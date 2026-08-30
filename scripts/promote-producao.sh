@@ -84,13 +84,15 @@ Thumbs.db
 GITIGNORE
 git add .gitignore
 
-echo "==> Compilando assets (npm ci + npm run build)"
-npm ci --silent
-npm run build
-
 echo "==> Instalando dependências PHP sem dev (composer install --no-dev)"
 rm -rf vendor
 composer install --no-dev --optimize-autoloader --no-interaction
+
+# O build precisa do vendor/ presente — os temas do Filament importam
+# CSS de dentro de vendor/filament. Por isso o composer roda ANTES do npm.
+echo "==> Compilando assets (npm ci + npm run build)"
+npm ci --silent
+npm run build
 
 echo "==> Removendo tests/ e node_modules/ (fora do runtime)"
 rm -rf tests node_modules
