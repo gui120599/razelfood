@@ -1,0 +1,62 @@
+/*
+ * Tokens de marca RazelFood compartilhados entre os painéis Filament
+ * (Tenant Panel + Central Panel — mesma paleta, é a marca do produto).
+ * Importado por resources/css/filament/{tenant,central}/theme.css.
+ * Fonte: docs/identidade-visual-design-system.md (seções 2.2, 3 e 4).
+ * Manter em sincronia manual com app/Support/BrandColors.php.
+ */
+
+@import '@fontsource/space-grotesk/500.css';
+@import '@fontsource/space-grotesk/600.css';
+@import '@fontsource/space-grotesk/700.css';
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+
+@theme {
+  --color-rf-navy-950: #001428;
+  --color-rf-navy-900: #001E3C;
+  --color-rf-navy-800: #002846;
+  --color-rf-navy-700: #003250;
+  --color-rf-navy-600: #003C64;
+
+  --color-rf-orange-700: #FA5A00;
+  --color-rf-orange-600: #FA6400;
+  --color-rf-orange-500: #FA7800;
+  --color-rf-orange-400: #FA9600;
+
+  --color-rf-amber-300: #FAB400;
+
+  --color-rf-teal-700: #003264;
+  --color-rf-teal-500: #007896;
+  --color-rf-teal-300: #0096B4;
+
+  --color-rf-brass: #C9A057;
+
+  /* Semântico fixo (não é cor de marca) — usado em mensagens de erro/ações
+     destrutivas dentro do painel (ex.: AttendOrder). Mesmo hex de
+     App\Support\BrandColors::DANGER e do token espelho em resources/css/app.css. */
+  --color-rf-danger: #DC2626;
+
+  --font-heading: 'Space Grotesk', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+.rf-gradient-text {
+  background: linear-gradient(90deg, var(--color-rf-teal-500), var(--color-rf-amber-300), var(--color-rf-orange-600));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.rf-brand-logo-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.5rem;
+  background: rgba(255, 255, 255, 0.92);
+}
