@@ -5,10 +5,10 @@ Before planning or editing, find the row whose globs match the file's path and r
 | Applies to | Rule file |
 | --- | --- |
 | app/Console/Commands/** | .ai/rules/commands.md |
-| config/filament-shield.php | .ai/rules/config.md |
+| config/filament-shield.php, config/*.php | .ai/rules/config.md |
 | tests/Feature/**/*.php | .ai/rules/feature.md |
 | app/Filament/Resources/** | .ai/rules/filament-resources.md |
-| app/Filament/Support/{EstablishmentDocumentFields.php,InputMasks.php} | .ai/rules/filament-support.md |
+| app/Filament/Support/EstablishmentDocumentFields.php, app/Filament/Support/InputMasks.php | .ai/rules/filament-support.md |
 | resources/css/filament/**/*.css | .ai/rules/filament.md |
 | ** | .ai/rules/general.md |
 | app/Actions/Menu/{ResolvePriceForProduct.php,ResolvePriceForCartLine.php,ResolvedPrice.php},app/Livewire/Menu.php | .ai/rules/livewire.md |
