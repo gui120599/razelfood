@@ -16,8 +16,11 @@ return [
      * Reativar ao subir para hospedagem (produção).
      */
     'cache' => [
-        'enabled' => env('TENANCY_CACHE_ENABLED', true),
-        'ttl_minutes' => env('TENANCY_CACHE_TTL_MINUTES', 5),
+        'enabled' => (bool) env('TENANCY_CACHE_ENABLED', true),
+        // (int) obrigatório: vindo do .env o valor é string ('5') e o Carbon 3
+        // rejeita string em now()->addMinutes() (IdentifyTenant), quebrando
+        // toda requisição de subdomínio.
+        'ttl_minutes' => (int) env('TENANCY_CACHE_TTL_MINUTES', 5),
     ],
 
     /*
