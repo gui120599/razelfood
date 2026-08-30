@@ -30,7 +30,7 @@ class IdentifyTenant
         $tenant = config('tenancy.cache.enabled')
             ? Cache::remember(
                 "tenant:slug:{$slug}",
-                now()->addMinutes(config('tenancy.cache.ttl_minutes')),
+                now()->addMinutes((int) config('tenancy.cache.ttl_minutes')),
                 $resolveTenant,
             )
             : $resolveTenant();
