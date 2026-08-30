@@ -1,0 +1,30 @@
+# RazelFood — deploy em hospedagem compartilhada (HostGator / cPanel).
+#
+# A pasta do domínio (ex.: ~/public_html) é um checkout da branch `producao`.
+# Este arquivo encaminha todas as requisições para `public/` sem precisar
+# alterar o Document Root do domínio no cPanel. Se o cPanel permitir apontar
+# o Document Root direto para `.../public`, isso é mais limpo e este arquivo
+# pode ser removido.
+#
+# No servidor, congele contra sobrescrita de `git pull`:
+#   git update-index --skip-worktree .htaccess public/.htaccess
+# (o cPanel reescreve o bloco "cPanel-generated handler" a cada troca de PHP.)
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Nunca servir dotfiles (.env, .gitignore, .git/…) — exceto .well-known,
+    # usado pela validação do AutoSSL.
+    RewriteRule (^|/)\.(?!well-known/) - [F,L]
+
+    # Encaminha tudo que não estiver sob /public/ para lá.
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.*)$ /public/$1 [L]
+</IfModule>
+
+# Reforço caso o mod_rewrite esteja indisponível.
+<IfModule !mod_rewrite.c>
+    <FilesMatch "^\.env">
+        Require all denied
+    </FilesMatch>
+</IfModule>

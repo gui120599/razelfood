@@ -1,0 +1,6 @@
+@import '../../../../vendor/filament/filament/resources/css/theme.css';
+@import '../brand.css';
+
+@source '../../../../app/Filament/Tenant/**/*';
+@source '../../../../resources/views/filament/**/*';
+@source '../../../../resources/views/components/orders/**/*';
