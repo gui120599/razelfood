@@ -21,6 +21,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 | app/Filament/Tenant/Pages/{Dashboard.php,Reports.php},app/Filament/Tenant/Widgets/Reports/** | .ai/rules/reports.md |
 | app/Filament/Tenant/Resources/**/*Resource.php | .ai/rules/resources.md |
 | routes/web.php | .ai/rules/routes.md |
+| scripts/promote-producao.sh | .ai/rules/scripts.md |
 | app/Actions/Orders/Support/CartStockAndPromotionLedger.php | .ai/rules/support.md |
 | app/{Actions/Orders/AdvanceOrderStatus.php,Filament/Tenant/Support/OrderStatusActions.php,Filament/Tenant/Pages/Kitchen.php,Models/Order.php} | .ai/rules/tenant-pages.md |
 | app/Filament/Tenant/Resources/Users/** | .ai/rules/users.md |
