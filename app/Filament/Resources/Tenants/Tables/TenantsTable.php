@@ -2,8 +2,11 @@
 
 namespace App\Filament\Resources\Tenants\Tables;
 
+use App\Enums\CentralRole;
 use App\Enums\TenantStatus;
 use App\Filament\Support\InputMasks;
+use App\Models\Tenant;
+use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
@@ -12,11 +15,14 @@ use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\RestoreAction;
 use Filament\Actions\RestoreBulkAction;
+use Filament\Facades\Filament;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Auth;
 
 class TenantsTable
 {
@@ -69,6 +75,15 @@ class TenantsTable
                 TrashedFilter::make(),
             ])
             ->recordActions([
+                Action::make('accessPanel')
+                    ->label('Acessar painel')
+                    ->icon(Heroicon::OutlinedArrowTopRightOnSquare)
+                    ->color('gray')
+                    // Só o super admin Plataforma tem canAccessTenant() para
+                    // qualquer tenant (ver App\Models\User + .ai/rules/models-filament.md);
+                    // Support levaria 403 na URL de destino.
+                    ->visible(fn (): bool => Auth::user()?->hasCentralRole(CentralRole::Platform) ?? false)
+                    ->url(fn (Tenant $record): string => Filament::getPanel('tenant')->getUrl($record), shouldOpenInNewTab: true),
                 EditAction::make(),
                 DeleteAction::make(),
                 RestoreAction::make(),
