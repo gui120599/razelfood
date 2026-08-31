@@ -4,6 +4,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 
 | Applies to | Rule file |
 | --- | --- |
+| app/Filament/Resources/LocationSyncs/**,app/Services/Address/LocationCatalogTransfer.php | .ai/rules/address.md |
 | app/Livewire/{Menu.php,Checkout.php,OrderStatusTimeline.php,Concerns/EstablishesTenantContext.php} | .ai/rules/app-livewire.md |
 | app/Console/Commands/** | .ai/rules/commands.md |
 | config/filament-shield.php, config/*.php | .ai/rules/config.md |

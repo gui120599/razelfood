@@ -283,6 +283,7 @@ return array(
     'App\\Rules\\ValidCnpj' => $baseDir . '/app/Rules/ValidCnpj.php',
     'App\\Rules\\ValidTenantSlug' => $baseDir . '/app/Rules/ValidTenantSlug.php',
     'App\\Services\\Address\\IbgeService' => $baseDir . '/app/Services/Address/IbgeService.php',
+    'App\\Services\\Address\\LocationCatalogTransfer' => $baseDir . '/app/Services/Address/LocationCatalogTransfer.php',
     'App\\Services\\Address\\LocationSyncService' => $baseDir . '/app/Services/Address/LocationSyncService.php',
     'App\\Services\\Address\\RuaCepBairroScraper' => $baseDir . '/app/Services/Address/RuaCepBairroScraper.php',
     'App\\Services\\Address\\ViaCepClient' => $baseDir . '/app/Services/Address/ViaCepClient.php',

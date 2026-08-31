@@ -998,6 +998,7 @@ class ComposerStaticInit55a038cf3738d8ee656cb068db45a51f
         'App\\Rules\\ValidCnpj' => __DIR__ . '/../..' . '/app/Rules/ValidCnpj.php',
         'App\\Rules\\ValidTenantSlug' => __DIR__ . '/../..' . '/app/Rules/ValidTenantSlug.php',
         'App\\Services\\Address\\IbgeService' => __DIR__ . '/../..' . '/app/Services/Address/IbgeService.php',
+        'App\\Services\\Address\\LocationCatalogTransfer' => __DIR__ . '/../..' . '/app/Services/Address/LocationCatalogTransfer.php',
         'App\\Services\\Address\\LocationSyncService' => __DIR__ . '/../..' . '/app/Services/Address/LocationSyncService.php',
         'App\\Services\\Address\\RuaCepBairroScraper' => __DIR__ . '/../..' . '/app/Services/Address/RuaCepBairroScraper.php',
         'App\\Services\\Address\\ViaCepClient' => __DIR__ . '/../..' . '/app/Services/Address/ViaCepClient.php',
