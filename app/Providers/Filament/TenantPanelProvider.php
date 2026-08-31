@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Tenant\Pages\Dashboard;
+use App\Filament\Tenant\Widgets\AccountWidget;
 use App\Http\Middleware\ApplyTenantScopes;
 use App\Models\Tenant;
 use App\Support\CurrentTenant;
@@ -18,7 +19,6 @@ use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
 use Filament\Support\Icons\Heroicon;
 use Filament\View\PanelsRenderHook;
-use Filament\Widgets\AccountWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;

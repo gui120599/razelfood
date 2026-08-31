@@ -907,6 +907,7 @@ class ComposerStaticInit55a038cf3738d8ee656cb068db45a51f
         'App\\Filament\\Tenant\\Resources\\Users\\Tables\\UsersTable' => __DIR__ . '/../..' . '/app/Filament/Tenant/Resources/Users/Tables/UsersTable.php',
         'App\\Filament\\Tenant\\Resources\\Users\\UserResource' => __DIR__ . '/../..' . '/app/Filament/Tenant/Resources/Users/UserResource.php',
         'App\\Filament\\Tenant\\Support\\OrderStatusActions' => __DIR__ . '/../..' . '/app/Filament/Tenant/Support/OrderStatusActions.php',
+        'App\\Filament\\Tenant\\Widgets\\AccountWidget' => __DIR__ . '/../..' . '/app/Filament/Tenant/Widgets/AccountWidget.php',
         'App\\Filament\\Tenant\\Widgets\\CatalogSnapshot' => __DIR__ . '/../..' . '/app/Filament/Tenant/Widgets/CatalogSnapshot.php',
         'App\\Filament\\Tenant\\Widgets\\OrdersTodayOverview' => __DIR__ . '/../..' . '/app/Filament/Tenant/Widgets/OrdersTodayOverview.php',
         'App\\Filament\\Tenant\\Widgets\\PlanFeatures' => __DIR__ . '/../..' . '/app/Filament/Tenant/Widgets/PlanFeatures.php',

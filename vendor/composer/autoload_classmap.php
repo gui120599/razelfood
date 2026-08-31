@@ -192,6 +192,7 @@ return array(
     'App\\Filament\\Tenant\\Resources\\Users\\Tables\\UsersTable' => $baseDir . '/app/Filament/Tenant/Resources/Users/Tables/UsersTable.php',
     'App\\Filament\\Tenant\\Resources\\Users\\UserResource' => $baseDir . '/app/Filament/Tenant/Resources/Users/UserResource.php',
     'App\\Filament\\Tenant\\Support\\OrderStatusActions' => $baseDir . '/app/Filament/Tenant/Support/OrderStatusActions.php',
+    'App\\Filament\\Tenant\\Widgets\\AccountWidget' => $baseDir . '/app/Filament/Tenant/Widgets/AccountWidget.php',
     'App\\Filament\\Tenant\\Widgets\\CatalogSnapshot' => $baseDir . '/app/Filament/Tenant/Widgets/CatalogSnapshot.php',
     'App\\Filament\\Tenant\\Widgets\\OrdersTodayOverview' => $baseDir . '/app/Filament/Tenant/Widgets/OrdersTodayOverview.php',
     'App\\Filament\\Tenant\\Widgets\\PlanFeatures' => $baseDir . '/app/Filament/Tenant/Widgets/PlanFeatures.php',
