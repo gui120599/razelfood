@@ -10,17 +10,30 @@ namespace App\Support;
  * `addons`: array de {addon_id, quantity, target} — `target` é null (produto/
  * combo inteiro) ou um dos `flavor_ids` (sabor específico), nunca validado
  * aqui (RN-13/RN-48 — validação real acontece em ResolvePriceForCartLine).
+ *
+ * A chave de sessão é escopada por tenant (`cart:{tenant_id}`): com todos os
+ * tenants no mesmo domínio, o cookie de sessão é único e um carrinho montado
+ * em /tenantA vazaria para /tenantB sem esse namespacing.
  */
 class Cart
 {
-    private const SESSION_KEY = 'cart';
+    private const SESSION_KEY_PREFIX = 'cart';
+
+    private static function sessionKey(): string
+    {
+        $tenantId = CurrentTenant::id();
+
+        return $tenantId !== null
+            ? self::SESSION_KEY_PREFIX.':'.$tenantId
+            : self::SESSION_KEY_PREFIX;
+    }
 
     /**
      * @return array<int, array{type: string, product_id: int, flavor_ids: array<int>, quantity: int, note: ?string, addons: array<int, array{addon_id:int, quantity:int, target:?int}>}>
      */
     public static function items(): array
     {
-        return array_values(session(self::SESSION_KEY, []));
+        return array_values(session(self::sessionKey(), []));
     }
 
     /**
@@ -110,7 +123,7 @@ class Cart
 
     public static function clear(): void
     {
-        session()->forget(self::SESSION_KEY);
+        session()->forget(self::sessionKey());
     }
 
     public static function isEmpty(): bool
@@ -135,6 +148,6 @@ class Cart
      */
     private static function store(array $items): void
     {
-        session([self::SESSION_KEY => array_values($items)]);
+        session([self::sessionKey() => array_values($items)]);
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Livewire\Concerns\EstablishesTenantContext;
 use App\Models\Order;
 use Livewire\Component;
 
@@ -17,6 +18,8 @@ use Livewire\Component;
  */
 class OrderStatusTimeline extends Component
 {
+    use EstablishesTenantContext;
+
     public Order $order;
 
     public function render()

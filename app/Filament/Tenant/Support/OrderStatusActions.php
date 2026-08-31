@@ -93,7 +93,9 @@ class OrderStatusActions
 
                 try {
                     DB::transaction(function () use ($order, $data, $actingUser): void {
-                        $deliveryUser = User::query()->findOrFail($data['assigned_delivery_user_id']);
+                        $deliveryUser = User::query()
+                            ->where('tenant_id', CurrentTenant::id())
+                            ->findOrFail($data['assigned_delivery_user_id']);
 
                         app(AssignDeliveryUser::class)($order, $deliveryUser, $actingUser);
                         app(AdvanceOrderStatus::class)($order, $actingUser);
@@ -140,7 +142,9 @@ class OrderStatusActions
                 $order = self::resolveOrder($arguments);
 
                 try {
-                    $deliveryUser = User::query()->findOrFail($data['assigned_delivery_user_id']);
+                    $deliveryUser = User::query()
+                        ->where('tenant_id', CurrentTenant::id())
+                        ->findOrFail($data['assigned_delivery_user_id']);
                     app(AssignDeliveryUser::class)($order, $deliveryUser, auth()->user());
                 } catch (OrderTransitionException $e) {
                     Notification::make()->title($e->getMessage())->danger()->send();

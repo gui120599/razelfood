@@ -23,7 +23,7 @@ use Tests\TestCase;
  * RN-44: o gestor da plataforma também gerencia os usuários de qualquer
  * tenant pelo painel central (onboarding, destravar tenant sem Admin). Os
  * papéis são do spatie/permission com "teams" — precisam cair no team
- * (tenant_id) certo mesmo sem o middleware IdentifyTenant.
+ * (tenant_id) certo mesmo sem tenant middleware (o painel central não tem).
  */
 class TenantUsersRelationManagerTest extends TestCase
 {

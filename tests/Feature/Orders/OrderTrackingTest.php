@@ -226,7 +226,7 @@ class OrderTrackingTest extends TestCase
         $this->assertNotEmpty($order->public_token);
         $this->assertStringContainsString($order->public_token, route('order.tracking', ['order' => $order->public_token]));
 
-        $base = "http://{$tenant->slug}.".config('tenancy.base_domain');
+        $base = "/{$tenant->slug}";
         $this->get("{$base}/acompanhar/{$order->public_token}")->assertOk();
         $this->get("{$base}/acompanhar/{$order->id}")->assertNotFound();
         $this->get("{$base}/acompanhar/nao-existe")->assertNotFound();

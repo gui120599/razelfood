@@ -12,14 +12,29 @@ use Illuminate\Support\Facades\URL;
 use Spatie\Permission\PermissionRegistrar;
 use Symfony\Component\HttpFoundation\Response;
 
-class IdentifyTenant
+/**
+ * Resolve o tenant a partir do primeiro segmento do path (`/{tenant}/...`).
+ *
+ * Aplicado como middleware do grupo de rotas públicas do tenant em
+ * routes/web.php — NÃO é mais um middleware global (era `IdentifyTenant`, que
+ * lia o subdomínio do `Host`). O painel do Filament resolve o tenant pelo
+ * mecanismo nativo `->tenant()` + `ApplyTenantScopes`, não por aqui.
+ *
+ * Como roda depois do routing, `$request->route('tenant')` já contém o slug
+ * cru do primeiro segmento. Diferente do middleware antigo, este SEMPRE roda
+ * em contexto de tenant: não existe o ramo "rota central, segue sem tenant".
+ */
+class ResolveTenantFromPath
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $slug = $this->extractSlug($request->getHost());
+        $slug = $request->route('tenant');
 
-        if ($slug === null || in_array($slug, config('tenancy.reserved_slugs'), true)) {
-            return $next($request); // rota central, sem tenant
+        // Defesa em profundidade: a constraint `->where('tenant', ...)` da
+        // rota e a ordem de registro (rotas de sistema/painéis primeiro) já
+        // impedem que um segmento reservado chegue até aqui.
+        if (! is_string($slug) || $slug === '' || in_array($slug, config('tenancy.reserved_slugs'), true)) {
+            abort(404);
         }
 
         // Eager load do plano/overrides junto da resolução do tenant: evita
@@ -48,9 +63,9 @@ class IdentifyTenant
         app()->instance(Tenant::class, $tenant);
         CurrentTenant::set($tenant);
 
-        // Route::domain('{tenant}.'.base_domain) trata {tenant} como
-        // parâmetro de rota comum — sem um default, qualquer route() para
-        // esse domínio (ex.: redirect de login do Filament) quebra com
+        // Route::prefix('{tenant}') trata {tenant} como parâmetro de rota
+        // comum — sem um default, qualquer route() para essas rotas (ex.:
+        // route('menu.index') sem args nas views) quebra com
         // UrlGenerationException por parâmetro faltando.
         URL::defaults(['tenant' => $slug]);
 
@@ -60,16 +75,5 @@ class IdentifyTenant
         app(PermissionRegistrar::class)->setPermissionsTeamId($tenant->id);
 
         return $next($request);
-    }
-
-    private function extractSlug(string $host): ?string
-    {
-        $baseDomain = config('tenancy.base_domain');
-
-        if (! str_ends_with($host, ".{$baseDomain}")) {
-            return null; // acesso direto pelo domínio base, sem subdomínio
-        }
-
-        return substr($host, 0, -1 * (strlen($baseDomain) + 1));
     }
 }

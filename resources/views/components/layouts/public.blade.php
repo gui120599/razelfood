@@ -45,9 +45,9 @@
                 @endif
                 <h1 class="min-w-0 truncate text-lg font-bold text-white">{{ $tenant->name ?? '' }}</h1>
 
-                {{-- Acesso ao painel do tenant (mesmo subdomínio, path /painel).
+                {{-- Acesso ao painel do tenant (razelfood.com.br/painel/{slug}).
                      Filament redireciona para o login se não houver sessão. --}}
-                <a href="{{ url('/painel') }}"
+                <a href="{{ url('/painel/'.$tenant->slug) }}"
                    class="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-gray-200 transition hover:bg-white/10">
                     <x-heroicon-o-lock-closed class="h-4 w-4" />
                     Painel

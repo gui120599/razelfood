@@ -24,7 +24,7 @@ class OrderTicketController extends Controller
     public function show(Request $request): View
     {
         abort_unless(Auth::check(), 403);
-        abort_unless(Auth::user()->tenant_id === CurrentTenant::id(), 403);
+        abort_unless(Auth::user()->canOperateInCurrentTenant(), 403);
         abort_unless(Auth::user()->can('manage_order_status'), 403);
 
         // TenantScope global garante 404 para pedido de outro tenant.

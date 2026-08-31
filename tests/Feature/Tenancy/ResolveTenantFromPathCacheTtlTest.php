@@ -1,20 +1,18 @@
 <?php
 
-namespace Tests\Feature;
+namespace Tests\Feature\Tenancy;
 
-use App\Http\Middleware\IdentifyTenant;
 use App\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Http\Request;
 use Tests\TestCase;
 
 /**
  * Regressão: `config('tenancy.cache.ttl_minutes')` vindo do .env é string
  * ('5'), e o Carbon 3 (via Symfony 8) rejeita string em now()->addMinutes(),
- * derrubando toda requisição de subdomínio de tenant com HTTP 500. O cast
- * mora tanto em config/tenancy.php quanto no próprio middleware.
+ * derrubando toda requisição de cardápio de tenant com HTTP 500. O cast mora
+ * tanto em config/tenancy.php quanto no próprio ResolveTenantFromPath.
  */
-class IdentifyTenantCacheTtlTest extends TestCase
+class ResolveTenantFromPathCacheTtlTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -31,12 +29,7 @@ class IdentifyTenantCacheTtlTest extends TestCase
             'whatsapp_number' => '5511999999999',
         ]);
 
-        $baseDomain = config('tenancy.base_domain');
-        $request = Request::create("http://{$tenant->slug}.{$baseDomain}/");
-
-        $response = app(IdentifyTenant::class)->handle($request, fn () => response('ok'));
-
-        $this->assertSame('ok', $response->getContent());
+        $this->get("/{$tenant->slug}")->assertOk();
     }
 
     public function test_config_casts_ttl_minutes_to_int(): void

@@ -16,16 +16,21 @@ use UnitEnum;
 /**
  * Estende o RoleResource do Shield só para corrigir o isolamento por tenant.
  *
- * O RoleResource vendor conta com o mecanismo NATIVO de multi-tenancy do
- * Filament (Filament::getTenant(), via ->tenant() no Panel) pra escopar a
- * listagem de Roles. Este projeto usa tenancy por domínio, sem ->tenant()
- * — Filament::getTenant() é sempre null aqui, então a query do vendor
- * nunca filtra por tenant, e o Admin de um tenant veria/editaria/apagaria
- * roles de OUTROS tenants. getEloquentQuery() abaixo fecha esse vazamento.
+ * O painel do tenant usa a tenancy nativa do Filament (`->tenant()`), mas ela
+ * escopa um Resource procurando a relação de posse `tenant()` no MODEL — e
+ * `Spatie\Permission\Models\Role` não tem essa relação (o vínculo com o
+ * tenant é via `model_has_roles.tenant_id`/`roles.tenant_id`, coluna de
+ * pivot do recurso "teams" do spatie/permission, não uma BelongsTo). Por
+ * isso `$isScopedToTenant = false` (senão o Filament estoura LogicException
+ * ao montar a query), e o filtro por tenant é feito à mão em
+ * getEloquentQuery() usando o team id do spatie, que ApplyTenantScopes já
+ * setou a partir de Filament::getTenant().
  */
 class RoleResource extends ShieldRoleResource
 {
     use GatedByFeature;
+
+    protected static bool $isScopedToTenant = false;
 
     protected static string|UnitEnum|null $navigationGroup = 'Equipe';
 

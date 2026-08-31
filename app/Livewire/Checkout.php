@@ -8,6 +8,7 @@ use App\Actions\Orders\CreateOrderFromCart;
 use App\Actions\Orders\FindOrCreateClient;
 use App\Actions\Orders\ResolveDeliveryFee;
 use App\Exceptions\CheckoutException;
+use App\Livewire\Concerns\EstablishesTenantContext;
 use App\Models\Addon;
 use App\Models\Client;
 use App\Models\DeliveryOption;
@@ -24,6 +25,8 @@ use Livewire\Component;
 
 class Checkout extends Component
 {
+    use EstablishesTenantContext;
+
     public string $phone = '';
 
     public string $name = '';

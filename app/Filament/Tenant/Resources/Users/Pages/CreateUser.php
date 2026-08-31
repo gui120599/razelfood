@@ -20,8 +20,16 @@ class CreateUser extends CreateRecord
 
     protected function afterCreate(): void
     {
+        // Filtra por tenant além do whereIn: o Select do form só oferece
+        // papéis do tenant atual, mas o payload de `roleIds` é do cliente —
+        // sem este where um Admin poderia forjar o id de um papel de outro
+        // tenant. syncRoles() grava a pivot no team certo (setado por
+        // ApplyTenantScopes), mas não revalida o id.
         $this->record->syncRoles(
-            Role::query()->whereIn('id', $this->data['roleIds'] ?? [])->get()
+            Role::query()
+                ->where(config('permission.column_names.team_foreign_key'), CurrentTenant::id())
+                ->whereIn('id', $this->data['roleIds'] ?? [])
+                ->get()
         );
     }
 }

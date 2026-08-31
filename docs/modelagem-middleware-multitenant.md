@@ -1,9 +1,30 @@
 # RazelFood — Modelagem de Dados e Middleware Multi-tenant
 
 **Documento de instrução para implementação e homologação**
-**Versão:** 1.3
-**Data:** 22/08/2026
+**Versão:** 2.0
+**Data:** 31/08/2026
 **Depende de:** `requisitos-regras-negocio.md` (v3.3) — este documento traduz as regras RN-02 a RN-49 daquele documento em schema de banco, middleware e estrutura de rotas concretos.
+
+> **Nota de versão (1.3 → 2.0) — TENANCY POR PATH:** o tenant deixou de ser
+> identificado por **subdomínio** (`{slug}.razelfood.com.br`) e passou a ser
+> identificado por **path**, num domínio único:
+> - Cardápio público: `razelfood.com.br/{slug}/...` — grupo `Route::prefix('{tenant}')`
+>   com o middleware `App\Http\Middleware\ResolveTenantFromPath` (não é mais
+>   middleware global; `IdentifyTenant` foi renomeado e reescrito).
+> - Painel do tenant: `razelfood.com.br/painel/{slug}` — **tenancy nativa do
+>   Filament** (`->tenant(Tenant::class, slugAttribute: 'slug')`), com
+>   `User implements HasTenants` (`getTenants()` / `canAccessTenant()`) e o
+>   middleware persistente `App\Http\Middleware\ApplyTenantScopes` fazendo a
+>   ponte `Filament::getTenant()` → `CurrentTenant`/`TenantScope`/spatie-teams.
+> - Painel central: `razelfood.com.br/admin` (era `interno.razelfood.com.br/central`).
+>
+> Motivação: eliminar a dependência de wildcard DNS + wildcard SSL na HostGator
+> (seção 9 — era o maior risco técnico). Provisionar um tenant novo passou a
+> ser um `INSERT` em `tenants`, sem configuração de infra. **Nenhuma migration
+> de banco** — `tenants.slug` já era a chave e é domain-agnostic. As seções
+> 4.1, 4.6, 4.7, 4.8 e 9 abaixo descrevem o modelo ANTIGO (subdomínio) e ficam
+> como registro histórico; a implementação corrente é a desta nota + o plano
+> em `.claude/plans/` + `.ai/rules/{middleware,routes,resources,users}.md`.
 
 > **Nota de versão (1.2 → 1.3):** adicionadas as tabelas `addons` e `product_addon`, e as colunas `addons`/`addons_total` em `order_items` — ver seção 3.3 (nova subseção `addons`/`product_addon`, e `orders`/`order_items` atualizada). Reflete RN-45 a RN-49 de `requisitos-regras-negocio.md` v3.3. Aproveitado pra documentar também `flavor_quantity_options.flavor_shares` (coluna adicionada em 21-22/08/2026, ainda não refletida na v1.2) e corrigir o tipo de `products.sales_count` (documentado como `unsignedInteger`, migração real já é `decimal(10,2)` desde a correção de 22/08/2026) — ambos descobertos durante esta mesma revisão de schema.
 

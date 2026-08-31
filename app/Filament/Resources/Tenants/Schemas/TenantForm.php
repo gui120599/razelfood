@@ -29,14 +29,14 @@ class TenantForm
                         ->required()
                         ->maxLength(255),
                     TextInput::make('slug')
-                        ->label('Slug (subdomínio)')
+                        ->label('Slug (endereço)')
                         ->required()
                         ->maxLength(255)
                         ->rules([new ValidTenantSlug])
                         ->unique(ignoreRecord: true)
                         ->disabled(fn (string $operation): bool => $operation !== 'create')
                         ->dehydrated(fn (string $operation): bool => $operation === 'create')
-                        ->helperText('Usado como subdomínio: {slug}.razelfood.com.br. Praticamente imutável após a publicação — ver ação "Alterar slug" na edição.'),
+                        ->helperText('Endereço do cardápio: razelfood.com.br/{slug} (e painel em /painel/{slug}). Praticamente imutável após a publicação — ver ação "Alterar slug" na edição.'),
                     Select::make('status')
                         ->label('Status')
                         ->options(collect(TenantStatus::cases())->mapWithKeys(

@@ -18,6 +18,16 @@ class CurrentTenant
         static::$tenant = $tenant;
     }
 
+    /**
+     * Limpa o tenant do contexto atual. Usado quando uma requisição sai do
+     * escopo de um tenant (ex.: entre casos de teste, ou processos
+     * long-lived que reaproveitam o worker).
+     */
+    public static function forget(): void
+    {
+        static::$tenant = null;
+    }
+
     public static function get(): ?Tenant
     {
         return static::$tenant;

@@ -28,8 +28,7 @@ class CentralPanelProvider extends PanelProvider
         return $panel
             ->default()
             ->id('central')
-            ->domain('interno.'.config('tenancy.base_domain'))
-            ->path('central')
+            ->path('admin')
             ->viteTheme('resources/css/filament/central/theme.css')
             ->login()
             ->colors([
