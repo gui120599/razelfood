@@ -66,6 +66,13 @@ class Checkout extends Component
 
     public bool $clientFound = false;
 
+    /**
+     * Fica true assim que o cliente digita algo no valor da 1ª forma de
+     * pagamento — a partir daí paramos de espelhar o total do pedido nesse
+     * campo automaticamente (ver autofillRemaining()).
+     */
+    public bool $paymentAmountManuallySet = false;
+
     public bool $cepNotFound = false;
 
     public ?string $errorMessage = null;
@@ -108,19 +115,32 @@ class Checkout extends Component
 
     public function updated(string $name): void
     {
+        if ($name === 'payments.0.amount') {
+            $this->paymentAmountManuallySet = true;
+        }
+
         if (str_starts_with($name, 'payments.') && str_ends_with($name, '.amount')) {
             $this->autofillRemaining();
         }
     }
 
     /**
-     * Preenche automaticamente o saldo restante (total - soma já digitada)
-     * na primeira linha de pagamento ainda em branco, sempre que a soma
-     * digitada ainda não bate com o total.
+     * Mantém o valor a pagar em dia com o total do pedido, igual ao
+     * FulfillmentPicker do painel:
+     * - Uma única forma de pagamento, ainda não editada à mão: espelha o
+     *   total atual (que muda conforme a entrega/endereço escolhidos, sem
+     *   passar por updated()).
+     * - Pagamento dividido: preenche o saldo restante na 1ª linha em branco.
      */
     private function autofillRemaining(): void
     {
         if ($this->grandTotal <= 0) {
+            return;
+        }
+
+        if (count($this->payments) === 1 && ! $this->paymentAmountManuallySet) {
+            $this->payments[0]['amount'] = number_format($this->grandTotal, 2, ',', '.');
+
             return;
         }
 
@@ -528,7 +548,9 @@ class Checkout extends Component
             return (float) $option->delivery_fee;
         }
 
-        return $this->deliveryFeeResolution['fee'] ?? 0.0;
+        return $this->deliveryFeeResolution === null
+            ? 0.0
+            : ($this->deliveryFeeResolution['fee'] ?? 0.0);
     }
 
     #[Computed]
@@ -551,6 +573,12 @@ class Checkout extends Component
 
     public function render()
     {
+        // O total só fica conhecido depois do mount (depende do carrinho e da
+        // opção de entrega escolhida), e mudar de entrega não passa por
+        // updating/updated — então o preenchimento do saldo restante é
+        // reavaliado aqui a cada render, igual ao FulfillmentPicker do painel.
+        $this->autofillRemaining();
+
         return view('livewire.checkout')
             ->layout('components.layouts.public', ['tenant' => CurrentTenant::get()]);
     }
