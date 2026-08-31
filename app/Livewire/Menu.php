@@ -6,6 +6,7 @@ use App\Actions\Menu\CheckBusinessHours;
 use App\Actions\Menu\ResolvePriceForCartLine;
 use App\Actions\Menu\ResolvePriceForProduct;
 use App\Enums\FlashPromotionStatus;
+use App\Livewire\Concerns\EstablishesTenantContext;
 use App\Models\Addon;
 use App\Models\Category;
 use App\Models\FlashPromotion;
@@ -22,6 +23,8 @@ use Livewire\Component;
 
 class Menu extends Component
 {
+    use EstablishesTenantContext;
+
     /** @var array{category_id: ?int, quantity_option_id: ?int, required_count: ?int, flavor_ids: array<int>, step: string} */
     public array $comboBuilder = [
         'category_id' => null,

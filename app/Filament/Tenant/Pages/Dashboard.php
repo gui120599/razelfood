@@ -8,7 +8,6 @@ use App\Filament\Tenant\Widgets\PlanFeatures;
 use App\Filament\Tenant\Widgets\StoreReadiness;
 use Filament\Pages\Dashboard as BaseDashboard;
 use Filament\Widgets\AccountWidget;
-use Override;
 
 /**
  * Dashboard padrão do painel do tenant (`/painel`). Lista os widgets
@@ -18,11 +17,11 @@ use Override;
  */
 class Dashboard extends BaseDashboard
 {
-    
     public function getColumns(): int|array
     {
         return 5;
     }
+
     public function getWidgets(): array
     {
         return [

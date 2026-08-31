@@ -13,7 +13,7 @@ NUNCA rodar `shield:generate --panel=central` (gera policies Shield que trancam 
 Ex.: `app/Filament/Resources/Users/UserResource.php` + `app/Policies/UserPolicy.php::before()`.
 
 ## Papéis spatie (teams) num RelationManager do painel central: setar team id no booted()
-Um RelationManager central que gerencia papéis spatie/permission de um tenant (ex.: `UsersRelationManager` em `TenantResource`) NÃO passa pelo middleware `IdentifyTenant`, então o team id (`tenant_id`) nunca é setado sozinho e `syncRoles()`/`$user->roles` caem no team errado (ou vazio).
+Um RelationManager central que gerencia papéis spatie/permission de um tenant (ex.: `UsersRelationManager` em `TenantResource`) roda no painel central, que NÃO tem tenant middleware (`ApplyTenantScopes` só existe no painel do tenant), então o team id (`tenant_id`) nunca é setado sozinho e `syncRoles()`/`$user->roles` caem no team errado (ou vazio).
 
 Padrão: `public function booted(): void { app(\Spatie\Permission\PermissionRegistrar::class)->setPermissionsTeamId($this->getOwnerRecord()->getKey()); }` — `booted()` roda a cada request Livewire, depois da hidratação de `$this->ownerRecord`. Filament usa hooks de trait (`bootedInteractsWithTable`), então `booted()` do componente não colide.
 

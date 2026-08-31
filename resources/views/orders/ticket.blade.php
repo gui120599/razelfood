@@ -47,12 +47,20 @@
 <body>
     @php
         $money = fn ($v) => 'R$ '.number_format((float) $v, 2, ',', '.');
+        $phone = fn ($v) => \App\Filament\Support\InputMasks::formatPhone($v);
     @endphp
+
+    @if ($tenant?->show_logo_on_prints && $tenant?->print_logo_path)
+        <div class="center">
+            <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($tenant->print_logo_path) }}"
+                 alt="" style="max-width: 100%; max-height: 20mm; margin-bottom: 2mm;">
+        </div>
+    @endif
 
     <div class="center">
         <div class="bold">{{ $tenant?->name }}</div>
         @if ($tenant?->whatsapp_number)
-            <div class="sm">{{ $tenant->whatsapp_number }}</div>
+            <div class="sm">{{ $phone($tenant->whatsapp_number) }}</div>
         @endif
         <div class="sm">{{ $order->created_at?->format('d/m/Y H:i') }}</div>
     </div>
@@ -71,7 +79,7 @@
         <span class="bold">Cliente:</span> {{ $order->client?->name ?? '—' }}
     </div>
     <div>
-        <span class="bold">Telefone:</span> {{ $order->client?->phone ?? '—' }}
+        <span class="bold">Telefone:</span> {{ $order->client?->phone ? $phone($order->client->phone) : '—' }}
     </div>
 
     @if ($order->requiresDelivery())

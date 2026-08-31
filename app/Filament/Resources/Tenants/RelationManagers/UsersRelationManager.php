@@ -25,10 +25,10 @@ use Spatie\Permission\PermissionRegistrar;
  * onboarding e para destravar um tenant que ficou sem Admin.
  *
  * spatie/laravel-permission roda com "teams" (`team_foreign_key = tenant_id`).
- * O painel central não passa pelo middleware `IdentifyTenant`, então o team
- * id nunca é setado sozinho — este RM seta explicitamente no `booted()`
- * (roda a cada requisição Livewire) para que a leitura/escrita de papéis
- * caia no tenant certo. Ver .ai/rules/users.md.
+ * O painel central não tem tenant middleware (só o painel do tenant tem, via
+ * ApplyTenantScopes), então o team id nunca é setado sozinho aqui — este RM
+ * seta explicitamente no `booted()` (roda a cada requisição Livewire) para
+ * que a leitura/escrita de papéis caia no tenant certo. Ver .ai/rules/users.md.
  */
 class UsersRelationManager extends RelationManager
 {

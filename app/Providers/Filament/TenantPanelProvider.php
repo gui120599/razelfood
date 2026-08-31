@@ -2,9 +2,9 @@
 
 namespace App\Providers\Filament;
 
-use App\Filament\Tenant\Pages\Auth\Login;
 use App\Filament\Tenant\Pages\Dashboard;
-use App\Http\Middleware\IdentifyTenant;
+use App\Http\Middleware\ApplyTenantScopes;
+use App\Models\Tenant;
 use App\Support\CurrentTenant;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use Filament\Enums\ThemeMode;
@@ -33,10 +33,24 @@ class TenantPanelProvider extends PanelProvider
     {
         return $panel
             ->id('tenant')
-            ->domain('{tenant}.'.config('tenancy.base_domain'))
             ->path('painel')
+            // Tenancy por path: razelfood.com.br/painel/{slug}. O {tenant} da
+            // URL é resolvido por route-model binding contra `tenants.slug`;
+            // ApplyTenantScopes (tenantMiddleware persistente) faz a ponte com
+            // CurrentTenant/TenantScope/spatie-teams. tenantMenu(false): cada
+            // usuário pertence a no máximo um tenant, não há o que trocar.
+            ->tenant(Tenant::class, slugAttribute: 'slug')
+            ->tenantMiddleware([
+                ApplyTenantScopes::class,
+            ], isPersistent: true)
+            ->tenantMenu(false)
             ->viteTheme('resources/css/filament/tenant/theme.css')
-            ->login(Login::class)
+            // Login em /painel/login (fora do contexto de tenant). O isolamento
+            // no login vem de: email globalmente único (1 user = 1 tenant),
+            // canAccessPanel('tenant') (tenant_id != null) e canAccessTenant()
+            // ao resolver o {slug} da URL de destino. Não precisa mais da classe
+            // Login custom que forçava a credencial tenant_id (era p/ subdomínio).
+            ->login()
             ->colors([
                 'primary' => Color::hex('#FA6400'),
                 'info' => Color::hex('#007896'),
@@ -84,7 +98,6 @@ class TenantPanelProvider extends PanelProvider
                     ->sort(99),
             ])
             ->middleware([
-                IdentifyTenant::class,
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,

@@ -37,6 +37,10 @@
 </head>
 <body>
     <div class="head">
+        @if ($tenant?->show_logo_on_prints && $tenant?->print_logo_path)
+            <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($tenant->print_logo_path) }}"
+                 alt="" style="max-height: 18mm; margin-bottom: 6px;">
+        @endif
         <div class="row">
             <h1>{{ $title }}</h1>
             <span class="muted">{{ $tenant?->name }}</span>

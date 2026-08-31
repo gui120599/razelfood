@@ -11,9 +11,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->web(prepend: [
-            \App\Http\Middleware\IdentifyTenant::class,
-        ]);
+        // O tenant é resolvido por rota, não globalmente:
+        // - rotas públicas do cardápio: App\Http\Middleware\ResolveTenantFromPath
+        //   (middleware do grupo Route::prefix('{tenant}') em routes/web.php);
+        // - painel do tenant: mecanismo nativo do Filament (->tenant()) +
+        //   App\Http\Middleware\ApplyTenantScopes (tenant middleware persistente).
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

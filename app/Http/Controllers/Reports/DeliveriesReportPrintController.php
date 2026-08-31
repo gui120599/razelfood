@@ -20,7 +20,7 @@ class DeliveriesReportPrintController extends Controller
     public function show(Request $request, DeliveriesReport $report): View
     {
         abort_unless(Auth::check(), 403);
-        abort_unless(Auth::user()->tenant_id === CurrentTenant::id(), 403);
+        abort_unless(Auth::user()->canOperateInCurrentTenant(), 403);
         abort_unless(CurrentTenant::get()?->hasFeature(FeatureKey::RELATORIOS) ?? false, 403);
         abort_unless(Auth::user()->can('View:Deliveries'), 403);
 

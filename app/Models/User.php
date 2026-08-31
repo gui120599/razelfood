@@ -7,15 +7,18 @@ use App\Enums\CentralRole;
 use App\Support\CurrentTenant;
 use Database\Factories\UserFactory;
 use Filament\Models\Contracts\FilamentUser;
+use Filament\Models\Contracts\HasTenants;
 use Filament\Panel;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Collection;
 use Spatie\Permission\Traits\HasRoles;
 
-class User extends Authenticatable implements FilamentUser
+class User extends Authenticatable implements FilamentUser, HasTenants
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasRoles, Notifiable;
@@ -80,14 +83,71 @@ class User extends Authenticatable implements FilamentUser
      * acessa o painel central (seção 4.7 da modelagem). No painel central,
      * o que cada resource libera é decidido pelo `central_role` nas policies
      * (App\Policies\Concerns\CentralPanelPolicy).
+     *
+     * O match fino "este usuário pode ver ESTE tenant" fica em
+     * canAccessTenant() (contrato HasTenants) — o Filament chama os dois:
+     * canAccessPanel() antes de qualquer rota do painel, e canAccessTenant()
+     * antes de servir qualquer rota tenant-aware.
+     *
+     * A equipe Razel Tec com papel "Plataforma" (super admin) acessa TAMBÉM
+     * o painel de qualquer tenant (supervisão/suporte) — RN-44. Como central
+     * e tenant compartilham o cookie de sessão (domínio único), sem esta
+     * liberação o super admin logado em /admin levava 403 ao abrir
+     * /painel/{slug}. A autorização por Resource do Shield é liberada para
+     * esse usuário via Gate::before em AppServiceProvider.
      */
     public function canAccessPanel(Panel $panel): bool
     {
         return match ($panel->getId()) {
-            'tenant' => $this->tenant_id !== null && $this->tenant_id === CurrentTenant::id(),
+            'tenant' => $this->tenant_id !== null || $this->hasCentralRole(CentralRole::Platform),
             'central' => $this->tenant_id === null,
             default => false,
         };
+    }
+
+    /**
+     * Contrato HasTenants — tenancy nativa do Filament no painel do tenant.
+     * Usuário de tenant: 0 ou 1 item (o switcher fica escondido,
+     * ->tenantMenu(false)). Super admin "Plataforma": todos os tenants, para
+     * o redirect de /painel funcionar (o switcher continua escondido).
+     */
+    public function getTenants(Panel $panel): Collection
+    {
+        if ($this->hasCentralRole(CentralRole::Platform)) {
+            return Tenant::query()->get();
+        }
+
+        return $this->tenant ? collect([$this->tenant]) : collect();
+    }
+
+    /**
+     * Barreira explícita contra troca de slug na URL do painel: o Filament
+     * chama isto ao resolver o `{tenant}` da rota, antes de servir qualquer
+     * página tenant-aware. Um usuário do tenant A que force
+     * `/painel/{slug-de-B}` recebe 404 aqui — sem depender do global scope.
+     * O super admin "Plataforma" passa por qualquer tenant.
+     */
+    public function canAccessTenant(Model $tenant): bool
+    {
+        if ($this->hasCentralRole(CentralRole::Platform)) {
+            return true;
+        }
+
+        return $this->tenant_id !== null && $tenant->getKey() === $this->tenant_id;
+    }
+
+    /**
+     * "Este usuário pode operar no tenant resolvido na requisição atual?"
+     * Mesmo critério de canAccessTenant() (tenant do próprio usuário OU super
+     * admin Plataforma), para os controllers das rotas públicas do painel
+     * (comanda de cozinha, relatórios imprimíveis) que rodam fora do Filament
+     * e não têm o canAccessTenant() nativo.
+     */
+    public function canOperateInCurrentTenant(): bool
+    {
+        $tenant = CurrentTenant::get();
+
+        return $tenant !== null && $this->canAccessTenant($tenant);
     }
 
     public function isCentralUser(): bool
