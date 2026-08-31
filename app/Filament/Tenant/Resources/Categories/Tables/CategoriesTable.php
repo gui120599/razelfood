@@ -14,12 +14,18 @@ use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class CategoriesTable
 {
     public static function configure(Table $table): Table
     {
         return $table
+            // A listagem mostra só categorias raiz; subcategoria é gerenciada
+            // pelo SubcategoriesRelationManager na página de edição do pai. O
+            // filtro fica aqui (não no getEloquentQuery do Resource) para não
+            // quebrar a resolução do record em /categories/{subcategoria}/edit.
+            ->modifyQueryUsing(fn (Builder $query) => $query->whereNull('parent_id'))
             ->reorderable('display_order')
             ->defaultSort('display_order')
             ->columns([
@@ -30,6 +36,10 @@ class CategoriesTable
                 IconColumn::make('show_in_menu')
                     ->label('No cardápio')
                     ->boolean(),
+                IconColumn::make('show_description_in_menu')
+                    ->label('Descrição no cardápio')
+                    ->boolean()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 IconColumn::make('allows_flavors')
                     ->label('Permite sabores')
                     ->boolean(),

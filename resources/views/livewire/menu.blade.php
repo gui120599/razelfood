@@ -127,7 +127,11 @@
         <section wire:key="category-{{ $category->id }}" id="categoria-{{ $category->id }}" class="scroll-mt-16" x-data="{ activeChild: 'all' }">
             <h2 class="sticky top-14 z-20 -mx-2 bg-black px-2 py-2 text-lg font-bold text-white">{{ $category->name }}</h2>
 
-            @if ($category->allows_flavors && $category->flavorQuantityOptions->isNotEmpty())
+            @if ($category->show_description_in_menu && filled($category->description))
+                <p class="mb-2 text-xs text-gray-400">{{ $category->description }}</p>
+            @endif
+
+            @if ($category->allows_flavors && $category->resolvedFlavorQuantityOptions()->isNotEmpty())
                 <button wire:click="startCombo({{ $category->id }})"
                         class="mb-3 rounded-md border border-[var(--tenant-primary)] px-3 py-1 text-sm text-[var(--tenant-primary)]">
                     Montar combo de sabores
@@ -160,6 +164,9 @@
             @foreach ($category->children as $child)
                 <div x-show="activeChild === 'all' || activeChild === '{{ $child->id }}'" wire:key="subcategory-{{ $child->id }}" class="mt-1">
                     <h3 class="mb-1 border-l-4 border-[var(--tenant-primary)]/60 pl-2 text-base font-bold uppercase tracking-wide text-gray-300">{{ $child->name }}</h3>
+                    @if ($child->show_description_in_menu && filled($child->description))
+                        <p class="mb-1 text-xs text-gray-400">{{ $child->description }}</p>
+                    @endif
                     @foreach ($child->products as $product)
                         <x-menu.product-card wire:key="product-{{ $product->id }}" :product="$product" :category="$child" />
                     @endforeach
@@ -205,7 +212,7 @@
                         @endif
                     </div>
 
-                    @if ($this->viewingProduct->category?->allows_flavors && $this->viewingProduct->category->flavorQuantityOptions->isNotEmpty())
+                    @if ($this->viewingProduct->category?->allows_flavors && $this->viewingProduct->category->resolvedFlavorQuantityOptions()->isNotEmpty())
                         <button wire:click="startCombo({{ $this->viewingProduct->category->id }}, {{ $this->viewingProduct->id }})"
                                 class="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--tenant-primary)] py-3 text-sm font-bold uppercase tracking-wide text-white">
                             Escolher quantidade de sabores
@@ -247,7 +254,7 @@
     {{-- Montador de combo — modal único: quantidade + lista de sabores --}}
     @if ($comboBuilder['category_id'])
         @php
-            $comboCategory = $this->categories->firstWhere('id', $comboBuilder['category_id']);
+            $comboCategory = $this->menuCategory($comboBuilder['category_id']);
 
             // Produtos em promoção "só inteira" não entram em combos de 2+
             // sabores — só ficam de fora quando a quantidade exige mais de 1.
@@ -265,7 +272,7 @@
                     <button wire:click="cancelCombo" class="text-gray-400"><x-heroicon-o-x-mark class="h-6 w-6" /></button>
                 </div>
 
-                @if (($comboCategory?->flavorQuantityOptions ?? collect())->isEmpty())
+                @if (($comboCategory?->resolvedFlavorQuantityOptions() ?? collect())->isEmpty())
                     <p class="px-4 py-6 text-center text-sm text-gray-500">Nenhuma opção de sabores cadastrada para esta categoria.</p>
                 @elseif ($comboBuilder['step'] === 'addons' && $comboAddonsGate === null)
                     {{-- Pergunta antes de mostrar a lista — mesmo sub-passo, sem virar modal novo --}}
@@ -355,7 +362,7 @@
                     <div class="shrink-0 border-b border-white/10 px-4 py-3">
                         <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Como deseja?</p>
                         <div class="flex flex-wrap gap-2">
-                            @foreach ($comboCategory->flavorQuantityOptions as $option)
+                            @foreach ($comboCategory->resolvedFlavorQuantityOptions() as $option)
                                 <button type="button" wire:key="quantity-{{ $option->id }}"
                                         wire:click="selectFlavorQuantity({{ $option->id }})"
                                         @class([

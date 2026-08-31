@@ -160,8 +160,8 @@ class Menu extends Component
             return;
         }
 
-        $category = $this->categories->firstWhere('id', $categoryId);
-        $defaultOption = $category?->flavorQuantityOptions->first();
+        $category = $this->menuCategory($categoryId);
+        $defaultOption = $category?->resolvedFlavorQuantityOptions()->first();
 
         $this->comboBuilder = [
             'category_id' => $categoryId,
@@ -182,8 +182,8 @@ class Menu extends Component
      */
     public function selectFlavorQuantity(int $optionId): void
     {
-        $category = $this->categories->firstWhere('id', $this->comboBuilder['category_id']);
-        $option = $category?->flavorQuantityOptions->firstWhere('id', $optionId);
+        $category = $this->menuCategory($this->comboBuilder['category_id']);
+        $option = $category?->resolvedFlavorQuantityOptions()->firstWhere('id', $optionId);
 
         if (! $option) {
             return;
@@ -408,7 +408,7 @@ class Menu extends Component
             ->where(fn (Builder $query) => $this->visibleProducts($query))
             ->whereHas('category', fn (Builder $query) => $query->where('show_in_menu', true))
             ->where('name', 'like', '%'.$term.'%')
-            ->with('category')
+            ->with(['category.flavorQuantityOptions', 'category.parent.flavorQuantityOptions'])
             ->orderBy('name')
             ->limit(50)
             ->get();
@@ -442,6 +442,10 @@ class Menu extends Component
                 $category->setRelation('products', $this->attachPrices($category->products));
 
                 foreach ($category->children as $child) {
+                    // Deixa o pai já resolvido na subcategoria para
+                    // resolvedFlavorQuantityOptions() não disparar query
+                    // (o flavorQuantityOptions do pai já veio no eager-load).
+                    $child->setRelation('parent', $category);
                     $child->setRelation('products', $this->attachPrices($child->products));
                 }
 
@@ -450,6 +454,38 @@ class Menu extends Component
                 return $category;
             })
             ->values();
+    }
+
+    /**
+     * Localiza uma categoria do cardápio pelo id, incluindo subcategorias —
+     * a coleção `categories()` só carrega raízes. Cai para um load direto
+     * quando o id vem de um bestseller/busca fora da árvore filtrada.
+     */
+    public function menuCategory(int $categoryId): ?Category
+    {
+        foreach ($this->categories as $category) {
+            if ($category->id === $categoryId) {
+                return $category;
+            }
+
+            $child = $category->children->firstWhere('id', $categoryId);
+
+            if ($child !== null) {
+                return $child;
+            }
+        }
+
+        $category = Category::query()
+            ->with([
+                'flavorQuantityOptions',
+                'parent.flavorQuantityOptions',
+                'products' => fn ($query) => $this->visibleProducts($query),
+            ])
+            ->find($categoryId);
+
+        $category?->setRelation('products', $this->attachPrices($category->products));
+
+        return $category;
     }
 
     /**
@@ -479,6 +515,7 @@ class Menu extends Component
         $products = Product::query()
             ->where('bestseller_eligible', true)
             ->where(fn ($query) => $this->visibleProducts($query))
+            ->with(['category.flavorQuantityOptions', 'category.parent.flavorQuantityOptions'])
             ->orderByDesc('sales_count')
             ->limit(6)
             ->get();
@@ -509,7 +546,7 @@ class Menu extends Component
             return null;
         }
 
-        $product = Product::with('category.flavorQuantityOptions')->find($this->viewingProductId);
+        $product = Product::with(['category.flavorQuantityOptions', 'category.parent.flavorQuantityOptions'])->find($this->viewingProductId);
 
         return $product ? $this->attachPrice($product) : null;
     }

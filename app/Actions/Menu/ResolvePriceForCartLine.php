@@ -74,16 +74,17 @@ class ResolvePriceForCartLine
             throw new InvalidArgumentException('Os sabores precisam ser da mesma categoria.');
         }
 
-        $category = Category::findOrFail($categoryIds->first());
+        $category = Category::with(['flavorQuantityOptions', 'parent.flavorQuantityOptions'])
+            ->findOrFail($categoryIds->first());
 
         if (! $category->allows_flavors) {
             throw new InvalidArgumentException('Esta categoria não permite combinar sabores.');
         }
 
-        $quantityOption = $category->flavorQuantityOptions()->firstWhere('flavor_count', count($flavorIds));
+        $quantityOption = $category->resolvedFlavorQuantityOptions()->firstWhere('flavor_count', count($flavorIds));
 
         if (! $quantityOption) {
-            throw new InvalidArgumentException('Esta categoria não tem uma opção configurada para essa quantidade de sabores.');
+            throw new InvalidArgumentException('Esta categoria (ou a categoria pai, se estiver herdando) não tem uma opção configurada para essa quantidade de sabores.');
         }
 
         $prices = collect($flavorIds)->map(

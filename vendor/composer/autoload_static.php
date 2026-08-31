@@ -497,8 +497,8 @@ class ComposerStaticInit55a038cf3738d8ee656cb068db45a51f
         ),
         'League\\Uri\\' => 
         array (
-            0 => __DIR__ . '/..' . '/league/uri-interfaces',
-            1 => __DIR__ . '/..' . '/league/uri',
+            0 => __DIR__ . '/..' . '/league/uri',
+            1 => __DIR__ . '/..' . '/league/uri-interfaces',
             2 => __DIR__ . '/..' . '/league/uri-components',
         ),
         'League\\MimeTypeDetection\\' => 

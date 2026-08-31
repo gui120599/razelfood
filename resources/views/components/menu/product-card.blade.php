@@ -3,7 +3,7 @@
 @php
     $onPromo = (float) $product->resolved_price < (float) $product->resolved_original_price;
     $hasFlavorOptions = $category?->allows_flavors
-        && $category->flavorQuantityOptions->isNotEmpty()
+        && $category->resolvedFlavorQuantityOptions()->isNotEmpty()
         && ! ($product->resolved_flavor_combo_blocked ?? false);
 @endphp
 
