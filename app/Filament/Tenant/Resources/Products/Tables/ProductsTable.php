@@ -2,7 +2,9 @@
 
 namespace App\Filament\Tenant\Resources\Products\Tables;
 
+use App\Actions\Products\AdjustProductsPrice;
 use App\Actions\Products\ReplicateProductsToCategory;
+use App\Filament\Support\InputMasks;
 use App\Filament\Tenant\Support\CategoryOptions;
 use App\Models\Category;
 use App\Models\Product;
@@ -17,7 +19,10 @@ use Filament\Actions\ReplicateAction;
 use Filament\Actions\RestoreAction;
 use Filament\Actions\RestoreBulkAction;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\ImageColumn;
@@ -99,6 +104,63 @@ class ProductsTable
                             Notification::make()
                                 ->title('Produtos replicados')
                                 ->body("{$count} produto(s) copiado(s) para {$target->name}.")
+                                ->success()
+                                ->send();
+                        })
+                        ->deselectRecordsAfterCompletion(),
+                    BulkAction::make('adjustPrice')
+                        ->label('Ajustar preço')
+                        ->icon(Heroicon::OutlinedCurrencyDollar)
+                        ->modalHeading('Ajustar preço dos produtos selecionados')
+                        ->modalSubmitActionLabel('Aplicar')
+                        ->authorizeIndividualRecords('update')
+                        ->schema([
+                            Select::make('mode')
+                                ->label('Tipo de ajuste')
+                                ->options([
+                                    'set' => 'Definir um valor fixo',
+                                    'percent' => 'Porcentagem (%)',
+                                    'amount' => 'Valor (R$)',
+                                ])
+                                ->default('set')
+                                ->required()
+                                ->live(),
+                            Select::make('direction')
+                                ->label('Direção')
+                                ->options([
+                                    'increase' => 'Aumentar',
+                                    'decrease' => 'Diminuir',
+                                ])
+                                ->default('increase')
+                                ->required()
+                                ->visible(fn (Get $get): bool => in_array($get('mode'), ['percent', 'amount'], true)),
+                            InputMasks::money(
+                                TextInput::make('value')
+                                    ->label(fn (Get $get): string => match ($get('mode')) {
+                                        'set' => 'Novo preço',
+                                        'percent' => 'Porcentagem',
+                                        default => 'Valor',
+                                    })
+                                    ->prefix(fn (Get $get): ?string => $get('mode') === 'percent' ? null : 'R$')
+                                    ->suffix(fn (Get $get): ?string => $get('mode') === 'percent' ? '%' : null)
+                                    ->required()
+                            ),
+                            Toggle::make('apply_to_promotional')
+                                ->label('Aplicar também ao preço promocional (quando houver)')
+                                ->default(false),
+                        ])
+                        ->action(function (Collection $records, array $data): void {
+                            $count = app(AdjustProductsPrice::class)(
+                                $records,
+                                $data['mode'],
+                                (float) $data['value'],
+                                $data['direction'] ?? 'increase',
+                                (bool) ($data['apply_to_promotional'] ?? false),
+                            );
+
+                            Notification::make()
+                                ->title('Preços atualizados')
+                                ->body("{$count} produto(s) atualizado(s).")
                                 ->success()
                                 ->send();
                         })

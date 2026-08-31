@@ -30,6 +30,7 @@ return array(
     'App\\Actions\\Orders\\Support\\CartStockAndPromotionLedger' => $baseDir . '/app/Actions/Orders/Support/CartStockAndPromotionLedger.php',
     'App\\Actions\\Orders\\Support\\RecordsOrderPayments' => $baseDir . '/app/Actions/Orders/Support/RecordsOrderPayments.php',
     'App\\Actions\\Orders\\UpdateOrderFromCart' => $baseDir . '/app/Actions/Orders/UpdateOrderFromCart.php',
+    'App\\Actions\\Products\\AdjustProductsPrice' => $baseDir . '/app/Actions/Products/AdjustProductsPrice.php',
     'App\\Actions\\Products\\ReplicateProductsToCategory' => $baseDir . '/app/Actions/Products/ReplicateProductsToCategory.php',
     'App\\Actions\\Reports\\ExportDeliveriesCsv' => $baseDir . '/app/Actions/Reports/ExportDeliveriesCsv.php',
     'App\\Actions\\Reports\\ExportOrdersCsv' => $baseDir . '/app/Actions/Reports/ExportOrdersCsv.php',

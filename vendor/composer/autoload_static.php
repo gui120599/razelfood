@@ -745,6 +745,7 @@ class ComposerStaticInit55a038cf3738d8ee656cb068db45a51f
         'App\\Actions\\Orders\\Support\\CartStockAndPromotionLedger' => __DIR__ . '/../..' . '/app/Actions/Orders/Support/CartStockAndPromotionLedger.php',
         'App\\Actions\\Orders\\Support\\RecordsOrderPayments' => __DIR__ . '/../..' . '/app/Actions/Orders/Support/RecordsOrderPayments.php',
         'App\\Actions\\Orders\\UpdateOrderFromCart' => __DIR__ . '/../..' . '/app/Actions/Orders/UpdateOrderFromCart.php',
+        'App\\Actions\\Products\\AdjustProductsPrice' => __DIR__ . '/../..' . '/app/Actions/Products/AdjustProductsPrice.php',
         'App\\Actions\\Products\\ReplicateProductsToCategory' => __DIR__ . '/../..' . '/app/Actions/Products/ReplicateProductsToCategory.php',
         'App\\Actions\\Reports\\ExportDeliveriesCsv' => __DIR__ . '/../..' . '/app/Actions/Reports/ExportDeliveriesCsv.php',
         'App\\Actions\\Reports\\ExportOrdersCsv' => __DIR__ . '/../..' . '/app/Actions/Reports/ExportOrdersCsv.php',
