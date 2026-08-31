@@ -83,6 +83,13 @@ class CheckoutChangeForTest extends TestCase
         Cart::addSimple($product->id);
     }
 
+    public function test_first_payment_line_is_prefilled_with_the_order_total(): void
+    {
+        // Carrinho tem só a Calabresa (R$ 40), sem entrega — total R$ 40.
+        Livewire::test(Checkout::class)
+            ->assertSet('payments.0.amount', '40,00');
+    }
+
     public function test_change_field_only_shows_up_when_cash_is_selected(): void
     {
         Livewire::test(Checkout::class)
