@@ -3,7 +3,7 @@
 namespace App\Filament\Tenant\Resources\Products\Schemas;
 
 use App\Filament\Support\InputMasks;
-use App\Models\Category;
+use App\Filament\Tenant\Support\CategoryOptions;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
@@ -24,7 +24,7 @@ class ProductForm
                 ->schema([
                     Select::make('category_id')
                         ->label('Categoria')
-                        ->options(fn (): array => self::categoryOptions())
+                        ->options(fn (): array => CategoryOptions::grouped())
                         ->searchable()
                         ->required(),
                     TextInput::make('name')
@@ -85,42 +85,5 @@ class ProductForm
                         ->visible(fn (Get $get): bool => (bool) $get('controls_stock')),
                 ]),
         ]);
-    }
-
-    /**
-     * Opções do select de categoria agrupadas pela categoria pai. Subcategorias
-     * de pais diferentes podem ter o mesmo nome — o cabeçalho do grupo (nome do
-     * pai) é o que as distingue. Categoria raiz sem subcategoria fica solta no
-     * topo, sem grupo.
-     *
-     * @return array<int|string, string|array<int, string>>
-     */
-    private static function categoryOptions(): array
-    {
-        $roots = Category::query()
-            ->whereNull('parent_id')
-            ->with(['children' => fn ($query) => $query->orderBy('display_order')])
-            ->orderBy('display_order')
-            ->get();
-
-        $options = [];
-
-        foreach ($roots as $root) {
-            if ($root->children->isEmpty()) {
-                $options[$root->id] = $root->name;
-
-                continue;
-            }
-
-            $group = [$root->id => $root->name];
-
-            foreach ($root->children as $child) {
-                $group[$child->id] = $child->name;
-            }
-
-            $options[$root->name] = $group;
-        }
-
-        return $options;
     }
 }
