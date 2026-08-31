@@ -64,7 +64,7 @@ class AddonProductAttachTest extends TestCase
             'pageClass' => EditProduct::class,
         ])
             ->callAction(TestAction::make('attach')->table(), [
-                'recordId' => $addon->id,
+                'recordId' => [$addon->id],
                 'price' => 8.00,
                 'max_quantity' => 3,
             ])
@@ -90,7 +90,7 @@ class AddonProductAttachTest extends TestCase
             'pageClass' => EditProduct::class,
         ])
             ->callAction(TestAction::make('attach')->table(), [
-                'recordId' => $addon->id,
+                'recordId' => [$addon->id],
                 'price' => null,
                 'max_quantity' => null,
             ])
@@ -104,6 +104,29 @@ class AddonProductAttachTest extends TestCase
         $this->assertNotNull($pivot);
         $this->assertNull($pivot->price);
         $this->assertNull($pivot->max_quantity);
+    }
+
+    public function test_attaching_several_addons_at_once_creates_one_pivot_row_each(): void
+    {
+        [$tenant, $product, $bacon] = $this->makeTenantProductAndAddon();
+        $cheese = Addon::create(['tenant_id' => $tenant->id, 'name' => 'Queijo extra', 'price' => 4.00]);
+
+        Livewire::test(AddonsRelationManager::class, [
+            'ownerRecord' => $product,
+            'pageClass' => EditProduct::class,
+        ])
+            ->callAction(TestAction::make('attach')->table(), [
+                'recordId' => [$bacon->id, $cheese->id],
+                'price' => null,
+                'max_quantity' => 2,
+            ])
+            ->assertHasNoActionErrors();
+
+        $pivots = ProductAddon::query()->where('product_id', $product->id)->get();
+
+        $this->assertCount(2, $pivots);
+        $this->assertEqualsCanonicalizing([$bacon->id, $cheese->id], $pivots->pluck('addon_id')->all());
+        $this->assertTrue($pivots->every(fn ($pivot) => $pivot->max_quantity === 2 && $pivot->tenant_id === $tenant->id));
     }
 
     /**
