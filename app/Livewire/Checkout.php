@@ -8,12 +8,14 @@ use App\Actions\Orders\CreateOrderFromCart;
 use App\Actions\Orders\FindOrCreateClient;
 use App\Actions\Orders\ResolveDeliveryFee;
 use App\Exceptions\CheckoutException;
+use App\Filament\Support\InputMasks;
 use App\Livewire\Concerns\EstablishesTenantContext;
 use App\Models\Addon;
 use App\Models\Client;
 use App\Models\DeliveryOption;
 use App\Models\PaymentOption;
 use App\Models\Product;
+use App\Rules\ValidCpf;
 use App\Services\Address\ViaCepClient;
 use App\Services\Security\RecaptchaVerifier;
 use App\Support\Cart;
@@ -30,6 +32,8 @@ class Checkout extends Component
     public string $phone = '';
 
     public string $name = '';
+
+    public string $cpf = '';
 
     public ?string $zipCode = null;
 
@@ -193,6 +197,7 @@ class Checkout extends Component
 
         if ($client) {
             $this->name = $client->name;
+            $this->cpf = InputMasks::formatCpf($client->cpf) ?? '';
             $this->zipCode = $client->zip_code;
             $this->street = $client->street;
             $this->number = $client->number;
@@ -260,10 +265,15 @@ class Checkout extends Component
         $messages = [
             'phone.required' => 'Informe seu telefone.',
             'name.required' => 'Informe seu nome.',
+            'cpf.required' => 'Informe seu CPF.',
             'street.required' => 'Informe a rua para entrega.',
             'neighborhood.required' => 'Informe o bairro para entrega.',
             'complement.required' => 'Sem número? Informe um complemento ou ponto de referência.',
         ];
+
+        if ($this->requiresCpf) {
+            $rules['cpf'] = ['required', 'string', new ValidCpf];
+        }
 
         if ($this->requiresAddress) {
             $rules['street'] = ['required', 'string', 'max:255'];
@@ -325,6 +335,7 @@ class Checkout extends Component
             $order = app(CreateOrderFromCart::class)(Cart::items(), [
                 'phone' => $this->phone,
                 'name' => $this->name,
+                'cpf' => $this->requiresCpf ? $this->cpf : null,
                 'zip_code' => $this->zipCode,
                 'street' => $this->street,
                 'number' => $this->number,
@@ -459,6 +470,17 @@ class Checkout extends Component
     public function requiresAddress(): bool
     {
         return (bool) $this->selectedDeliveryOption?->requires_address;
+    }
+
+    /**
+     * RN: quando o tenant liga "Exigir CPF" em Configurações de Pedidos, o
+     * campo de CPF aparece no checkout e vira obrigatório. Só o checkout
+     * público — a Central de Pedidos não é afetada.
+     */
+    #[Computed]
+    public function requiresCpf(): bool
+    {
+        return (bool) CurrentTenant::get()?->require_client_cpf;
     }
 
     /**

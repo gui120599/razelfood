@@ -70,6 +70,7 @@ class OrderSettings extends Page
                 'unlisted_neighborhood_fee',
                 'uses_in_transit_stage',
                 'assigns_delivery_couriers',
+                'require_client_cpf',
             ])
         );
     }
@@ -107,6 +108,15 @@ class OrderSettings extends Page
                             ->default(true)
                             ->visible(fn (Get $get) => (bool) $get('uses_in_transit_stage'))
                             ->helperText('Desligado: o pedido avança para "Em Transporte" sem selecionar um entregador, e o filtro/campo de entregador some da Central.'),
+                    ])
+                    ->columns(1),
+                Section::make('Dados do cliente')
+                    ->description('O que o cliente precisa informar para finalizar um pedido pelo cardápio online.')
+                    ->schema([
+                        Toggle::make('require_client_cpf')
+                            ->label('Exigir CPF do cliente no checkout online')
+                            ->default(false)
+                            ->helperText('Ligado: o cliente precisa informar um CPF válido para finalizar o pedido pelo cardápio público. Não afeta pedidos lançados pela Central de Pedidos.'),
                     ])
                     ->columns(1),
                 Section::make('Bairros não configurados')

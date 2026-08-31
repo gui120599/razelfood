@@ -34,7 +34,7 @@ class CreateOrderFromCart
 
     /**
      * @param  array<int, array{type: string, product_id: int, flavor_ids: array<int>, quantity: int, note: ?string, addons?: array<int, array{addon_id:int, quantity:int, target:?int}>}>  $cartItems
-     * @param  array{phone: string, name: string, zip_code: ?string, street: ?string, number: ?string, complement: ?string, neighborhood: ?string, city: ?string, state: ?string, delivery_option_id: ?int, payments: array<int, array{payment_option_id: int, amount: float, change_for: ?float}>, notes: ?string}  $checkoutData
+     * @param  array{phone: string, name: string, cpf?: ?string, zip_code: ?string, street: ?string, number: ?string, complement: ?string, neighborhood: ?string, city: ?string, state: ?string, delivery_option_id: ?int, payments: array<int, array{payment_option_id: int, amount: float, change_for: ?float}>, notes: ?string}  $checkoutData
      * @param  OrderOrigin  $origin  Origem gravada no pedido — Menu (cardápio público, default) ou Staff (lançado pelo painel do tenant).
      * @param  bool  $bypassBusinessHours  Pula a checagem de horário de funcionamento — só usado pelo painel (atendente pode lançar mesmo "fechado").
      */
@@ -71,6 +71,7 @@ class CreateOrderFromCart
                     $checkoutData['phone'],
                     $checkoutData['name'],
                     Arr::only($checkoutData, ['zip_code', 'street', 'number', 'complement', 'neighborhood', 'city', 'state']),
+                    $checkoutData['cpf'] ?? null,
                 );
 
             $resolvePriceForCartLine = app(ResolvePriceForCartLine::class);

@@ -79,6 +79,36 @@ class ClientResourceTest extends TestCase
         ]);
     }
 
+    public function test_create_normalizes_a_formatted_cpf(): void
+    {
+        Livewire::test(CreateClient::class)
+            ->fillForm([
+                'name' => 'João Cliente',
+                'phone' => '11999997777',
+                'cpf' => '529.982.247-25',
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $this->assertDatabaseHas('clients', [
+            'tenant_id' => $this->tenant->id,
+            'name' => 'João Cliente',
+            'cpf' => '52998224725',
+        ]);
+    }
+
+    public function test_invalid_cpf_is_rejected(): void
+    {
+        Livewire::test(CreateClient::class)
+            ->fillForm([
+                'name' => 'João Cliente',
+                'phone' => '11999996666',
+                'cpf' => '111.111.111-11',
+            ])
+            ->call('create')
+            ->assertHasFormErrors(['cpf']);
+    }
+
     public function test_phone_must_be_unique_within_the_tenant(): void
     {
         Client::create([

@@ -58,6 +58,13 @@ final class InputMasks
             ->stripCharacters(['.', '/', '-']);
     }
 
+    public static function cpf(TextInput $input): TextInput
+    {
+        return $input
+            ->mask('999.999.999-99')
+            ->stripCharacters(['.', '-']);
+    }
+
     /**
      * Reconstrói a máscara de telefone BR a partir dos dígitos gravados.
      * Aceita 10/11 dígitos (fixo/celular) e 12/13 dígitos (com o código do
@@ -104,6 +111,25 @@ final class InputMasks
                 substr($digits, 5, 3),
                 substr($digits, 8, 4),
                 substr($digits, 12),
+            )
+            : $value;
+    }
+
+    /**
+     * Reconstrói a máscara de CPF (999.999.999-99) a partir dos 11 dígitos
+     * gravados.
+     */
+    public static function formatCpf(?string $value): ?string
+    {
+        $digits = preg_replace('/\D/', '', (string) $value);
+
+        return strlen($digits) === 11
+            ? sprintf(
+                '%s.%s.%s-%s',
+                substr($digits, 0, 3),
+                substr($digits, 3, 3),
+                substr($digits, 6, 3),
+                substr($digits, 9),
             )
             : $value;
     }

@@ -119,4 +119,14 @@ class OrderSettingsTest extends TestCase
 
         $this->assertFalse($this->tenant->fresh()->uses_in_transit_stage);
     }
+
+    public function test_saving_persists_the_require_client_cpf_flag(): void
+    {
+        Livewire::test(OrderSettings::class)
+            ->set('data.require_client_cpf', true)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertTrue($this->tenant->fresh()->require_client_cpf);
+    }
 }

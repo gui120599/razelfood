@@ -42,6 +42,7 @@ class Tenant extends Model
         'order_late_after_minutes',
         'uses_in_transit_stage',
         'assigns_delivery_couriers',
+        'require_client_cpf',
     ];
 
     protected function casts(): array
@@ -56,6 +57,7 @@ class Tenant extends Model
             'unlisted_neighborhood_fee' => 'decimal:2',
             'uses_in_transit_stage' => 'boolean',
             'assigns_delivery_couriers' => 'boolean',
+            'require_client_cpf' => 'boolean',
         ];
     }
 

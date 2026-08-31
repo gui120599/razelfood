@@ -3,6 +3,7 @@
 namespace App\Filament\Tenant\Resources\Clients\Schemas;
 
 use App\Filament\Support\InputMasks;
+use App\Rules\ValidCpf;
 use App\Services\Address\ViaCepClient;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
@@ -28,6 +29,9 @@ class ClientForm
                             ->maxLength(20)
                             ->unique(ignoreRecord: true)
                             ->helperText('Usado pelo cardápio público (RN-01) para reconhecer o cliente em pedidos futuros pelo mesmo telefone.'),
+                        InputMasks::cpf(TextInput::make('cpf')->label('CPF'))
+                            ->rule(new ValidCpf)
+                            ->maxLength(14),
                     ]),
                 Section::make('Endereço')
                     ->columns(3)

@@ -25,6 +25,11 @@ class ClientsTable
                     ->label('Telefone')
                     ->formatStateUsing(fn (?string $state): ?string => InputMasks::formatPhone($state))
                     ->searchable(),
+                TextColumn::make('cpf')
+                    ->label('CPF')
+                    ->formatStateUsing(fn (?string $state): ?string => InputMasks::formatCpf($state))
+                    ->placeholder('—')
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('neighborhood')
                     ->label('Bairro')
                     ->placeholder('—'),
