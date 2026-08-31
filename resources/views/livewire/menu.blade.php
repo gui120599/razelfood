@@ -45,9 +45,12 @@
         </section>
     @else
 
-    {{-- Navegação rápida por categoria --}}
+    {{-- Navegação rápida por categoria — fixa logo abaixo do cabeçalho do
+         estabelecimento (top-14), acima dos títulos de categoria (top-[7rem]).
+         mt-0! anula o space-y-6 do wrapper: com a margem, o `sticky` prenderia
+         a barra 24px abaixo do ponto certo e ela cobriria o título da categoria. --}}
     @if ($this->categories->isNotEmpty())
-        <div class="-mx-2 flex gap-2 overflow-x-auto px-2 pb-1">
+        <div class="sticky top-14 z-30 mt-0! -mx-2 flex gap-2 overflow-x-auto bg-black px-2 pb-2 pt-3">
             @if ($this->activePromotions->isNotEmpty())
                 <a href="#secao-relampago" class="shrink-0 rounded-full border border-red-500/40 bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-400 whitespace-nowrap">
                     ⚡ Relâmpago
@@ -77,7 +80,7 @@
     @if ($this->activePromotions->isNotEmpty())
         <div class="space-y-4">
             @foreach ($this->activePromotions as $promotion)
-                <section wire:key="promo-{{ $promotion->id }}" id="{{ $loop->first ? 'secao-relampago' : 'secao-relampago-'.$promotion->id }}" class="scroll-mt-16">
+                <section wire:key="promo-{{ $promotion->id }}" id="{{ $loop->first ? 'secao-relampago' : 'secao-relampago-'.$promotion->id }}" class="scroll-mt-28">
                     <div class="flex items-center justify-between gap-2 rounded-t-xl bg-gradient-to-r from-red-600 to-orange-500 px-3 py-2">
                         <div class="flex min-w-0 items-center gap-2">
                             <x-heroicon-s-bolt class="h-6 w-6 shrink-0 animate-pulse text-yellow-300" />
@@ -110,7 +113,7 @@
 
     {{-- Mais vendidos --}}
     @if ($this->bestsellers->isNotEmpty())
-        <section id="secao-mais-vendidos" class="scroll-mt-16">
+        <section id="secao-mais-vendidos" class="scroll-mt-28">
             <h2 class="mb-2 flex items-center gap-1.5 text-lg font-bold uppercase text-yellow-400">
                 <x-heroicon-s-star class="h-5 w-5" /> Mais vendidos
             </h2>
@@ -124,8 +127,8 @@
 
     {{-- Categorias --}}
     @foreach ($this->categories as $category)
-        <section wire:key="category-{{ $category->id }}" id="categoria-{{ $category->id }}" class="scroll-mt-16" x-data="{ activeChild: 'all' }">
-            <h2 class="sticky top-14 z-20 -mx-2 bg-black px-2 py-2 text-lg font-bold text-white">{{ $category->name }}</h2>
+        <section wire:key="category-{{ $category->id }}" id="categoria-{{ $category->id }}" class="scroll-mt-28" x-data="{ activeChild: 'all' }">
+            <h2 class="sticky top-[7rem] z-20 -mx-2 bg-black px-2 py-2 text-lg font-bold text-white">{{ $category->name }}</h2>
 
             @if ($category->show_description_in_menu && filled($category->description))
                 <p class="mb-2 text-xs text-gray-400">{{ $category->description }}</p>
