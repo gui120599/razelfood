@@ -80,21 +80,21 @@ class NeighborhoodsRelationManagerTest extends TestCase
         ]);
     }
 
-    public function test_changing_city_resets_the_previously_selected_neighborhood(): void
+    public function test_changing_city_resets_the_previously_selected_neighborhoods(): void
     {
         $this->relationManager()
             ->mountAction(TestAction::make(CreateAction::class)->table())
             ->set('mountedActions.0.data.city', 'sao paulo')
-            ->set('mountedActions.0.data.neighborhood', 'se')
+            ->set('mountedActions.0.data.neighborhoods', ['se'])
             ->set('mountedActions.0.data.city', 'campinas')
-            ->assertSchemaStateSet(['neighborhood' => null]);
+            ->assertSchemaStateSet(['neighborhoods' => []]);
     }
 
     public function test_neighborhood_select_is_disabled_until_a_city_is_selected(): void
     {
         $this->relationManager()
             ->mountAction(TestAction::make(CreateAction::class)->table())
-            ->assertSchemaComponentExists('neighborhood', null, fn ($component) => $component->isDisabled());
+            ->assertSchemaComponentExists('neighborhoods', null, fn ($component) => $component->isDisabled());
     }
 
     public function test_creating_a_neighborhood_from_the_catalog_persists_normalized_city_and_neighborhood(): void
@@ -102,7 +102,7 @@ class NeighborhoodsRelationManagerTest extends TestCase
         $this->relationManager()
             ->callAction(TestAction::make(CreateAction::class)->table(), [
                 'city' => 'sao paulo',
-                'neighborhood' => 'vila mariana',
+                'neighborhoods' => ['vila mariana'],
             ])
             ->assertHasNoActionErrors();
 
@@ -114,6 +114,39 @@ class NeighborhoodsRelationManagerTest extends TestCase
         ]);
     }
 
+    public function test_creating_several_neighborhoods_at_once_creates_one_row_each(): void
+    {
+        $this->relationManager()
+            ->callAction(TestAction::make(CreateAction::class)->table(), [
+                'city' => 'sao paulo',
+                'neighborhoods' => ['vila mariana', 'se'],
+            ])
+            ->assertHasNoActionErrors();
+
+        $this->assertDatabaseHas('delivery_zone_neighborhoods', [
+            'delivery_zone_id' => $this->deliveryZone->id, 'city' => 'sao paulo', 'neighborhood' => 'vila mariana',
+        ]);
+        $this->assertDatabaseHas('delivery_zone_neighborhoods', [
+            'delivery_zone_id' => $this->deliveryZone->id, 'city' => 'sao paulo', 'neighborhood' => 'se',
+        ]);
+        $this->assertSame(2, $this->deliveryZone->neighborhoods()->count());
+    }
+
+    public function test_last_city_is_remembered_and_preselected_on_the_next_create(): void
+    {
+        $component = $this->relationManager()
+            ->callAction(TestAction::make(CreateAction::class)->table(), [
+                'city' => 'sao paulo',
+                'neighborhoods' => ['vila mariana'],
+            ])
+            ->assertHasNoActionErrors()
+            ->assertSet('lastCity', 'sao paulo');
+
+        $component
+            ->mountAction(TestAction::make(CreateAction::class)->table())
+            ->assertSchemaStateSet(['city' => 'sao paulo']);
+    }
+
     public function test_neighborhood_from_a_different_city_is_rejected(): void
     {
         // "Centro" existe no catálogo, mas pertence a Campinas — não pode
@@ -122,9 +155,9 @@ class NeighborhoodsRelationManagerTest extends TestCase
         $this->relationManager()
             ->callAction(TestAction::make(CreateAction::class)->table(), [
                 'city' => 'sao paulo',
-                'neighborhood' => 'centro',
+                'neighborhoods' => ['centro'],
             ])
-            ->assertHasActionErrors(['neighborhood']);
+            ->assertHasActionErrors(['neighborhoods']);
     }
 
     public function test_duplicate_neighborhood_for_the_same_city_is_rejected_with_a_friendly_message(): void
@@ -145,9 +178,9 @@ class NeighborhoodsRelationManagerTest extends TestCase
         $this->relationManager()
             ->callAction(TestAction::make(CreateAction::class)->table(), [
                 'city' => 'sao paulo',
-                'neighborhood' => 'vila mariana',
+                'neighborhoods' => ['vila mariana'],
             ])
-            ->assertHasActionErrors(['neighborhood']);
+            ->assertHasActionErrors(['neighborhoods']);
     }
 
     public function test_editing_a_neighborhood_does_not_trigger_its_own_duplicate_validation(): void

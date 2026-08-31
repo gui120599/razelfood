@@ -8,6 +8,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 | app/Livewire/{Menu.php,Checkout.php,OrderStatusTimeline.php,Concerns/EstablishesTenantContext.php} | .ai/rules/app-livewire.md |
 | app/Console/Commands/** | .ai/rules/commands.md |
 | config/filament-shield.php, config/*.php | .ai/rules/config.md |
+| app/Filament/Tenant/Resources/DeliveryZones/RelationManagers/NeighborhoodsRelationManager.php | .ai/rules/delivery-zones-relation-managers.md |
 | tests/Feature/**/*.php | .ai/rules/feature.md |
 | app/Filament/Resources/** | .ai/rules/filament-resources.md |
 | app/Filament/Support/EstablishmentDocumentFields.php, app/Filament/Support/InputMasks.php | .ai/rules/filament-support.md |
