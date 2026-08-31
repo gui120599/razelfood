@@ -44,7 +44,7 @@ class UpdateOrderFromCart
 
     /**
      * @param  array<int, array{type: string, product_id: int, flavor_ids: array<int>, quantity: int, note: ?string, addons?: array<int, array{addon_id:int, quantity:int, target:?int}>}>  $cartItems
-     * @param  array{phone: string, name: string, zip_code: ?string, street: ?string, number: ?string, complement: ?string, neighborhood: ?string, city: ?string, state: ?string, delivery_option_id: ?int, payments: array<int, array{payment_option_id: int, amount: float, change_for: ?float}>, notes: ?string}  $checkoutData
+     * @param  array{phone: string, name: string, cpf?: ?string, zip_code: ?string, street: ?string, number: ?string, complement: ?string, neighborhood: ?string, city: ?string, state: ?string, delivery_option_id: ?int, payments: array<int, array{payment_option_id: int, amount: float, change_for: ?float}>, notes: ?string}  $checkoutData
      */
     public function __invoke(Order $order, array $cartItems, array $checkoutData): Order
     {
@@ -205,6 +205,7 @@ class UpdateOrderFromCart
                 $checkoutData['phone'],
                 $checkoutData['name'],
                 Arr::only($checkoutData, ['zip_code', 'street', 'number', 'complement', 'neighborhood', 'city', 'state']),
+                $checkoutData['cpf'] ?? null,
             );
 
         $itemsTotal = $resolvedLines->sum(

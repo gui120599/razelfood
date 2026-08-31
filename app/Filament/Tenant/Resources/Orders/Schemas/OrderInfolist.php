@@ -39,6 +39,10 @@ class OrderInfolist
                             ->label('Telefone')
                             ->formatStateUsing(fn (?string $state): ?string => InputMasks::formatPhone($state))
                             ->placeholder('—'),
+                        TextEntry::make('client.cpf')
+                            ->label('CPF')
+                            ->formatStateUsing(fn (?string $state): ?string => InputMasks::formatCpf($state))
+                            ->visible(fn (?string $state): bool => filled($state)),
                         TextEntry::make('delivery_address')
                             ->label('Endereço')
                             ->placeholder('Retirada no local'),

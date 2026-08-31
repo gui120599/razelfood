@@ -996,6 +996,7 @@ class ComposerStaticInit55a038cf3738d8ee656cb068db45a51f
         'App\\Providers\\Filament\\CentralPanelProvider' => __DIR__ . '/../..' . '/app/Providers/Filament/CentralPanelProvider.php',
         'App\\Providers\\Filament\\TenantPanelProvider' => __DIR__ . '/../..' . '/app/Providers/Filament/TenantPanelProvider.php',
         'App\\Rules\\ValidCnpj' => __DIR__ . '/../..' . '/app/Rules/ValidCnpj.php',
+        'App\\Rules\\ValidCpf' => __DIR__ . '/../..' . '/app/Rules/ValidCpf.php',
         'App\\Rules\\ValidTenantSlug' => __DIR__ . '/../..' . '/app/Rules/ValidTenantSlug.php',
         'App\\Services\\Address\\IbgeService' => __DIR__ . '/../..' . '/app/Services/Address/IbgeService.php',
         'App\\Services\\Address\\LocationCatalogTransfer' => __DIR__ . '/../..' . '/app/Services/Address/LocationCatalogTransfer.php',

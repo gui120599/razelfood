@@ -281,6 +281,7 @@ return array(
     'App\\Providers\\Filament\\CentralPanelProvider' => $baseDir . '/app/Providers/Filament/CentralPanelProvider.php',
     'App\\Providers\\Filament\\TenantPanelProvider' => $baseDir . '/app/Providers/Filament/TenantPanelProvider.php',
     'App\\Rules\\ValidCnpj' => $baseDir . '/app/Rules/ValidCnpj.php',
+    'App\\Rules\\ValidCpf' => $baseDir . '/app/Rules/ValidCpf.php',
     'App\\Rules\\ValidTenantSlug' => $baseDir . '/app/Rules/ValidTenantSlug.php',
     'App\\Services\\Address\\IbgeService' => $baseDir . '/app/Services/Address/IbgeService.php',
     'App\\Services\\Address\\LocationCatalogTransfer' => $baseDir . '/app/Services/Address/LocationCatalogTransfer.php',

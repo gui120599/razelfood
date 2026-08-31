@@ -11,6 +11,7 @@ class Client extends TenantScopedModel
         'tenant_id',
         'name',
         'phone',
+        'cpf',
         'address',
         'zip_code',
         'street',

@@ -33,6 +33,17 @@
                    class="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:border-[var(--tenant-primary)] focus:outline-none">
             @error('name') <p class="mt-1 text-xs text-red-400">{{ $message }}</p> @enderror
         </div>
+
+        @if ($this->requiresCpf)
+            <div>
+                <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-400">CPF</label>
+                <input type="text" wire:model="cpf" data-field="cpf" inputmode="numeric"
+                       x-on:input="$el.value = window.maskCpf($el.value)"
+                       placeholder="000.000.000-00" maxlength="14"
+                       class="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:border-[var(--tenant-primary)] focus:outline-none">
+                @error('cpf') <p class="mt-1 text-xs text-red-400">{{ $message }}</p> @enderror
+            </div>
+        @endif
     </div>
 
     {{-- 2. Opção de entrega --}}
@@ -327,6 +338,11 @@
     // Máscaras puramente visuais — o servidor sempre normaliza (remove
     // pontuação) antes de salvar/comparar, então não afetam a validação.
     window.maskCep = (value) => value.replace(/\D/g, '').slice(0, 8).replace(/^(\d{5})(\d)/, '$1-$2');
+
+    window.maskCpf = (value) => value.replace(/\D/g, '').slice(0, 11)
+        .replace(/^(\d{3})(\d)/, '$1.$2')
+        .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+        .replace(/^(\d{3})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3-$4');
 
     window.maskPhone = (value) => {
         value = value.replace(/\D/g, '').slice(0, 11);
