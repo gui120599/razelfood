@@ -9,6 +9,7 @@ use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Repeater;
+use Filament\Forms\Components\Repeater\TableColumn;
 use Filament\Forms\Components\TimePicker;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
@@ -97,7 +98,14 @@ class ManageBusinessHours extends Page
                     ->map(fn (string $label, int $weekday) => Section::make($label)
                         ->schema([
                             Repeater::make("weekday_{$weekday}")
-                                ->label('')
+                                ->hiddenLabel()
+                                ->table([
+                                    TableColumn::make('Abre')
+                                        ->markAsRequired(),
+                                    TableColumn::make('Fecha')
+                                        ->markAsRequired(),
+                                    TableColumn::make('Ativo'),
+                                ])
                                 ->schema([
                                     TimePicker::make('opens_at')
                                         ->label('Abre')
@@ -111,7 +119,6 @@ class ManageBusinessHours extends Page
                                         ->label('Ativo')
                                         ->default(true),
                                 ])
-                                ->columns(3)
                                 ->addActionLabel('+ Adicionar turno')
                                 ->defaultItems(0),
                         ]))

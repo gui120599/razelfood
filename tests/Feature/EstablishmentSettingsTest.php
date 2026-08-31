@@ -104,6 +104,24 @@ class EstablishmentSettingsTest extends TestCase
         Storage::disk('public')->assertExists($faviconPath);
     }
 
+    public function test_admin_can_enable_and_upload_a_logo_for_print_documents(): void
+    {
+        Storage::fake('public');
+
+        Livewire::test(EstablishmentSettings::class)
+            ->fillForm(['show_logo_on_prints' => true])
+            ->fillForm(['print_logo_path' => UploadedFile::fake()->image('comanda.png', 400, 200)])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $tenant = $this->tenant->fresh();
+
+        $this->assertTrue($tenant->show_logo_on_prints);
+        $this->assertNotNull($tenant->print_logo_path);
+        $this->assertStringStartsWith('tenants/print/', $tenant->print_logo_path);
+        Storage::disk('public')->assertExists($tenant->print_logo_path);
+    }
+
     public function test_admin_can_save_cnpj_and_address(): void
     {
         Livewire::test(EstablishmentSettings::class)

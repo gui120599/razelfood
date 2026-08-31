@@ -174,6 +174,29 @@ class OrderTicketTest extends TestCase
             ->assertSee('R$ 58,00')
             ->assertSee('Troco para R$ 100,00')
             ->assertSee('Troco: R$ 42,00')
-            ->assertSee('Centro');
+            ->assertSee('Centro')
+            ->assertSee('(11) 99999-0000')
+            ->assertSee('+55 (11) 98888-7777');
+    }
+
+    public function test_ticket_shows_the_print_logo_only_when_enabled(): void
+    {
+        $order = $this->makeOrder();
+        $this->tenant->update([
+            'print_logo_path' => 'tenants/print/logo.png',
+            'show_logo_on_prints' => false,
+        ]);
+
+        $this->actingAs($this->userWithRole('Atendente'))
+            ->get(route('order.ticket', $order))
+            ->assertOk()
+            ->assertDontSee('tenants/print/logo.png');
+
+        $this->tenant->update(['show_logo_on_prints' => true]);
+
+        $this->actingAs($this->userWithRole('Atendente'))
+            ->get(route('order.ticket', $order))
+            ->assertOk()
+            ->assertSee('tenants/print/logo.png');
     }
 }

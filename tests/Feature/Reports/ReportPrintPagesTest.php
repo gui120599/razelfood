@@ -98,6 +98,23 @@ class ReportPrintPagesTest extends TestCase
             ->assertSee('Centro');
     }
 
+    public function test_print_reports_show_the_logo_only_when_enabled(): void
+    {
+        $this->seedOrders();
+        $this->tenant->update(['print_logo_path' => 'tenants/print/logo.png']);
+        $url = route('reports.orders.print', ['start' => now()->subDays(30)->toDateString(), 'end' => now()->toDateString()]);
+
+        $this->actingAs($this->userWithRole('Gerente'))->get($url)
+            ->assertOk()
+            ->assertDontSee('tenants/print/logo.png');
+
+        $this->tenant->update(['show_logo_on_prints' => true]);
+
+        $this->actingAs($this->userWithRole('Gerente'))->get($url)
+            ->assertOk()
+            ->assertSee('tenants/print/logo.png');
+    }
+
     public function test_deliveries_page_access_gate(): void
     {
         $this->actingAs($this->userWithRole('Gerente'));

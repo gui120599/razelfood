@@ -12,6 +12,7 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Actions;
@@ -19,6 +20,7 @@ use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\EmbeddedSchema;
 use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\Alignment;
 use Filament\Support\Icons\Heroicon;
@@ -75,6 +77,8 @@ class EstablishmentSettings extends Page
                 'whatsapp_number',
                 'logo_path',
                 'favicon_path',
+                'print_logo_path',
+                'show_logo_on_prints',
                 'primary_color',
                 'watermark_height',
                 ...EstablishmentDocumentFields::names(),
@@ -130,6 +134,24 @@ class EstablishmentSettings extends Page
                             ->helperText('PNG quadrado (idealmente 512×512). Aparece na aba do navegador do cardápio público.')
                             ->columnSpanFull(),
                     ]),
+                Section::make('Impressões')
+                    ->description('Logo aplicada nas vias imprimíveis: comanda de cozinha e relatórios em A4.')
+                    ->schema([
+                        Toggle::make('show_logo_on_prints')
+                            ->label('Exibir logo nas impressões')
+                            ->live()
+                            ->helperText('Quando ligado, a logo abaixo é impressa no topo da comanda e dos relatórios.'),
+                        FileUpload::make('print_logo_path')
+                            ->label('Logo para impressões')
+                            ->image()
+                            ->disk('public')
+                            ->directory('tenants/print')
+                            ->visibility('public')
+                            ->imageEditor()
+                            ->maxSize(2048)
+                            ->helperText('De preferência em preto e branco, com boa margem. Se vazia, nada é impresso mesmo com a opção ligada.')
+                            ->visible(fn (Get $get): bool => (bool) $get('show_logo_on_prints')),
+                    ]),
                 EstablishmentDocumentFields::section(),
             ])
             ->statePath('data');
@@ -141,7 +163,7 @@ class EstablishmentSettings extends Page
 
         $tenant->update($this->form->getState());
 
-        // O middleware IdentifyTenant cacheia o tenant por slug — sem
+        // O middleware ResolveTenantFromPath cacheia o tenant por slug — sem
         // invalidar, o cardápio público mostra logo/cor/nome antigos até o
         // TTL expirar.
         Cache::forget("tenant:slug:{$tenant->slug}");
