@@ -44,7 +44,8 @@ class FlavorQuantityOptionsRelationManager extends RelationManager
 
     public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
     {
-        return (bool) $ownerRecord->allows_flavors;
+        // Subcategoria que herda as opções do pai não cadastra as próprias.
+        return $ownerRecord->allows_flavors && ! $ownerRecord->inheritsFlavorOptions();
     }
 
     public function form(Schema $schema): Schema

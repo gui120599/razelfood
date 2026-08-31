@@ -37,7 +37,7 @@ class FlavorPickerModal extends Component
     public function startCombo(int $categoryId, ?int $initialProductId = null): void
     {
         $category = $this->loadCategory($categoryId);
-        $defaultOption = $category?->flavorQuantityOptions->first();
+        $defaultOption = $category?->resolvedFlavorQuantityOptions()->first();
 
         $this->comboBuilder = [
             'category_id' => $categoryId,
@@ -52,7 +52,7 @@ class FlavorPickerModal extends Component
     public function selectFlavorQuantity(int $optionId): void
     {
         $category = $this->loadCategory($this->comboBuilder['category_id']);
-        $option = $category?->flavorQuantityOptions->firstWhere('id', $optionId);
+        $option = $category?->resolvedFlavorQuantityOptions()->firstWhere('id', $optionId);
 
         if (! $option) {
             return;
@@ -132,7 +132,7 @@ class FlavorPickerModal extends Component
             return null;
         }
 
-        return Category::with('flavorQuantityOptions')->find($categoryId);
+        return Category::with(['flavorQuantityOptions', 'parent.flavorQuantityOptions'])->find($categoryId);
     }
 
     #[Computed]

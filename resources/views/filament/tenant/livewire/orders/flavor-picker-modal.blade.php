@@ -12,9 +12,9 @@
                     </button>
                 </div>
 
-                @if ($this->currentCategory?->flavorQuantityOptions->count() > 1)
+                @if ($this->currentCategory?->resolvedFlavorQuantityOptions()->count() > 1)
                     <div class="flex gap-2 border-b border-gray-200 px-4 py-3 dark:border-white/10">
-                        @foreach ($this->currentCategory->flavorQuantityOptions as $option)
+                        @foreach ($this->currentCategory->resolvedFlavorQuantityOptions() as $option)
                             <button
                                 type="button"
                                 wire:click="selectFlavorQuantity({{ $option->id }})"
