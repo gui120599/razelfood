@@ -40,7 +40,7 @@
          o `sticky` do <header> fica preso à altura de 1 viewport e o cabeçalho
          "descola" ao rolar a lista de produtos. --}}
     <div class="relative z-10 mx-auto flex min-h-full w-full max-w-lg flex-col">
-        <header class="sticky top-0 z-30 border-b border-white/10 bg-black/95 backdrop-blur">
+        <header class="sticky top-0 z-40 border-b border-white/10 bg-black/95 backdrop-blur">
             <div class="flex items-center gap-3 px-4 py-3">
                 @if ($tenant->logo_path ?? null)
                     <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($tenant->logo_path) }}"
