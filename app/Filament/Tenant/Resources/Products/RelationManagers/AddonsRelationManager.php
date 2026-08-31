@@ -49,18 +49,21 @@ class AddonsRelationManager extends RelationManager
             ])
             ->headerActions([
                 AttachAction::make()
+                    ->multiple()
                     ->schema(fn (AttachAction $action): array => [
-                        $action->getRecordSelect(),
+                        $action->getRecordSelect()
+                            ->label('Adicionais')
+                            ->helperText('Você pode escolher vários de uma vez.'),
                         InputMasks::money(
                             TextInput::make('price')
                                 ->label('Preço neste produto (opcional)')
                                 ->prefix('R$')
-                                ->helperText('Vazio = usa o preço base do adicional.')
+                                ->helperText('Vazio = usa o preço base do adicional. Vale para todos os adicionais selecionados.')
                         ),
                         TextInput::make('max_quantity')
                             ->label('Quantidade máxima por pedido')
                             ->numeric()
-                            ->helperText('Vazio = sem limite.'),
+                            ->helperText('Vazio = sem limite. Vale para todos os adicionais selecionados.'),
                     ]),
             ])
             ->recordActions([
