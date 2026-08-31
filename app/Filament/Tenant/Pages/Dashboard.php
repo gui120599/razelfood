@@ -2,12 +2,12 @@
 
 namespace App\Filament\Tenant\Pages;
 
+use App\Filament\Tenant\Widgets\AccountWidget;
 use App\Filament\Tenant\Widgets\CatalogSnapshot;
 use App\Filament\Tenant\Widgets\OrdersTodayOverview;
 use App\Filament\Tenant\Widgets\PlanFeatures;
 use App\Filament\Tenant\Widgets\StoreReadiness;
 use Filament\Pages\Dashboard as BaseDashboard;
-use Filament\Widgets\AccountWidget;
 
 /**
  * Dashboard padrão do painel do tenant (`/painel`). Lista os widgets
