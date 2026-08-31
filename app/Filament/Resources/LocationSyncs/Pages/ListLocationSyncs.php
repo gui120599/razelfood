@@ -6,13 +6,16 @@ use App\Filament\Resources\LocationSyncs\LocationSyncResource;
 use App\Filament\Resources\LocationSyncs\Schemas\LocationSyncForm;
 use App\Jobs\ImportNeighborhoodsFromRuaCepJob;
 use App\Services\Address\IbgeService;
+use App\Services\Address\LocationCatalogTransfer;
 use App\Services\Address\LocationSyncService;
 use Filament\Actions\Action;
+use Filament\Forms\Components\FileUpload;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Validation\ValidationException;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class ListLocationSyncs extends ListRecords
 {
@@ -92,6 +95,62 @@ class ListLocationSyncs extends ListRecords
                     Notification::make()
                         ->title('Importação iniciada')
                         ->body("Buscando bairros de {$city->name}/{$city->state->uf} no RuaCEP.")
+                        ->success()
+                        ->send();
+                }),
+
+            Action::make('exportCatalog')
+                ->label('Exportar localidades')
+                ->icon(Heroicon::OutlinedArrowDownTray)
+                ->color('gray')
+                ->tooltip('Baixa estados, cidades e bairros num arquivo .json pra reimportar em outro ambiente.')
+                ->action(fn () => app(LocationCatalogTransfer::class)->downloadResponse()),
+
+            Action::make('importCatalog')
+                ->label('Importar localidades')
+                ->icon(Heroicon::OutlinedArrowUpTray)
+                ->color('gray')
+                ->modalHeading('Importar localidades')
+                ->modalDescription('Envie o arquivo .json gerado pelo "Exportar localidades" em outro ambiente. Estados, cidades e bairros são inseridos ou atualizados por chave natural (UF, código IBGE, nome normalizado) — nada é apagado.')
+                ->modalSubmitActionLabel('Importar')
+                ->schema([
+                    FileUpload::make('file')
+                        ->label('Arquivo JSON')
+                        ->acceptedFileTypes(['application/json'])
+                        ->storeFiles(false)
+                        ->required(),
+                ])
+                ->action(function (array $data, Schema $schema): void {
+                    $file = $data['file'];
+                    $contents = $file instanceof TemporaryUploadedFile ? $file->get() : false;
+                    $payload = is_string($contents) ? json_decode($contents, true) : null;
+
+                    try {
+                        if ($payload === null) {
+                            throw ValidationException::withMessages([
+                                'file' => 'Não foi possível ler o arquivo enviado como JSON.',
+                            ]);
+                        }
+
+                        $counts = app(LocationCatalogTransfer::class)->import($payload);
+                    } catch (ValidationException $exception) {
+                        // Erros nascem em LocationCatalogTransfer com a chave "crua"
+                        // ("file") — reprefixa com o state path da action pra
+                        // aparecer no campo certo do modal (mesmo padrão da action "sync").
+                        $statePath = $schema->getStatePath();
+
+                        throw ValidationException::withMessages(
+                            collect($exception->errors())
+                                ->mapWithKeys(fn (array $messages, string $key) => [
+                                    filled($statePath) ? "{$statePath}.{$key}" : $key => $messages,
+                                ])
+                                ->all(),
+                        );
+                    }
+
+                    Notification::make()
+                        ->title('Localidades importadas')
+                        ->body("{$counts['states']} estados, {$counts['cities']} cidades e {$counts['neighborhoods']} bairros processados.")
                         ->success()
                         ->send();
                 }),
