@@ -41,7 +41,7 @@ O RazelFood existe para o dono de restaurante que precisa de um cardápio digita
 **Público-alvo:** donos/gestores de restaurantes, pizzarias, lanchonetes e operações de delivery de pequeno/médio porte, que tocam o operacional no dia a dia e não têm equipe de TI própria.
 
 **Como funciona, em quatro passos (conforme a proposta comercial):**
-1. Cliente acessa o cardápio digital do estabelecimento (subdomínio próprio) pelo celular.
+1. Cliente acessa o cardápio digital do estabelecimento (`razelfood.com.br/{slug}`) pelo celular.
 2. Monta o pedido no carrinho.
 3. Confirma e é direcionado ao WhatsApp do estabelecimento, com mensagem já estruturada.
 4. A cozinha prepara e atualiza o status do pedido em tela própria.
@@ -61,7 +61,7 @@ Os perfis abaixo se inspiram nas roles já validadas no sistema de referência (
 | **Atendente** | Recebe e processa pedidos no dia a dia. | Cancelar/aceitar/rejeitar/avançar pedido (sem financeiro) |
 | **Caixa** | Opera abertura/fechamento de caixa (se o módulo estiver habilitado). | Abrir/fechar sessão de caixa |
 | **Entregador** | Executa a entrega e atualiza o pedido. | Marcar pedido como entregue (via link/QR assinado) |
-| **Cliente Final** | Consumidor que acessa o cardápio público (subdomínio do tenant) e faz o pedido. | Sem login formal — identificado por telefone (RN-01) |
+| **Cliente Final** | Consumidor que acessa o cardápio público (`razelfood.com.br/{slug}`) e faz o pedido. | Sem login formal — identificado por telefone (RN-01) |
 | **Razel Tec (equipe interna)** | Responsável por provisionar novos tenants, configurar e dar suporte. | Acesso multi-tenant: cria/gerencia tenants, dá suporte a qualquer cliente |
 
 > **RN-01:** Cliente Final não cria conta nem faz login formal. No checkout, o sistema busca automaticamente um cadastro existente pelo número de telefone informado, dentro do tenant daquele cardápio; se encontrar, reaproveita nome/endereço salvos (e permite atualizá-los); se não encontrar, cria um cadastro novo de cliente. Isso evita re-digitação em pedidos recorrentes sem exigir senha.
@@ -183,7 +183,7 @@ O status do pedido segue um fluxo definido no sistema, com data/hora registrada 
 | ID | Requisito |
 |---|---|
 | RF-01 | O sistema deve permitir provisionar um novo tenant (com slug reservado e validado) sem exigir alteração manual de schema de banco de dados. |
-| RF-02 | O sistema deve resolver automaticamente o tenant da requisição a partir do subdomínio e aplicar o isolamento de dados (escopo por tenant) em todas as consultas, de forma transparente para o restante do código. |
+| RF-02 | O sistema deve resolver automaticamente o tenant da requisição a partir do slug na URL (path) e aplicar o isolamento de dados (escopo por tenant) em todas as consultas, de forma transparente para o restante do código. |
 | RF-03 | A equipe da Razel Tec deve ter uma tela/ferramenta interna para listar tenants ativos, seus slugs, status e dados de contato, para fins de suporte. |
 | RF-04 | O sistema deve rejeitar a criação de um slug que já exista ou que conste na lista de palavras reservadas (RN-04). |
 
@@ -278,7 +278,7 @@ O status do pedido segue um fluxo definido no sistema, com data/hora registrada 
 | RNF-04 | **Disponibilidade:** o cardápio público é a vitrine do restaurante — alta disponibilidade, especialmente em horário de pico (almoço/jantar), para todos os tenants simultaneamente. |
 | RNF-05 | **Simplicidade de uso:** qualquer tela do painel deve ser operável sem familiaridade técnica nem treinamento formal extenso. |
 | RNF-06 | **Consistência visual:** identidade RazelTec (dark mode, gradientes azul/violeta, Space Grotesk/Inter/JetBrains Mono) no painel administrativo, e marca própria RazelFood (`razelfood.com.br`) nas telas voltadas ao cliente final. |
-| RNF-07 | **Segurança:** preço sempre resolvido no servidor (RN-13); dados de clientes finais tratados conforme LGPD, com coleta mínima necessária; certificado wildcard válido para `*.razelfood.com.br`. |
+| RNF-07 | **Segurança:** preço sempre resolvido no servidor (RN-13); dados de clientes finais tratados conforme LGPD, com coleta mínima necessária; certificado SSL válido para `razelfood.com.br` (domínio único — não precisa mais de wildcard). |
 | RNF-08 | **Concorrência:** operações sensíveis (ex.: baixa de saldo de promoção relâmpago) devem ser transacionais, evitando overselling em picos, sempre dentro do escopo do tenant (RN-22). |
 | RNF-09 | **Padrões de código:** skill `laravel-dev` (Laravel 12 + Blade + Tailwind v4 + Livewire 3 + Alpine.js 3 + Filament 4 + MySQL). |
 
@@ -311,8 +311,8 @@ Conforme a Proposta Comercial de 18/08/2026, válida como referência do pacote 
 ## 10. Glossário
 
 - **Tenant:** cliente/estabelecimento dentro da aplicação multi-tenant RazelFood, com seus próprios dados isolados logicamente.
-- **Slug:** identificador único e legível de um tenant, usado como subdomínio (ex.: `emporiodapizza` em `emporiodapizza.razelfood.com.br`).
-- **Cardápio público:** página acessível ao Cliente Final, sem necessidade de login, servida no subdomínio do tenant.
+- **Slug:** identificador único e legível de um tenant, usado no path da URL (ex.: `emporiodapizza` em `razelfood.com.br/emporiodapizza` e `razelfood.com.br/painel/emporiodapizza`).
+- **Cardápio público:** página acessível ao Cliente Final, sem necessidade de login, servida em `razelfood.com.br/{slug}`.
 - **Sabores/combo:** combinação de dois ou mais produtos em um único item vendido (ex.: pizza meio a meio), com preço rateado.
 - **Adicional:** item opcional vendido junto de um produto (ex.: porção extra de bacon), com preço base e estoque próprios, anexado a um ou mais produtos específicos; seu custo e consumo de estoque são rateados pela mesma fração de sabor do produto ao qual foi aplicado (RN-45, RN-48).
 - **Promoção relâmpago:** oferta por tempo/quantidade limitada, pontual ou recorrente, com teto de unidades e limite por pedido.

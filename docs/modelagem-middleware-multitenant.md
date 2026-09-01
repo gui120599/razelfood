@@ -32,12 +32,14 @@
 > - Painel central: `razelfood.com.br/admin` (era `interno.razelfood.com.br/central`).
 >
 > Motivação: eliminar a dependência de wildcard DNS + wildcard SSL na HostGator
-> (seção 9 — era o maior risco técnico). Provisionar um tenant novo passou a
-> ser um `INSERT` em `tenants`, sem configuração de infra. **Nenhuma migration
-> de banco** — `tenants.slug` já era a chave e é domain-agnostic. As seções
-> 4.1, 4.6, 4.7, 4.8 e 9 abaixo descrevem o modelo ANTIGO (subdomínio) e ficam
-> como registro histórico; a implementação corrente é a desta nota + o plano
-> em `.claude/plans/` + `.ai/rules/{middleware,routes,resources,users}.md`.
+> (era o maior risco técnico). Provisionar um tenant novo passou a ser um
+> `INSERT` em `tenants`, sem configuração de infra. **Nenhuma migration de
+> banco** — `tenants.slug` já era a chave e é domain-agnostic. Cutover em
+> produção: 31/08/2026.
+>
+> **As seções 4 (Middleware e Resolução de Tenant) e 9 (Hospedagem) abaixo
+> foram reescritas para o modelo por path.** Guia operacional detalhado (e
+> armadilhas) em `.ai/rules/{middleware,routes,resources,users,models-filament,app-livewire,scripts}.md`.
 
 > **Nota de versão (1.2 → 1.3):** adicionadas as tabelas `addons` e `product_addon`, e as colunas `addons`/`addons_total` em `order_items` — ver seção 3.3 (nova subseção `addons`/`product_addon`, e `orders`/`order_items` atualizada). Reflete RN-45 a RN-49 de `requisitos-regras-negocio.md` v3.3. Aproveitado pra documentar também `flavor_quantity_options.flavor_shares` (coluna adicionada em 21-22/08/2026, ainda não refletida na v1.2) e corrigir o tipo de `products.sales_count` (documentado como `unsignedInteger`, migração real já é `decimal(10,2)` desde a correção de 22/08/2026) — ambos descobertos durante esta mesma revisão de schema.
 
@@ -76,7 +78,7 @@ Por quê:
 - Compatível com a motivação original da mudança de arquitetura (RN-07 do documento de regras: reduzir custo marginal de suporte por cliente novo).
 - Continua permitindo migrar tenants grandes para isolamento físico depois, se algum cliente exigir — não é uma decisão irreversível.
 
-**Implementação: solução própria e enxuta, não um pacote de tenancy pronto (ex.: `stancl/tenancy`).** Pacotes de tenancy completos são pensados para cenários de banco-por-tenant ou multi-domínio complexo, e trazem uma camada de abstração maior do que o projeto precisa. Como o RazelFood é multi-tenant de banco único, um trait + global scope + middleware, escritos à mão, são mais fáceis de entender, debugar e manter por um time pequeno — e é isso que este documento especifica.
+**Implementação: solução própria e enxuta, não um pacote de tenancy pronto (ex.: `stancl/tenancy`).** Como o RazelFood é multi-tenant de banco único, um trait + global scope (`BelongsToTenant`/`TenantScope`) + middleware, escritos à mão, cobrem o cardápio público. O painel do tenant, por ser Filament, adotou a **tenancy nativa do Filament** (`->tenant()`) — que também é scope-based e roda por cima do mesmo `TenantScope`; ver seção 4. Nenhum pacote de tenancy de terceiros.
 
 ---
 
@@ -164,7 +166,7 @@ Seed inicial do catálogo (feature `is_available`, RN-42), em `App\Support\Featu
 // app/Models/Tenant.php (trecho)
 public function hasFeature(string $key): bool
 {
-    $feature = app(FeatureCatalog::class)->findByKey($key); // cacheado em memória por request, ver seção 4.9
+    $feature = app(FeatureCatalog::class)->findByKey($key); // cacheado em memória por request, ver seção 4.8
 
     if (! $feature || ! $feature->is_available) {
         return false;
@@ -179,7 +181,7 @@ public function hasFeature(string $key): bool
 }
 ```
 
-> Carregar `plan.features` e `featureOverrides` via eager load no middleware `IdentifyTenant` (seção 4.3), junto da resolução do tenant — evita N+1 quando `hasFeature()` é chamado várias vezes por request (nav do Filament chama isso por recurso).
+> Carregar `plan.features` e `featureOverrides` via eager load no middleware `ResolveTenantFromPath` (seção 4.3), junto da resolução do tenant — evita N+1 quando `hasFeature()` é chamado várias vezes por request (nav do Filament chama isso por recurso).
 
 ### 3.2 Usuários e Permissões
 
@@ -210,7 +212,7 @@ php artisan vendor:publish --provider="Spatie\Permission\PermissionServiceProvid
 ],
 ```
 
-O pacote resolve nativamente "essa role vale só dentro deste tenant" — mas **não** descobre o tenant sozinho: é preciso chamar `PermissionRegistrar::setPermissionsTeamId()` a cada requisição, o que já está incluído no middleware `IdentifyTenant` (seção 4.3).
+O pacote resolve nativamente "essa role vale só dentro deste tenant" — mas **não** descobre o tenant sozinho: é preciso chamar `PermissionRegistrar::setPermissionsTeamId()` a cada requisição, o que já está incluído no middleware `ResolveTenantFromPath` (cardápio) e `ApplyTenantScopes` (painel do tenant).
 
 ### 3.3 Tabelas de Domínio (todas com `tenant_id`)
 
@@ -703,123 +705,97 @@ class ResolveDeliveryFee
 
 ## 4. Middleware e Resolução de Tenant
 
-### 4.1 Fluxo de resolução por subdomínio
+### 4.1 Fluxo de resolução (por path)
 
-1. Requisição chega em `{slug}.razelfood.com.br`.
-2. Middleware extrai o `slug` do `Host` header (removendo o sufixo `.razelfood.com.br`).
-3. Se o `slug` estiver vazio ou for uma palavra reservada (seção 4.2) → não é uma requisição de tenant; segue para as rotas centrais (marketing, painel interno da Razel Tec).
-4. Middleware busca o tenant por `slug` (com cache — ver 4.3) e:
-   - Não encontrado → `404` com página amigável.
-   - Encontrado, mas `status != active` → página informando indisponibilidade (RN-10 do doc de regras, análogo à RN-10 sobre inadimplência — ajustar texto conforme o motivo).
-   - Encontrado e ativo → segue, com o tenant vinculado à requisição.
+Dois caminhos de entrada, ambos convergindo em `App\Support\CurrentTenant` setado
++ `URL::defaults(['tenant' => $slug])` + `PermissionRegistrar::setPermissionsTeamId()`:
 
-### 4.2 Slugs reservados
+**Cardápio público — `razelfood.com.br/{slug}/...`**
+1. A rota casa o grupo `Route::prefix('{tenant}')` de `routes/web.php`.
+2. O middleware `App\Http\Middleware\ResolveTenantFromPath` (middleware **do grupo**,
+   roda depois do routing) lê `$request->route('tenant')`.
+3. Slug reservado (seção 4.2) ou não resolvido → **`abort(404)`** (nunca segue sem
+   tenant); `status != Active` → `abort(503)`. Resolução cacheada em
+   `Cache::remember("tenant:slug:{$slug}", ttl)`.
 
-Lista inicial (expandir conforme necessário, manter em `config/tenancy.php`, não em rota nem hardcoded no middleware):
+**Painel do tenant — `razelfood.com.br/painel/{slug}`**
+1. **Tenancy nativa do Filament** — `TenantPanelProvider` declara
+   `->tenant(Tenant::class, slugAttribute: 'slug')`. O Filament resolve o `{tenant}`
+   por route-model binding contra `tenants.slug` e chama `User::canAccessTenant()`
+   (403/404 se falhar).
+2. `App\Http\Middleware\ApplyTenantScopes` (registrado como
+   `->tenantMiddleware([...], isPersistent: true)`, roda também nas requisições
+   Livewire AJAX) faz a ponte `Filament::getTenant()` → `CurrentTenant` +
+   `URL::defaults` + spatie-teams. O `TenantScope` global continua como 2ª camada.
 
-```php
-// config/tenancy.php
-return [
-    'reserved_slugs' => [
-        'www', 'app', 'api', 'admin', 'painel', 'interno', 'suporte',
-        'blog', 'mail', 'ftp', 'cdn', 'static', 'assets', 'docs', 'help',
-        'status', 'dev', 'staging', 'homolog', 'teste', 'demo',
-        'minhaconta', 'cardapio', 'pedido', 'pedidos', 'central',
-    ],
-];
-```
+**Painel central — `razelfood.com.br/admin`** — nenhum middleware de tenant.
+`CurrentTenant::id()` fica `null` → `TenantScope` não filtra → super admin enxerga
+todos os tenants.
 
-### 4.3 Implementação: middleware
+### 4.2 Slugs reservados — `config/tenancy.php`
 
-```php
-// app/Http/Middleware/IdentifyTenant.php
-namespace App\Http\Middleware;
-
-use App\Models\Tenant;
-use App\Support\CurrentTenant;
-use Closure;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
-
-class IdentifyTenant
-{
-    public function handle(Request $request, Closure $next)
-    {
-        $slug = $this->extractSlug($request->getHost());
-
-        if ($slug === null || in_array($slug, config('tenancy.reserved_slugs'), true)) {
-            return $next($request); // rota central, sem tenant
-        }
-
-        $tenant = Cache::remember("tenant:slug:{$slug}", now()->addMinutes(10), function () use ($slug) {
-            return Tenant::where('slug', $slug)->first();
-        });
-
-        if ($tenant === null) {
-            abort(404, 'Estabelecimento não encontrado.');
-        }
-
-        if ($tenant->status !== 'active') {
-            abort(503, 'Este cardápio está temporariamente indisponível.');
-        }
-
-        // Disponibiliza o tenant atual para toda a aplicação (global scope,
-        // controllers, Blade, etc.) sem precisar passar por parâmetro.
-        app()->instance(Tenant::class, $tenant);
-        CurrentTenant::set($tenant);
-
-        // spatie/laravel-permission (com 'teams' => true) não descobre o
-        // tenant sozinho — precisa ser informado a cada requisição, senão
-        // roles/permissions ficam soltas e furam o isolamento por tenant.
-        app(\Spatie\Permission\PermissionRegistrar::class)->setPermissionsTeamId($tenant->id);
-
-        return $next($request);
-    }
-
-    private function extractSlug(string $host): ?string
-    {
-        $baseDomain = config('tenancy.base_domain'); // 'razelfood.com.br'
-
-        if (! str_ends_with($host, ".{$baseDomain}")) {
-            return null; // acesso direto pelo domínio base, sem subdomínio
-        }
-
-        return substr($host, 0, -1 * (strlen($baseDomain) + 1));
-    }
-}
-```
+Com resolução por path, o primeiro segmento de `/{slug}` colide com **toda** rota de
+primeiro nível do sistema. A lista é crítica e usada em três lugares: a constraint
+`->where('tenant', ...)` do grupo (lookahead negativo montado da lista), a checagem
+defensiva em `ResolveTenantFromPath`, e `App\Rules\ValidTenantSlug`.
 
 ```php
-// app/Support/CurrentTenant.php
-namespace App\Support;
-
-use App\Models\Tenant;
-
-/**
- * Wrapper simples em volta do tenant resolvido na requisição atual.
- * Evita espalhar app(Tenant::class) por todo o código; um único ponto
- * de acesso deixa fácil trocar a estratégia de resolução no futuro.
- */
-class CurrentTenant
-{
-    private static ?Tenant $tenant = null;
-
-    public static function set(Tenant $tenant): void
-    {
-        static::$tenant = $tenant;
-    }
-
-    public static function get(): ?Tenant
-    {
-        return static::$tenant;
-    }
-
-    public static function id(): ?int
-    {
-        return static::$tenant?->id;
-    }
-}
+// config/tenancy.php — 'reserved_slugs' (resumo; ver o arquivo p/ a lista completa)
+'admin', 'painel', 'central', 'interno', 'login', 'logout',
+'livewire', 'filament', 'sanctum', 'storage', 'up', 'build', 'vendor',
+'assets', 'static', 'css', 'js', 'images', 'img', 'fonts',
+'favicon.ico', 'robots.txt',
+'checkout', 'acompanhar', 'comanda', 'entrega', 'relatorios',
+'www', 'app', 'api', 'suporte', 'blog', 'mail', 'ftp', 'cdn', 'docs',
+'help', 'status', 'dev', 'staging', 'homolog', 'teste', 'demo',
+'minhaconta', 'cardapio', 'pedido', 'pedidos',
 ```
+
+> Ao adicionar uma rota de primeiro nível nova fora do grupo `{tenant}`, adicione o
+> segmento aqui também.
+
+### 4.3 Middlewares
+
+**`app/Http/Middleware/ResolveTenantFromPath.php`** (evolução do antigo `IdentifyTenant`):
+lê `$request->route('tenant')` em vez do `Host`; **não** é mais middleware global
+(saiu do `prepend` em `bootstrap/app.php`); `abort(404)` obrigatório se não resolver.
+Seta `app()->instance(Tenant::class)`, `CurrentTenant::set()`,
+`URL::defaults(['tenant' => $slug])`, `setPermissionsTeamId($tenant->id)`.
+
+**`app/Http/Middleware/ApplyTenantScopes.php`** (novo): tenant middleware **persistente**
+do painel do tenant. `$tenant = Filament::getTenant()` (já resolvido/validado pelo
+Filament) → mesma ponte de `CurrentTenant`/`URL::defaults`/spatie-teams.
+
+**`app/Support/CurrentTenant.php`** — inalterado, exceto o novo `forget()` (limpa o
+holder entre casos de teste / workers long-lived).
+
+`routes/web.php`:
+
+```php
+Route::get('/', [LandingController::class, 'index'])->name('landing');
+
+$reservedSlugPattern = collect(config('tenancy.reserved_slugs'))
+    ->map(fn (string $s) => preg_quote($s, '/'))->implode('|');
+
+Route::prefix('{tenant}')
+    ->where(['tenant' => '(?!(?:'.$reservedSlugPattern.')$)[a-z0-9]+(?:-[a-z0-9]+)*'])
+    ->middleware(ResolveTenantFromPath::class)
+    ->group(function () {
+        Route::get('/', Menu::class)->name('menu.index');
+        Route::get('/checkout', Checkout::class)->name('checkout.index');
+        Route::get('/acompanhar/{order}', [OrderTrackingController::class, 'show'])->name('order.tracking');
+        Route::get('/comanda/{order}', [OrderTicketController::class, 'show'])->name('order.ticket');
+        Route::get('/relatorios/pedidos/imprimir', [OrdersReportPrintController::class, 'show'])->name('reports.orders.print');
+        Route::get('/relatorios/entregas/imprimir', [DeliveriesReportPrintController::class, 'show'])->name('reports.deliveries.print');
+        Route::match(['GET', 'POST'], '/entrega/{order}', DeliveryConfirmationController::class)
+            ->name('delivery.confirmation')->middleware('signed');
+    });
+```
+
+> `URL::defaults(['tenant' => $slug])` é o ponto de costura: quase todo
+> `route('menu.index')` / `route('order.tracking', ['order' => $token])` nas views e
+> actions OMITE o parâmetro `tenant` — ele entra pelo default. O bug antigo de
+> `Route::domain('{tenant}...')` capturar o route-model binding não existe mais.
 
 ### 4.4 Trait `BelongsToTenant` + Global Scope
 
@@ -880,62 +856,63 @@ class Product extends Model
 }
 ```
 
-> **Recomendação de segurança adicional:** criar uma classe abstrata `TenantScopedModel extends Model` que já aplica a trait, e fazer todo model de domínio estender essa classe em vez de `Model` diretamente. Isso reduz a chance de alguém esquecer a trait ao criar um model novo — o "esqueci de escopar" vira erro de sintaxe (esquecer de estender a classe certa é mais visível em code review do que esquecer um `use`).
+> **Implementado (RNF-01):** a classe abstrata `App\Models\Concerns\TenantScopedModel`
+> (que já aplica `BelongsToTenant`) — todo model de domínio a estende em vez de `Model`.
+> Além do `TenantScope` do projeto, o painel do tenant aplica **também** o escopo nativo
+> do Filament (ownership relationship `tenant()`) — dupla camada. Exceções que precisam
+> de filtro manual em `getEloquentQuery()`: `RoleResource` (model Spatie sem `tenant()`,
+> `$isScopedToTenant = false`) e `UserResource` (`User` é `Authenticatable` puro).
 
-### 4.5 Registro do middleware (Laravel 12 — `bootstrap/app.php`)
+### 4.5 Componentes Livewire públicos — `EstablishesTenantContext`
 
-```php
-// bootstrap/app.php
-->withMiddleware(function (Middleware $middleware) {
-    $middleware->web(prepend: [
-        \App\Http\Middleware\IdentifyTenant::class,
-    ]);
-})
-```
+`POST /livewire/update` (a rota do Livewire) **não** passa pelo grupo
+`Route::prefix('{tenant}')` — é `livewire/update` pura, middleware `web` só. Sem
+tratamento, a partir do 1º `wire:*` depois do page load `CurrentTenant` fica `null`,
+o `TenantScope` para de filtrar e `route('checkout.index')` estoura
+`UrlGenerationException`.
 
-### 4.6 Rotas por domínio
+Os componentes públicos (`app/Livewire/Menu.php`, `Checkout.php`,
+`OrderStatusTimeline.php`) usam a trait
+`App\Livewire\Concerns\EstablishesTenantContext`: guardam o slug numa property
+pública `$tenantSlug` (protegida pelo checksum do snapshot do Livewire 3) e
+re-resolvem o tenant no hook `bootedEstablishesTenantContext()` a cada requisição.
+O painel Filament não tem esse problema (`Livewire::addPersistentMiddleware` do
+próprio Filament + `ApplyTenantScopes`).
 
-```php
-// routes/web.php
+### 4.6 Painéis Filament (tenant vs. central)
 
-// Cardápio público + painel do tenant — qualquer subdomínio sob razelfood.com.br
-Route::domain('{tenant}.razelfood.com.br')->group(function () {
-    Route::get('/', [MenuController::class, 'index'])->name('menu.index');
-    Route::get('/lookup-client', [CheckoutController::class, 'lookupClient'])->name('checkout.lookup_client');
-    Route::post('/checkout', [CheckoutController::class, 'store'])->name('checkout.store');
-    Route::get('/acompanhar/{order}', [OrderTrackingController::class, 'show'])->name('order.tracking');
-    // Painel Filament do tenant fica registrado separadamente via Panel Provider (seção 4.7)
-});
+Dois `PanelProvider`, **sem `->domain()`**:
 
-// Domínio central — sem subdomínio de tenant (marketing, painel interno Razel Tec)
-Route::domain('razelfood.com.br')->group(function () {
-    Route::get('/', [LandingController::class, 'index'])->name('landing');
-});
-```
+- **`TenantPanelProvider`** — `->path('painel')` + `->tenant(Tenant::class, slugAttribute: 'slug')`
+  → URL `razelfood.com.br/painel/{slug}`. `->tenantMiddleware([ApplyTenantScopes::class], isPersistent: true)`,
+  `->tenantMenu(false)` (1 tenant por usuário — sem switcher), `->login()` (login em
+  `/painel/login`, fora do contexto de tenant). Resources: cardápio, pedidos, clientes,
+  configurações, usuários, papéis — escopados por `TenantScope` + escopo nativo do Filament.
+- **`CentralPanelProvider`** — `->path('admin')`, `->default()`, sem `->tenant()`, sem Shield.
+  `TenantResource`/`PlanResource`/`FeatureResource`/localidades para a equipe Razel Tec.
 
-> `{tenant}` na definição da rota é só para o Laravel aceitar qualquer subdomínio — o valor real já foi resolvido pelo middleware `IdentifyTenant` e está em `CurrentTenant::get()`. Não usar o parâmetro de rota `$tenant` como fonte de verdade (ele é a string crua do subdomínio, não valida contra o banco).
+### 4.7 Autenticação e acesso entre painéis
 
-### 4.7 Painéis Filament (tenant vs. central)
+- **Guard único `web`, cookie de sessão host-only no apex** (`SESSION_DOMAIN=null`).
+  Central (`/admin`) e tenants (`/painel/{slug}`) compartilham o cookie — não há guard
+  por painel (adotar um quebraria ~26 testes de painel e todo `auth()->user()` do
+  painel). O isolamento é `User::canAccessPanel()` + `User::canAccessTenant()`, ambos
+  checados pelo Filament a cada requisição.
+- `User implements HasTenants`:
+  - `canAccessPanel('tenant')` = `tenant_id !== null || hasCentralRole(Platform)`.
+  - `canAccessTenant($tenant)` = tenant do próprio usuário **ou** super admin Plataforma.
+  - `getTenants()` = `[$this->tenant]` (ou `Tenant::all()` para Plataforma).
+- **Super admin "Plataforma" acessa o painel de qualquer tenant** (RN-44) — um
+  `Gate::before` em `AppServiceProvider` retorna `true` para `hasCentralRole(Platform)`,
+  liberando a autorização do Filament Shield no painel do tenant. Usuário comum de
+  tenant em `/admin` → 403.
+- Controllers fora do Filament que checam tenant à mão (comanda, relatórios
+  imprimíveis) usam `User::canOperateInCurrentTenant()` (mesmo critério, cobre o
+  super admin) no lugar de `tenant_id === CurrentTenant::id()`.
+- `email` é globalmente único → 1 usuário = 1 tenant. `tenant_id` de escrita **nunca**
+  vem do payload — sempre `CurrentTenant::id()` (hook `creating` da trait).
 
-Dois `PanelProvider`:
-
-- **`TenantPanelProvider`** — `->domain('{tenant}.razelfood.com.br')`, path `/painel` (ex.: `emporiodapizza.razelfood.com.br/painel`). Recursos: cardápio, pedidos, clientes, configurações, usuários — tudo escopado pelo `TenantScope` automaticamente. Login restrito a usuários cujo `tenant_id` bate com o tenant resolvido pelo subdomínio (checar isso explicitamente no `FilamentUser::canAccessPanel()`, não confiar só no global scope).
-- **`CentralPanelProvider`** — domínio fixo (ex.: `interno.razelfood.com.br`), sem `tenant_id` aplicado. Recurso `TenantResource` para a equipe Razel Tec provisionar/gerenciar tenants (RF-03), visível só para usuários com `tenant_id = null` e role apropriada.
-
-### 4.8 Autenticação — guarda contra login cruzado
-
-Mesmo com o global scope ativo, o formulário de login do painel do tenant deve filtrar explicitamente por `tenant_id` na hora de autenticar — o global scope se aplica a queries via Eloquent, mas vale reforçar no fluxo de auth para não depender só disso:
-
-```php
-// Dentro do fluxo de login do TenantPanelProvider
-Auth::attempt([
-    'email' => $data['email'],
-    'password' => $data['password'],
-    'tenant_id' => CurrentTenant::id(), // usuário de outro tenant nunca autentica aqui
-]);
-```
-
-### 4.9 Controle de acesso por feature (Filament)
+### 4.8 Controle de acesso por feature (Filament)
 
 Implementa RN-43 (RF-42, RF-43): duas camadas, nunca só uma. Confirmado na documentação do Filament 4 (e na assinatura real instalada no projeto) — `shouldRegisterNavigation(): bool` só esconde o link do menu, **não impede acesso direto por URL**; quem bloqueia de fato é `canAccess(): bool` (sem parâmetros nesta versão), reavaliado a cada requisição Livewire (inclusive se o plano do tenant mudar no meio de uma sessão aberta).
 
@@ -993,9 +970,9 @@ class Kitchen extends Page
 
 `GatedByFeature` (a trait genérica acima) **não é usada** em `Kitchen`/`OrderSettings` por causa disso — o padrão de alias é escrito à mão nessas duas classes. Mesmo padrão vale pra qualquer Page futura que precise combinar feature-gate com `HasPageShield`.
 
-### 4.10 Painel central — gestão de planos e features (RF-40, RF-41)
+### 4.9 Painel central — gestão de planos e features (RF-40, RF-41)
 
-`CentralPanelProvider` (seção 4.7) ganha dois recursos novos, visíveis só para usuários com `tenant_id = null`:
+`CentralPanelProvider` (seção 4.6) ganha dois recursos novos, visíveis só para usuários com `tenant_id = null`:
 
 - **`PlanResource`** — CRUD de planos, com um `CheckboxList`/`Select` múltiplo de features (via `plan_feature`) no formulário.
 - **`FeatureResource`** — CRUD do catálogo de features, incluindo o toggle `is_available` (RN-42). Alterar `is_available` de `true` para `false` deve, na prática, revogar o acesso de todo tenant que a tinha via plano ou override — não precisa de job de limpeza, porque `hasFeature()` já checa `is_available` em tempo real (seção 3.1.1).
@@ -1017,9 +994,14 @@ Antes de considerar a arquitetura multi-tenant homologada, validar:
 
 - [ ] Criar dois tenants de teste (A e B) com produtos, categorias e clientes com nomes parecidos propositalmente.
 - [ ] Confirmar que uma consulta em `Product::all()` autenticado no contexto do tenant A **nunca** retorna produtos do tenant B, mesmo sem `where` explícito no código da feature.
-- [ ] Tentar login com um usuário do tenant A no subdomínio do tenant B → deve falhar.
-- [ ] Tentar acessar `/painel` de um tenant sem estar autenticado nele → deve barrar.
-- [ ] Confirmar que um slug reservado (`www`, `admin`, etc.) nunca é aceito na criação de tenant.
+- [ ] Usuário do tenant A autenticado, `GET /painel/{slug-de-B}` → 404 (`canAccessTenant`). Trocar o slug na URL do painel logado nunca dá acesso.
+- [ ] `GET /painel/{slug}` sem sessão → redireciona para `/painel/login`.
+- [ ] `GET /painel/{slug}/products/{id de produto de B}` no painel de A → 404 (resolução de record escopada).
+- [ ] Super admin "Plataforma" logado em `/admin` acessa `/painel/{qualquer-slug}` (RN-44); usuário comum de tenant em `/admin` → 403.
+- [ ] Adicionar item no carrinho em `/{slug-A}/`, abrir `/{slug-B}/` → carrinho vazio (chave de sessão namespaced por tenant).
+- [ ] Selecionar um produto no cardápio (dispara `POST /livewire/update`) → sem `UrlGenerationException` (a trait `EstablishesTenantContext` restaura o contexto).
+- [ ] Confirmar que um slug reservado (`admin`, `painel`, `checkout`, `livewire`, …) nunca é aceito na criação de tenant nem casa a rota `/{tenant}`.
+- [ ] Cobertura automatizada: `tests/Feature/Tenancy/{CrossTenantIsolationTest,TenantPathResolutionTest}.php`.
 - [ ] Confirmar que dois pedidos concorrentes na última unidade de uma promoção relâmpago do **mesmo tenant** resultam em só um pedido confirmado com o preço promocional (teste de concorrência, RN-22).
 - [ ] Confirmar que promoções relâmpago do tenant A não aparecem nem afetam o saldo de promoções do tenant B, mesmo com nomes de promoção idênticos.
 - [ ] Confirmar que a página de acompanhamento de pedido (`/acompanhar/{order}`) de um tenant não permite ver pedido de outro tenant trocando o ID na URL (o `order` também precisa estar sob o `TenantScope`).
@@ -1038,7 +1020,7 @@ Consistente com a seção 9 do documento de regras de negócio — não implemen
 - Caixa, estoque avançado, compras, emissão fiscal/NFe — **os módulos em si**. O catálogo de features (seção 3.1.1) pode conter uma entrada reservada (`is_available = false`) para eles, mas isso é só um placeholder de roadmap, não a funcionalidade.
 - Pagamento online integrado (cartão/Pix automático).
 - Trial, upgrade/downgrade automatizado, cobrança pró-rata por plano — a **infraestrutura** de planos/features está dentro de escopo agora (RN-39 a RN-44); a precificação por plano não está.
-- Domínio próprio por cliente via CNAME (mencionado como upsell futuro — RN-06 — mas a arquitetura de subdomínio acima já não impede isso de ser adicionado depois).
+- Domínio próprio por cliente via CNAME (upsell futuro — RN-06 — a arquitetura por path não impede, ver seção 9).
 - Onboarding self-service (hoje o provisionamento de tenant é assistido pela equipe Razel Tec — RN-09).
 
 ---
@@ -1047,7 +1029,7 @@ Consistente com a seção 9 do documento de regras de negócio — não implemen
 
 1. ~~Nomenclatura em inglês vs. português~~ — **confirmado em 19/08/2026**: inglês (seção 1).
 2. ~~`tenant_id` em `flash_promotion_products`~~ — **confirmado em 19/08/2026**: entra, com índice e escopada pela trait `BelongsToTenant` como qualquer outra tabela de domínio (seção 3.3).
-3. **Cache de resolução de tenant** (seção 4.3) — usar cache de aplicação (Redis/array) desde o início ou só adicionar se a query por slug virar gargalo? Recomendo já nascer com cache simples (`Cache::remember`), é barato e evita 1 query por requisição. Na hospedagem compartilhada inicial (seção 9), provavelmente cache em arquivo/array, não Redis — ver seção 9.
+3. ~~**Cache de resolução de tenant** (seção 4.3)~~ — **implementado**: `Cache::remember("tenant:slug:{slug}", ttl)` em `ResolveTenantFromPath`, store `database` (`CACHE_STORE=database`), TTL `config('tenancy.cache.ttl_minutes')` (5 min). Trocar o slug pelo painel central invalida as duas chaves (`EditTenant::changeSlug`).
 4. ~~Tratamento do primeiro cliente já fechado~~ — **confirmado em 19/08/2026**: nasce como um tenant normal dentro da arquitetura multi-tenant, sem tratamento especial.
 5. ~~Modelo de taxa de entrega~~ — **confirmado em 20/08/2026**: taxa por setor/bairro (RN-34 a RN-38), substituindo a taxa fixa única por `DeliveryOption` para modalidades de entrega. Ver seções 3.3, 3.5, 3.6.
 6. ~~Normalização de bairro para casar `delivery_zone_neighborhoods.neighborhood` com o retorno do ViaCEP~~ — **resolvido em 20/08/2026**: `App\Support\NeighborhoodNormalizer` (ascii + minúsculas) aplicado tanto na gravação (mutator do model) quanto na busca em `ResolveDeliveryFee` (seção 3.6).
@@ -1056,19 +1038,37 @@ Consistente com a seção 9 do documento de regras de negócio — não implemen
 
 ---
 
-## 9. Restrições de Hospedagem — Compartilhada (HostGator) na V1
+## 9. Hospedagem — Compartilhada (HostGator)
 
-O plano de hospedagem inicial é compartilhado na HostGator, com possível migração futura para VPS (ex.: Oracle Cloud) conforme a base de clientes cresce. Hospedagem compartilhada impõe restrições reais sobre a arquitetura descrita neste documento — **verificar cada item abaixo com o plano contratado antes de começar a codar**, para não desenhar algo que não roda no ambiente de produção real:
+Compartilhado na HostGator, com possível migração futura para VPS conforme a base cresce.
+Com a **tenancy por path num domínio único**, a hospedagem compartilhada deixou de ser um
+risco: não há mais wildcard DNS nem wildcard SSL (era o maior risco técnico da V1).
 
-- **SSH e Composer:** confirmar que o plano HostGator dá acesso SSH e permite rodar `composer install`/`php artisan` na conta — nem todo plano de entrada da HostGator inclui SSH. Sem SSH, o deploy de uma aplicação Laravel fica bem mais manual (upload via FTP, sem artisan).
-- **Versão do PHP:** Laravel 12 exige PHP ≥ 8.2. Confirmar no cPanel (MultiPHP Manager) qual versão está disponível/selecionável para o domínio.
-- **Subdomínio curinga (`*.razelfood.com.br`) e SSL:** hospedagem compartilhada com cPanel geralmente suporta subdomínio curinga (criar um subdomínio literal `*` apontando para o mesmo `public/` da aplicação), mas o **certificado SSL wildcard** (RNF-07) depende do AutoSSL do provedor suportar validação de domínio curinga — isso varia por plano e nem sempre é automático em compartilhado. **Precisa ser validado diretamente com o suporte da HostGator antes de fechar esse desenho** — se não for viável, o plano B de curto prazo é migrar para a VPS mais cedo do que o previsto, especificamente por causa disso (é o ponto de maior risco técnico desta arquitetura na hospedagem atual).
-- **Sem worker de fila persistente:** hospedagem compartilhada não permite processos de longa duração (`php artisan queue:work` rodando indefinidamente, Horizon, Redis dedicado). Ajuste de arquitetura: usar a queue driver `database` (não Redis) e depender do **cron** do cPanel rodando `php artisan schedule:run` a cada minuto — o `schedule` do Laravel dispara `queue:work --stop-when-empty` periodicamente. Isso é suficiente para o volume de um PME (não é alto throughput), mas os jobs (ex.: reset de promoção recorrente, RN-21 do doc de regras) devem ser desenhados assumindo execução a cada 1 minuto, não em tempo real.
-- **Cron:** confirmar quantos cron jobs e com qual granularidade mínima o plano permite (alguns planos de entrada limitam a cada 5 ou 15 minutos, não a cada minuto) — isso afeta diretamente a precisão do agendamento de promoções recorrentes e do `schedule:run`.
-- **Symlink de storage:** `php artisan storage:link` depende de o usuário da conta poder criar links simbólicos — geralmente ok em cPanel, mas vale confirmar.
-- **Múltiplos domínios/subdomínios apontando para uma única aplicação Laravel:** é o padrão "Addon Domain" ou "Wildcard Subdomain" do cPanel, com o `document root` de todos apontando para a mesma pasta `public/`. Confirmar que o plano permite isso sem limite baixo de subdomínios simultâneos.
+- **Domínio / SSL:** um registro para `razelfood.com.br` (+ `www`), document root do apex
+  na pasta `public/` do app, **certificado SSL simples** (AutoSSL do cPanel). Todos os
+  tenants respondem no mesmo host. Provisionar um tenant novo é um `INSERT` em `tenants`.
+- **SSH e Composer:** o deploy usa SSH — `git pull origin producao` + comandos artisan.
+  A branch `producao` já vem com `vendor/` (sem dev) e `public/build/` compilados
+  (`scripts/promote-producao.sh` reconstrói tudo localmente), então o servidor **não**
+  precisa de Composer/npm.
+- **PHP:** fixado em 8.4.x no cPanel (MultiPHP Manager).
+- **Sessão:** `SESSION_DRIVER=file`, `SESSION_DOMAIN=null` (cookie host-only no apex),
+  `SESSION_SECURE_COOKIE=true`. Central e tenants compartilham o cookie — o isolamento é
+  `canAccessPanel`/`canAccessTenant` (seção 4.7).
+- **Sem worker de fila persistente:** queue driver `database`; dois cron jobs no cPanel
+  (a cada minuto): `php artisan schedule:run` e `php artisan queue:work --stop-when-empty --max-time=50`.
+  Jobs (reset de promoção recorrente, sync de localidades) assumem execução a cada 1 min.
+- **Cache:** `CACHE_STORE=database` (sem Redis/Memcached) — a entrada `tenant:slug:{slug}`
+  do `ResolveTenantFromPath` sobrevive a restart; `optimize:clear` / `cache:clear` limpam.
+- **Deploy:** `php artisan optimize:clear` em **todo** deploy após `git pull`; cachear só
+  `config:cache`, `event:cache`, `view:cache`, `filament:optimize`. **NUNCA `route:cache`**
+  (route cache defasado já removeu a rota do `livewire.min.js` → Filament inacessível).
+  Ver `.ai/rules/scripts.md` e o modelo `.env.hostgator.example`.
+- **Migrations são sempre aditivas** (`ADD COLUMN`) — `migrate --force` é seguro no deploy.
 
-> **Recomendação prática:** antes de escrever a primeira linha de código de infraestrutura, abrir chamado com o suporte da HostGator perguntando especificamente sobre wildcard SSL e acesso SSH no plano contratado. Se qualquer um dos dois não for suportado, vale reconsiderar já ir direto para uma VPS pequena (inclusive Oracle Cloud tem camada gratuita que pode servir de ambiente de homologação) em vez de construir em cima de uma hospedagem que vai exigir migração forçada assim que o primeiro tenant precisar de SSL no subdomínio dele.
+> **Domínio próprio por cliente (CNAME, upsell futuro — RN-06):** a arquitetura por path
+> não impede — bastaria mapear `Route::domain('{customDomain}')` para um tenant específico
+> além do grupo `/{tenant}`. Fora de escopo por ora.
 
 ---
 
