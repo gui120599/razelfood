@@ -1,9 +1,22 @@
 # RazelFood — Modelagem de Dados e Middleware Multi-tenant
 
 **Documento de instrução para implementação e homologação**
-**Versão:** 2.0
-**Data:** 31/08/2026
-**Depende de:** `requisitos-regras-negocio.md` (v3.3) — este documento traduz as regras RN-02 a RN-49 daquele documento em schema de banco, middleware e estrutura de rotas concretos.
+**Versão:** 2.1
+**Data:** 01/09/2026
+**Depende de:** `requisitos-regras-negocio.md` (v3.4) — este documento traduz as regras RN-02 a RN-52 daquele documento em schema de banco, middleware e estrutura de rotas concretos.
+
+> **Nota de versão (2.0 → 2.1) — set de features de ago/2026:**
+> - `categories`: `description` (text, nullable), `show_description_in_menu` (bool, default false) — descrição opcional exibida abaixo do nome da categoria/subcategoria no cardápio (RN-50); `inherit_flavor_options` (bool, default false) — subcategoria herda as `flavor_quantity_options` da categoria pai em vez de cadastrar as suas (RN-51). Fonte única de leitura: `Category::resolvedFlavorQuantityOptions()`.
+> - `clients`: `cpf` (string(11), nullable, **só dígitos**, sem `unique`) — CPF do cliente (RN-52). Validado por `App\Rules\ValidCpf` (mesmo molde de `ValidCnpj`).
+> - `tenants`: `require_client_cpf` (bool, default false) — exige CPF no checkout online público (RN-52); não afeta a Central de Pedidos.
+> - Painel: subcategoria ganhou página de edição completa do Resource (aba "Quantidades de sabores"); bulk actions em produtos — "Replicar para outra categoria" e "Ajustar preço" (RF-49, RF-50); anexar múltiplos adicionais de uma vez e cadastrar bairros de setor em lote (RF-51); painel central — export/import do catálogo de localidades e ação "Acessar painel" na lista de tenants (RF-52, RF-53).
+> - Sem impacto de schema: pré-preenchimento da 1ª forma de pagamento com o total no checkout; cabeçalho e barra de categorias fixos (`sticky`) no cardápio web.
+>
+> **Nota:** o bloco de schema de `tenants` na seção 3.1 está defasado — não reflete
+> colunas operacionais adicionadas em sessões anteriores (SLA de pedido em minutos,
+> flags de fluxo de entrega `uses_in_transit_stage`/`assigns_delivery_couriers`,
+> logo de impressão, favicon, `orders_sequence`, `watermark_height`). O model
+> `App\Models\Tenant` (`$fillable` + `casts()`) é a fonte de verdade.
 
 > **Nota de versão (1.3 → 2.0) — TENANCY POR PATH:** o tenant deixou de ser
 > identificado por **subdomínio** (`{slug}.razelfood.com.br`) e passou a ser
@@ -77,7 +90,7 @@ Não tem `tenant_id` (é a própria definição de tenant). Fora do escopo do Gl
 Schema::create('tenants', function (Blueprint $table) {
     $table->id();
     $table->string('name');                       // Nome comercial do estabelecimento
-    $table->string('slug')->unique();              // Usado como subdomínio: {slug}.razelfood.com.br
+    $table->string('slug')->unique();              // Identifica o tenant no path: razelfood.com.br/{slug} (cardápio) e /painel/{slug} (painel) — ver nota de versão 1.3→2.0
     $table->enum('status', ['active', 'suspended', 'cancelled'])->default('active');
     $table->string('whatsapp_number', 20);          // Número que recebe os pedidos (RN-27)
     $table->string('logo_path')->nullable();
@@ -87,6 +100,7 @@ Schema::create('tenants', function (Blueprint $table) {
     $table->string('recaptcha_secret_key')->nullable();
     $table->boolean('serves_unlisted_neighborhoods')->default(false); // RN-36
     $table->decimal('unlisted_neighborhood_fee', 10, 2)->nullable();  // RN-36, obrigatório quando serves_unlisted_neighborhoods = true (validado na camada de aplicação, não no schema)
+    $table->boolean('require_client_cpf')->default(false); // RN-52: exige CPF no checkout online público (não afeta a Central de Pedidos)
     $table->foreignId('plan_id')->nullable()->constrained()->nullOnDelete(); // RN-40, ver seção 3.1.1
     $table->timestamps();
     $table->softDeletes(); // Retenção pós-cancelamento (item em aberto #7 do doc de regras)
@@ -215,9 +229,12 @@ Schema::create('categories', function (Blueprint $table) {
     $table->foreignId('tenant_id')->constrained()->cascadeOnDelete();
     $table->foreignId('parent_id')->nullable()->constrained('categories')->nullOnDelete();
     $table->string('name');
+    $table->text('description')->nullable();               // RN-50: exibida no cardápio se show_description_in_menu = true
     $table->unsignedInteger('display_order')->default(0);
     $table->boolean('show_in_menu')->default(true);
+    $table->boolean('show_description_in_menu')->default(false); // RN-50
     $table->boolean('allows_flavors')->default(false);  // "meio a meio" (RN-16)
+    $table->boolean('inherit_flavor_options')->default(false);  // RN-51: subcategoria usa as flavor_quantity_options do pai
     $table->timestamps();
     $table->softDeletes();
 
@@ -225,6 +242,13 @@ Schema::create('categories', function (Blueprint $table) {
     $table->index(['tenant_id', 'show_in_menu']);
 });
 ```
+
+> **Hierarquia de categorias (implementação, ago/2026):** 1 nível só — categoria
+> raiz → subcategoria. Subcategoria é editada numa **página completa do Resource**
+> (`EditAction->url(CategoryResource::getUrl('edit'))` no `SubcategoriesRelationManager`);
+> o filtro `whereNull('parent_id')` vive em `CategoriesTable::modifyQueryUsing()`
+> (só a listagem), não em `getEloquentQuery()`. `SubcategoriesRelationManager::canViewForRecord()`
+> retorna `parent_id === null` (trava o aninhamento). Ver `.ai/rules/livewire-orders.md`.
 
 #### `flavor_quantity_options`
 
@@ -246,6 +270,14 @@ Schema::create('flavor_quantity_options', function (Blueprint $table) {
     $table->unique(['category_id', 'flavor_count']);
 });
 ```
+
+> **Herança pai→subcategoria (RN-51, ago/2026):** as opções pertencem a UMA
+> categoria (`category_id`), sem herança no schema. `Category::resolvedFlavorQuantityOptions()`
+> é a **fonte única** de leitura no cardápio/checkout/PDV: quando a subcategoria
+> tem `inherit_flavor_options = true`, retorna `parent->flavorQuantityOptions`,
+> senão as próprias. Nunca ler `->flavorQuantityOptions` direto para lógica de
+> combo. `ResolvePriceForCartLine::resolveCombo`, `Menu::menuCategory()` e
+> `FlavorPickerModal` já usam o helper. Ver `.ai/rules/livewire-orders.md`.
 
 #### `products`
 
@@ -364,6 +396,7 @@ Schema::create('clients', function (Blueprint $table) {
     $table->foreignId('tenant_id')->constrained()->cascadeOnDelete();
     $table->string('name');
     $table->string('phone', 20);         // RN-01: busca/cria por telefone
+    $table->string('cpf', 11)->nullable(); // RN-52: só os 11 dígitos (sem máscara), sem unique — FindOrCreateClient casa por telefone, não por CPF
 
     // Endereço estruturado (RN-33) — preenchido via busca de CEP (ViaCEP) ou manualmente.
     // `neighborhood` é o campo usado para resolver o setor de entrega (RN-34, RN-37).
@@ -434,6 +467,9 @@ Schema::create('delivery_zone_neighborhoods', function (Blueprint $table) {
     $table->index('tenant_id');
     $table->unique(['tenant_id', 'neighborhood', 'city']); // RN-35: um bairro pertence a no máximo um setor por tenant
 });
+// UX (ago/2026): "Adicionar bairros" no NeighborhoodsRelationManager aceita VÁRIOS
+// bairros de uma vez (um registro por bairro, via CreateAction->using()) e lembra
+// a última cidade usada. Ver .ai/rules/delivery-zones-relation-managers.md.
 
 Schema::create('payment_options', function (Blueprint $table) {
     $table->id();

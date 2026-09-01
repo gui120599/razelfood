@@ -1,9 +1,12 @@
 # RazelFood — Regras de Negócio e Levantamento de Requisitos Inicial
 
 **Produto:** RazelFood (produto próprio da Razel Tec Soluções e Consultoria em TI LTDA)
-**Versão do documento:** 3.3
-**Data:** 22/08/2026
-**Status:** Revisado — arquitetura multi-tenant confirmada, domínio próprio definido, catálogo de features e planos por tenant formalizado, adicionais de produto formalizados
+**Versão do documento:** 3.4
+**Data:** 01/09/2026
+**Status:** Revisado — arquitetura multi-tenant confirmada, tenancy por path, catálogo de features e planos por tenant, adicionais de produto, descrição/herança de sabores de categoria e CPF do cliente formalizados
+
+> **Nota de versão (3.3 → 3.4):** set de features de ago/2026, já em produção.
+> Cardápio: **RN-50** (descrição opcional por categoria, exibida no cardápio sob controle de um toggle) e **RN-51** (subcategoria pode herdar as quantidades de sabores da categoria pai). Checkout: **RN-52** (config por tenant "exigir CPF do cliente" — só no checkout online público). Requisitos funcionais novos: **RF-49/RF-50** (bulk actions de produto — replicar para outra categoria e ajustar preço em massa), **RF-51** (anexar vários adicionais de uma vez; cadastrar bairros de setor em lote), **RF-52** (export/import do catálogo de localidades no painel central), **RF-53** (acesso ao painel do tenant a partir da lista de tenants no painel central). Também: tenancy migrou de subdomínio para **path** (`razelfood.com.br/{slug}` e `/painel/{slug}`) — ver `modelagem-middleware-multitenant.md` nota 1.3→2.0; ajustes de UX no cardápio web (cabeçalho e barra de categorias fixos, 1ª forma de pagamento pré-preenchida com o total).
 
 > **Nota de versão (3.2 → 3.3):** adicionada a seção 5.2 — adicionais de produto (RN-45 a RN-49, RF-45 a RF-48). Formaliza a venda de porções extras (ex.: "Bacon extra") vinculadas a produtos específicos do cardápio, com preço base e estoque próprios, e rateio proporcional ao sabor-alvo em produtos de vários sabores — reaproveitando o mesmo mecanismo de rateio já usado no preço/estoque de combos (RN-16), sem criar um cálculo paralelo. Decisão tomada em 22/08/2026.
 
@@ -67,9 +70,11 @@ Os perfis abaixo se inspiram nas roles já validadas no sistema de referência (
 
 ## 4. Arquitetura Multi-tenant e Modelo Comercial
 
+> **Atualização (ago/2026) — TENANCY POR PATH:** o tenant deixou de ser identificado por **subdomínio** e passou a ser identificado por **path**, num domínio único: cardápio público em `razelfood.com.br/{slug}` e painel do tenant em `razelfood.com.br/painel/{slug}` (tenancy nativa do Filament). Motivo: eliminar a dependência de wildcard DNS + wildcard SSL na HostGator, que era o maior risco técnico. Provisionar um tenant virou um `INSERT` em `tenants`, sem configuração de infra. As menções a "subdomínio" abaixo e em RN-03/RN-04, RF-02, RNF-02 e no glossário ficam como registro histórico — leia "path" onde estiver escrito "subdomínio". Detalhes em `modelagem-middleware-multitenant.md` (nota 1.3→2.0).
+
 - **RN-02:** O RazelFood é multi-tenant desde a concepção: uma única aplicação (e, recomendado, um único banco de dados) atende todos os clientes, com isolamento lógico garantido por um identificador de tenant presente em toda tabela de domínio (produtos, categorias, pedidos, clientes, promoções, horários, opções de entrega, usuários etc.), aplicado automaticamente via escopo global em todas as consultas.
-- **RN-03:** Cada tenant tem um subdomínio próprio sob o domínio `razelfood.com.br`, baseado em um slug definido no onboarding — ex.: `emporiodapizza.razelfood.com.br`. O subdomínio da requisição é o que determina qual tenant (e qual cardápio) é servido.
-- **RN-04:** O slug do tenant deve ser único, seguir um formato controlado (minúsculas, sem espaços ou acentos, apenas letras/números/hífen) e não pode coincidir com uma lista de palavras reservadas (`www`, `admin`, `app`, `api`, `painel`, `suporte`, `blog`, etc.), para não colidir com rotas do próprio sistema.
+- **RN-03:** Cada tenant é identificado por um **path** sob o domínio `razelfood.com.br`, baseado em um slug definido no onboarding — cardápio em `razelfood.com.br/{slug}`, painel em `razelfood.com.br/painel/{slug}`. O slug da URL é o que determina qual tenant (e qual cardápio) é servido. *(Histórico: até ago/2026 era um subdomínio, ex.: `emporiodapizza.razelfood.com.br`.)*
+- **RN-04:** O slug do tenant deve ser único, seguir um formato controlado (minúsculas, sem espaços ou acentos, apenas letras/números/hífen) e não pode coincidir com uma lista de palavras reservadas (`www`, `admin`, `app`, `api`, `painel`, `suporte`, `blog`, etc.), para não colidir com rotas do próprio sistema (em especial `admin` e `painel`, que são segmentos de rota reais).
 - **RN-05:** O slug é tratado como praticamente imutável após a publicação do cardápio — o cliente divulga esse link em QR code de mesa, cardápio impresso e conversas de WhatsApp; alterá-lo depois quebra tudo isso. Mudança de slug só deve ocorrer via processo assistido pela Razel Tec, avisando o cliente do impacto.
 - **RN-06:** Domínio próprio do cliente (ex.: `cardapio.emporiodapizza.com.br` apontando via CNAME para o RazelFood) é um recurso possível a ser oferecido futuramente, não obrigatório para o lançamento — ver itens em aberto.
 - **RN-07:** A hospedagem, disponibilização online, manutenção de infraestrutura e atualizações técnicas continuam sob responsabilidade da Razel Tec — agora compartilhadas entre todos os tenants em uma única aplicação, o que reduz o custo marginal de suporte a cada cliente novo (motivo central da mudança de arquitetura em relação à v2.0 deste documento).
@@ -95,11 +100,13 @@ Os perfis abaixo se inspiram nas roles já validadas no sistema de referência (
 ## 5. Regras de Negócio — Cardápio e Precificação
 
 - **RN-11:** Um produto só aparece no cardápio público se estiver marcado como visível **e** (não controla estoque, **ou** tem saldo em estoque maior que zero, **ou** está configurado para aparecer mesmo com estoque zerado).
-- **RN-12:** Categorias podem ter hierarquia (categoria-mãe e subcategorias). Uma subcategoria só aparece no cardápio se tiver ao menos um produto visível, evitando seções vazias.
+- **RN-12:** Categorias podem ter hierarquia de **um nível** (categoria-mãe e subcategorias — sem sub-subcategoria). Uma subcategoria só aparece no cardápio se tiver ao menos um produto visível, evitando seções vazias. Subcategoria é gerenciada tanto pela aba "Subcategorias" da categoria-mãe quanto por página de edição própria (com a aba "Quantidades de sabores" quando não estiver herdando — RN-51).
 - **RN-13:** O preço de um item **nunca é aceito do cliente/navegador** — o servidor sempre recalcula o valor de cada item no checkout, dentro do escopo do tenant correspondente. Regra de segurança e de integridade financeira, não apenas de UX.
 - **RN-14:** Ordem de precedência de preço de um produto, da mais forte para a mais fraca: (1) promoção relâmpago vigente e com saldo; (2) preço promocional do próprio produto, dentro da janela de datas; (3) preço de venda normal.
 - **RN-15:** "Mais vendidos" é um destaque **calculado automaticamente** por tenant (top produtos por quantidade vendida, dentre os elegíveis), não uma lista editada manualmente — o Admin só liga/desliga a elegibilidade do produto.
 - **RN-16:** Itens com "sabores" (ex.: pizza meio a meio, terço) só podem ser combinados numa quantidade que exista como opção cadastrada na categoria (`flavor_quantity_options`, definida pelo Admin do tenant — não é uma lista fixa do sistema). Uma opção com quantidade 1 ("sabor único") é tratada como item simples, não como combo. O preço do combo é rateado proporcionalmente entre os sabores escolhidos, calculado no servidor. Se um sabor pertence a uma promoção relâmpago vigente com "permite sabores" desmarcado, ele só pode ser vendido inteiro — fica de fora de qualquer combo (2+ sabores), mesmo que a categoria permita; se a promoção permite sabores mas define seu próprio teto, esse teto prevalece sobre o da categoria quando mais restritivo.
+- **RN-50 (01/09/2026):** Cada categoria (raiz ou subcategoria) pode ter uma **descrição** livre e opcional (ex.: "Serve até 2 pessoas"), exibida abaixo do nome da categoria no cardápio público. A exibição é controlada por um toggle independente do texto — o Admin pode escrever a descrição e deixá-la oculta, ou ligá-la depois. Por padrão a descrição vem **oculta** (o toggle nasce desligado).
+- **RN-51 (01/09/2026):** Uma **subcategoria** com "permite sabores" ligado pode **herdar as quantidades de sabores da categoria pai** (`flavor_quantity_options` do pai) em vez de cadastrar as suas próprias. O Admin escolhe por subcategoria: o toggle "Herdar da categoria pai" aparece quando o pai tem ao menos uma opção cadastrada, e vem **marcado por padrão** em subcategoria nova (caso comum = mesmas regras do pai). Desligá-lo revela a aba "Quantidades de sabores" da subcategoria para cadastro próprio. O cardápio, o checkout e a Central de Pedidos leem sempre as opções **efetivas** (do pai quando herdando, senão as próprias) — nunca as opções cruas da subcategoria.
 
 ### 5.1 Promoções Relâmpago
 
@@ -133,6 +140,7 @@ O sistema de referência já valida em produção um motor de promoções relâm
 - **RN-29:** Pode haver verificação anti-robô (reCAPTCHA) no checkout, configurável por tenant.
 - **RN-30:** Toda opção de entrega (`delivery_options`) tem um tipo — retirada (sem entrega) ou entrega (com endereço) — configurado pelo tenant. Para opções de retirada, a taxa continua fixa (normalmente zero). Para opções de entrega, a taxa deixa de ser fixa por opção e passa a ser resolvida pelo bairro do cliente (ver 6.2). Em ambos os casos, continua existindo a possibilidade de isenção acima de um valor mínimo de pedido, configurável por tenant.
 - **RN-31:** O cancelamento de um pedido exige motivo categorizado (cliente desistiu, erro de lançamento, produto indisponível, demora, duplicado/teste, problema no pagamento, endereço fora da área, outro) — alimenta relatórios de motivo de cancelamento por tenant.
+- **RN-52 (01/09/2026):** O tenant pode exigir o **CPF do cliente** para finalizar um pedido. É uma configuração por tenant (Configurações de Pedidos), desligada por padrão. Quando ligada, o campo de CPF aparece no **checkout online público** e é obrigatório, com validação de dígito verificador; quando desligada, o campo nem aparece. A exigência **não afeta a Central de Pedidos** (atendente/PDV) — lá o CPF continua opcional, inclusive em "pedido sem cliente". O CPF é gravado só com os 11 dígitos (sem máscara) no cadastro do cliente (`clients.cpf`) e reaproveitado quando o mesmo cliente pede de novo (RN-01).
 
 ### 6.1 Ciclo de Vida do Pedido
 
@@ -183,9 +191,12 @@ O status do pedido segue um fluxo definido no sistema, com data/hora registrada 
 
 | ID | Requisito |
 |---|---|
-| RF-05 | O Admin deve poder criar, editar, reordenar (drag-and-drop) e excluir categorias, incluindo subcategorias, dentro do próprio tenant. |
-| RF-06 | O Admin deve poder criar, editar, duplicar e excluir produtos, cada um vinculado a uma categoria do próprio tenant. |
+| RF-05 | O Admin deve poder criar, editar, reordenar (drag-and-drop) e excluir categorias, incluindo subcategorias (um nível — RN-12), dentro do próprio tenant. Cada categoria suporta uma descrição opcional exibida no cardápio sob controle de um toggle (RN-50). |
+| RF-06 | O Admin deve poder criar, editar, duplicar e excluir produtos, cada um vinculado a uma categoria do próprio tenant. O select de categoria do formulário agrupa as subcategorias sob a categoria pai (subcategorias de pais diferentes podem ter o mesmo nome). |
 | RF-07 | Cada produto deve suportar: nome/descrição, preço de venda, foto (upload), indicador de disponibilidade e visibilidade no cardápio. |
+| RF-49 | O Admin deve poder selecionar vários produtos na listagem e **replicar** as cópias para outra categoria/subcategoria de uma vez (originais mantidos, adicionais vinculados vão junto, `sales_count` zerado). |
+| RF-50 | O Admin deve poder selecionar vários produtos na listagem e **ajustar o preço em massa**: definir um valor fixo, aplicar porcentagem (aumentar/diminuir) ou somar/subtrair um valor em R$; opcionalmente aplicar o mesmo ajuste ao preço promocional. O preço nunca fica negativo. |
+| RF-51 | Ações em lote de configuração do cardápio: anexar **vários adicionais de uma vez** a um produto (RN-46), e cadastrar **vários bairros de uma vez** num setor de entrega (RN-34), lembrando a última cidade usada. |
 | RF-08 | O Admin deve poder configurar produtos com suporte a "sabores" (combos tipo pizza meio a meio). Por categoria, o Admin cadastra as quantidades de sabores aceitas (ex.: "Sabor único" = 1, "Meio a meio" = 2), cada uma com rótulo livre — não é uma lista fixa do sistema. |
 | RF-09 | O Admin deve poder marcar um produto como indisponível temporariamente, ou usar controle de estoque para isso automaticamente (RN-24). |
 | RF-10 | O cardápio público deve ser responsivo (mobile-first) e carregar rápido mesmo em conexões ruins. |
@@ -205,8 +216,8 @@ O status do pedido segue um fluxo definido no sistema, com data/hora registrada 
 | ID | Requisito |
 |---|---|
 | RF-17 | O Cliente Final deve poder adicionar itens ao carrinho, incluindo sabores/combos, e revisar o pedido antes de confirmar. |
-| RF-18 | No checkout, o sistema busca automaticamente um cliente existente pelo telefone informado dentro do tenant, ou cria um cadastro novo (RN-01). |
-| RF-19 | O sistema deve calcular o total do pedido no servidor (nunca no navegador), incluindo descontos e taxa de entrega. |
+| RF-18 | No checkout, o sistema busca automaticamente um cliente existente pelo telefone informado dentro do tenant, ou cria um cadastro novo (RN-01). Quando o tenant exige CPF (RN-52), o checkout online mostra o campo de CPF (com máscara, gravado só com dígitos) e o valida antes de finalizar; se o cliente já tem CPF cadastrado, ele vem pré-preenchido. |
+| RF-19 | O sistema deve calcular o total do pedido no servidor (nunca no navegador), incluindo descontos e taxa de entrega. Havendo uma única forma de pagamento, o campo de valor já vem preenchido com o total do pedido (acompanha mudanças de entrega/endereço até o cliente editar). |
 | RF-20 | O Admin deve poder configurar opções de entrega (nome, tipo — retirada ou entrega —, valor mínimo de pedido para isenção), por tenant. Para retirada, a taxa é fixa (RN-30); para entrega, a taxa vem dos setores configurados (RF-36). |
 | RF-21 | O checkout deve bloquear pedidos fora do horário de funcionamento do tenant, informando o próximo horário de abertura (RN-23). |
 | RF-22 | Ao confirmar, o sistema registra o pedido, gera mensagem estruturada e redireciona ao WhatsApp configurado para aquele tenant (RN-26, RN-27). |
@@ -242,11 +253,18 @@ O status do pedido segue um fluxo definido no sistema, com data/hora registrada 
 
 | ID | Requisito |
 |---|---|
-| RF-30 | O painel deve concentrar, sempre restrito ao próprio tenant: cardápio, pedidos, clientes, configurações do estabelecimento e usuários/permissões. |
+| RF-30 | O painel deve concentrar, sempre restrito ao próprio tenant: cardápio, pedidos, clientes, configurações do estabelecimento e usuários/permissões. O cliente exibe/edita o CPF quando informado (RN-52). |
 | RF-31 | O painel deve ter dashboard com indicadores operacionais (pedidos por status/dia/hora/origem, formas de pagamento, motivos de cancelamento, mais vendidos por período) do próprio tenant. |
 | RF-32 | O painel deve ser utilizável em desktop e tablet, comum no balcão/cozinha. |
 | RF-33 | Deve existir controle de acesso por perfil (Admin, Gerente, Atendente, Caixa, Entregador), sempre avaliado dentro do tenant do usuário logado. |
 | RF-34 | O painel deve permitir upload e troca do logo do estabelecimento, refletido no cardápio público daquele tenant. |
+
+### 7.6 Módulo: Painel Central — Operação (Razel Tec)
+
+| ID | Requisito |
+|---|---|
+| RF-52 | O painel central deve permitir **exportar** o catálogo global de localidades (estados, cidades, bairros) para um arquivo e **importá-lo** em outro ambiente, agrupado por chave natural (UF, código IBGE, nome normalizado), de forma idempotente (insere/atualiza, nunca apaga) — evita refazer em produção uma sincronização lenta já feita em outro ambiente. |
+| RF-53 | Na lista de tenants do painel central, a equipe Razel Tec (perfil Plataforma) deve poder abrir o painel de um tenant específico (`/painel/{slug}`) em uma nova aba, direto da linha do tenant. |
 
 ---
 
@@ -255,7 +273,7 @@ O status do pedido segue um fluxo definido no sistema, com data/hora registrada 
 | ID | Requisito |
 |---|---|
 | RNF-01 | **Isolamento de dados:** cada tenant deve ser isolado logicamente por um identificador de tenant presente em toda tabela de domínio, aplicado automaticamente por escopo global em todas as consultas — nunca dependendo de o desenvolvedor lembrar de filtrar manualmente. |
-| RNF-02 | **Roteamento por subdomínio:** a resolução do tenant a partir do subdomínio deve ter overhead desprezível e falhar de forma segura (nunca expor dados de outro tenant) caso o slug não seja reconhecido. |
+| RNF-02 | **Roteamento por path (histórico: subdomínio):** a resolução do tenant a partir do slug na URL deve ter overhead desprezível e falhar de forma segura (nunca expor dados de outro tenant) caso o slug não seja reconhecido. |
 | RNF-03 | **Desempenho:** o cardápio público deve carregar em poucos segundos mesmo em conexão móvel 3G/4G. |
 | RNF-04 | **Disponibilidade:** o cardápio público é a vitrine do restaurante — alta disponibilidade, especialmente em horário de pico (almoço/jantar), para todos os tenants simultaneamente. |
 | RNF-05 | **Simplicidade de uso:** qualquer tela do painel deve ser operável sem familiaridade técnica nem treinamento formal extenso. |
@@ -322,7 +340,7 @@ Conforme a Proposta Comercial de 18/08/2026, válida como referência do pacote 
 9. **Pagamento online integrado:** confirmar se entra no roadmap de curto prazo como upsell ou fica de fora por ora.
 10. **Impressão de pedidos (comanda/cozinha):** equipamento é do cliente; validar se a integração de impressão é necessária já no início.
 11. ~~Módulos avançados do sistema de referência (caixa, estoque, fiscal)~~ — **decidido em 20/08/2026**: entram no catálogo de features (RN-39) como reservas de roadmap (PDV, estoque, NF-e emissão/entrada), marcadas `is_available = false`, sem implementação funcional nesta fase — ver seção 4.1. A implementação real de cada módulo continua sendo avaliada e priorizada separadamente, item por item, quando entrar em desenvolvimento.
-12. **Busca de CEP no cadastro de cliente do painel:** a busca de endereço por CEP (RN-33) nasce no checkout do carrinho; replicar o mesmo serviço no formulário de cliente do painel Filament é trabalho futuro, quando esse formulário entrar em desenvolvimento.
+12. ~~Busca de CEP no cadastro de cliente do painel~~ — **resolvido**: o `ClientForm` do painel do tenant tem o mesmo campo de CEP com busca via `ViaCepClient` (`App\Filament\Tenant\Resources\Clients\Schemas\ClientForm`). O formulário de cliente também passou a ter o campo de **CPF** (RN-52), com máscara e gravação só de dígitos.
 13. ~~Normalização de nomes de bairro~~ — **resolvido em 20/08/2026**: normalização por acento/maiúscula (`App\Support\NeighborhoodNormalizer`) aplicada na gravação e na busca, ver `modelagem-middleware-multitenant.md` seção 3.6.
 14. **Indisponibilidade do ViaCEP:** RN-33 já prevê preenchimento manual como fallback quando o serviço externo falha ou não encontra o CEP; definir um timeout máximo aceitável para a chamada, para não travar o checkout.
 

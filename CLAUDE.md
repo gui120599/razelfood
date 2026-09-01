@@ -9,10 +9,10 @@ Stack: Laravel 12 + Livewire 3 + Filament 4 + Tailwind v4 + MySQL, seguindo a sk
 
 ## Guardrails (não fazer sem alinhar antes)
 - Multi-tenant com banco único + `tenant_id` em toda tabela de domínio — nunca instância por cliente.
-- Subdomínio por slug em `razelfood.com.br` (ex.: emporiodapizza.razelfood.com.br).
+- Tenancy por **path** num domínio único: cardápio `razelfood.com.br/{slug}`, painel do tenant `razelfood.com.br/painel/{slug}` (nativa do Filament), painel central `/admin`. NÃO é mais subdomínio — ver `.ai/rules/{middleware,routes,resources,users}.md`.
 - Catálogo de features + planos por tenant (`features`, `plans`, `plan_feature`, `tenant_feature_overrides`) está em escopo (RN-39 a RN-44) — mas PDV, estoque avançado e NF-e (emissão/entrada) entram só como entradas *reservadas* no catálogo (`is_available = false`), sem implementação funcional. Não confundir "criar o placeholder da feature" com "construir o módulo".
 - Fora de escopo por ora: os módulos funcionais de caixa/PDV, estoque avançado, fiscal/NFe, financeiro completo, pagamento online integrado, trial e precificação por plano.
-- Hospedagem inicial: compartilhado HostGator — validar wildcard SSL/SSH antes de assumir infra.
+- Hospedagem: compartilhado HostGator. Deploy = `bash scripts/promote-producao.sh` (reconstrói a branch `producao`) + `git pull` + `optimize:clear` + `migrate --force` + caches no servidor. NUNCA `route:cache` (ver `.ai/rules/scripts.md`).
 
 ===
 
