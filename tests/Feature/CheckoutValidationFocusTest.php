@@ -79,7 +79,7 @@ class CheckoutValidationFocusTest extends TestCase
             ->assertDispatched('checkout-validation-failed', field: 'name');
     }
 
-    public function test_missing_address_for_delivery_focuses_street(): void
+    public function test_delivery_without_using_the_cep_first_focuses_the_cep_field(): void
     {
         $deliveryOption = DeliveryOption::create([
             'tenant_id' => $this->tenant->id,
@@ -92,6 +92,25 @@ class CheckoutValidationFocusTest extends TestCase
             ->set('phone', '11999990000')
             ->set('name', 'Cliente Teste')
             ->set('deliveryOptionId', $deliveryOption->id)
+            ->call('submit')
+            ->assertDispatched('checkout-validation-failed', field: 'zipCode')
+            ->assertSet('errorSection', 'delivery');
+    }
+
+    public function test_missing_address_after_unlocking_focuses_street(): void
+    {
+        $deliveryOption = DeliveryOption::create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Entrega padrão',
+            'delivery_fee' => 8,
+            'requires_address' => true,
+        ]);
+
+        Livewire::test(Checkout::class)
+            ->set('phone', '11999990000')
+            ->set('name', 'Cliente Teste')
+            ->set('deliveryOptionId', $deliveryOption->id)
+            ->call('revealManualAddress')
             ->call('submit')
             ->assertDispatched('checkout-validation-failed', field: 'street');
     }

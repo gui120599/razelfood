@@ -109,6 +109,7 @@ class NeighborhoodsRelationManagerTest extends TestCase
         $this->assertDatabaseHas('delivery_zone_neighborhoods', [
             'tenant_id' => $this->tenant->id,
             'delivery_zone_id' => $this->deliveryZone->id,
+            'city_id' => $this->saoPaulo->id,
             'city' => 'sao paulo',
             'neighborhood' => 'vila mariana',
         ]);
@@ -198,5 +199,7 @@ class NeighborhoodsRelationManagerTest extends TestCase
                 'neighborhood' => 'vila mariana',
             ])
             ->assertHasNoActionErrors();
+
+        $this->assertSame($this->saoPaulo->id, $neighborhood->refresh()->city_id);
     }
 }

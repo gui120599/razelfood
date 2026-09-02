@@ -68,6 +68,7 @@ class OrderSettings extends Page
                 'order_late_after_minutes',
                 'serves_unlisted_neighborhoods',
                 'unlisted_neighborhood_fee',
+                'allow_free_form_address',
                 'uses_in_transit_stage',
                 'assigns_delivery_couriers',
                 'require_client_cpf',
@@ -117,6 +118,15 @@ class OrderSettings extends Page
                             ->label('Exigir CPF do cliente no checkout online')
                             ->default(false)
                             ->helperText('Ligado: o cliente precisa informar um CPF válido para finalizar o pedido pelo cardápio público. Não afeta pedidos lançados pela Central de Pedidos.'),
+                    ])
+                    ->columns(1),
+                Section::make('Endereço no checkout')
+                    ->description('Como o cliente informa cidade e bairro ao finalizar um pedido de entrega pelo cardápio online.')
+                    ->schema([
+                        Toggle::make('allow_free_form_address')
+                            ->label('Permitir que o cliente digite cidade e bairro livremente')
+                            ->default(true)
+                            ->helperText('Desligado: o cliente escolhe a cidade e o bairro em listas — cidades limitadas aos seus setores de entrega e bairros vindos da base oficial, o que evita erro de digitação de bairro. Só tem efeito quando você já tem setores de entrega cadastrados.'),
                     ])
                     ->columns(1),
                 Section::make('Bairros não configurados')

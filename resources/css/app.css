@@ -13,3 +13,7 @@
        estados de erro/cancelamento, independente da primary_color do tenant. */
     --color-rf-danger: #DC2626;
 }
+
+[x-cloak] {
+    display: none !important;
+}

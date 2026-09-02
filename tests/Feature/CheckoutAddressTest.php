@@ -101,6 +101,7 @@ class CheckoutAddressTest extends TestCase
     {
         Livewire::test(Checkout::class)
             ->set('deliveryOptionId', $this->deliveryOption->id)
+            ->call('revealManualAddress')
             ->set('phone', '11999990000')
             ->set('name', 'Cliente Teste')
             ->set('street', 'Rua das Flores')
@@ -118,6 +119,7 @@ class CheckoutAddressTest extends TestCase
     {
         Livewire::test(Checkout::class)
             ->set('deliveryOptionId', $this->deliveryOption->id)
+            ->call('revealManualAddress')
             ->set('phone', '11999990000')
             ->set('name', 'Cliente Teste')
             ->set('street', 'Rua das Flores')
@@ -135,6 +137,7 @@ class CheckoutAddressTest extends TestCase
     {
         Livewire::test(Checkout::class)
             ->set('deliveryOptionId', $this->deliveryOption->id)
+            ->call('revealManualAddress')
             ->set('phone', '11999990000')
             ->set('name', 'Cliente Teste')
             ->set('street', 'Rua das Flores')
@@ -161,6 +164,7 @@ class CheckoutAddressTest extends TestCase
 
         Livewire::test(Checkout::class)
             ->set('deliveryOptionId', $this->deliveryOption->id)
+            ->call('revealManualAddress')
             ->set('phone', '11999990000')
             ->set('name', 'Cliente Teste')
             ->set('street', 'Rua das Flores')
@@ -183,6 +187,7 @@ class CheckoutAddressTest extends TestCase
 
         Livewire::test(Checkout::class)
             ->set('deliveryOptionId', $this->deliveryOption->id)
+            ->call('revealManualAddress')
             ->set('phone', '11999990000')
             ->set('name', 'Cliente Teste')
             ->set('street', 'Rua das Flores')
@@ -207,6 +212,7 @@ class CheckoutAddressTest extends TestCase
 
         Livewire::test(Checkout::class)
             ->set('deliveryOptionId', $this->deliveryOption->id) // taxa normal: R$ 8
+            ->call('revealManualAddress')
             ->set('phone', '11999990000')
             ->set('name', 'Cliente Teste')
             ->set('street', 'Rua das Flores')
