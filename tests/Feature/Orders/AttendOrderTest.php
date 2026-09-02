@@ -186,7 +186,7 @@ class AttendOrderTest extends TestCase
 
         Livewire::test(AttendOrder::class, ['order' => $order->id])
             ->assertSet('cartItems', [
-                ['type' => 'simple', 'product_id' => $oldProduct->id, 'flavor_ids' => [], 'quantity' => 2, 'note' => null, 'addons' => []],
+                ['type' => 'simple', 'product_id' => $oldProduct->id, 'flavor_ids' => [], 'quantity' => 2, 'note' => null, 'addons' => [], 'gifts' => []],
             ])
             ->call('removeItem', 0)
             ->call('addSimpleItem', $newProduct->id)

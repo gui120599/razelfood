@@ -112,6 +112,7 @@ class AddonPickerWiringTest extends TestCase
             ->assertDispatched('order-cart-line-confirmed', item: [
                 'type' => 'simple', 'product_id' => $product->id, 'flavor_ids' => [], 'quantity' => 1, 'note' => null,
                 'addons' => [['addon_id' => $addon->id, 'quantity' => 2, 'target' => null]],
+                'gifts' => [],
             ])
             ->assertSet('open', false);
     }
@@ -128,6 +129,7 @@ class AddonPickerWiringTest extends TestCase
             ->call('confirmAddons')
             ->assertDispatched('order-cart-line-confirmed', item: [
                 'type' => 'simple', 'product_id' => $product->id, 'flavor_ids' => [], 'quantity' => 1, 'note' => null, 'addons' => [],
+                'gifts' => [],
             ]);
     }
 
@@ -159,6 +161,7 @@ class AddonPickerWiringTest extends TestCase
             ->call('chooseWantsAddons', false)
             ->assertDispatched('order-cart-line-confirmed', item: [
                 'type' => 'simple', 'product_id' => $product->id, 'flavor_ids' => [], 'quantity' => 1, 'note' => null, 'addons' => [],
+                'gifts' => [],
             ])
             ->assertSet('open', false);
     }
@@ -198,6 +201,7 @@ class AddonPickerWiringTest extends TestCase
             ->call('skipAddons')
             ->assertDispatched('order-cart-line-confirmed', item: [
                 'type' => 'simple', 'product_id' => $product->id, 'flavor_ids' => [], 'quantity' => 1, 'note' => null, 'addons' => [],
+                'gifts' => [],
             ])
             ->assertSet('open', false);
     }

@@ -58,6 +58,18 @@ class ItemsRelationManager extends RelationManager
                 TextColumn::make('addons_total')
                     ->label('Adicionais (R$)')
                     ->money('BRL'),
+                TextColumn::make('gifts_display')
+                    ->label('Brindes')
+                    ->state(fn (OrderItem $record) => collect($record->gifts ?? [])
+                        ->map(function (array $gift) {
+                            $name = Product::withTrashed()->find($gift['gift_product_id'])?->name ?? 'Brinde removido';
+
+                            return ($gift['accepted'] ?? false) === true
+                                ? "🎁 {$gift['quantity']}x {$name}"
+                                : "🎁 {$name} (recusado)";
+                        })
+                        ->implode(' / '))
+                    ->placeholder('—'),
                 TextColumn::make('note')
                     ->label('Observação')
                     ->placeholder('—'),

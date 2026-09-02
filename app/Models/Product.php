@@ -67,6 +67,28 @@ class Product extends TenantScopedModel
             ->withPivot(['price', 'max_quantity']);
     }
 
+    /**
+     * Produtos oferecidos como brinde quando ESTE produto é comprado (RN-53).
+     */
+    public function gifts(): BelongsToMany
+    {
+        return $this->belongsToMany(Product::class, 'product_gift', 'product_id', 'gift_product_id')
+            ->using(ProductGift::class)
+            ->withPivot(['quantity', 'is_active', 'flavor_counts']);
+    }
+
+    /**
+     * Inversa de gifts() — produtos principais que oferecem ESTE produto como
+     * brinde. Necessária para o AttachAction do GiftsRelationManager resolver a
+     * relação inversa num self-join (ver .ai/rules/models.md).
+     */
+    public function giftedByProducts(): BelongsToMany
+    {
+        return $this->belongsToMany(Product::class, 'product_gift', 'gift_product_id', 'product_id')
+            ->using(ProductGift::class)
+            ->withPivot(['quantity', 'is_active', 'flavor_counts']);
+    }
+
     protected function imageUrl(): Attribute
     {
         return Attribute::make(

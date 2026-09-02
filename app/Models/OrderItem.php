@@ -18,6 +18,7 @@ class OrderItem extends Model
         'flavors',
         'addons',
         'addons_total',
+        'gifts',
     ];
 
     protected function casts(): array
@@ -28,6 +29,7 @@ class OrderItem extends Model
             'flavors' => 'array',
             'addons' => 'array',
             'addons_total' => 'decimal:2',
+            'gifts' => 'array',
         ];
     }
 

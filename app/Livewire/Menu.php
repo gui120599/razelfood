@@ -38,6 +38,15 @@ class Menu extends Component
     public array $addonSelections = [];
 
     /**
+     * Brindes aceitos pelo cliente na linha em montagem (RN-53) — keyed por
+     * gift_product_id => true. A quantidade e a validade do vínculo são sempre
+     * resolvidas no servidor (ResolvePriceForCartLine::resolveGifts).
+     *
+     * @var array<int, bool>
+     */
+    public array $giftSelections = [];
+
+    /**
      * null = ainda não perguntado; true = cliente quer escolher adicionais
      * pro combo (mostra a lista); false = optou por não adicionar nada
      * (finaliza o combo sem adicionais direto). Só se aplica ao sub-passo
@@ -62,8 +71,9 @@ class Menu extends Component
 
     /**
      * @param  array<int, array{addon_id:int, quantity:int, target:?int}>  $addons
+     * @param  array<int, array{gift_product_id:int, accepted:bool}>  $gifts
      */
-    public function addToCart(int $productId, array $addons = []): void
+    public function addToCart(int $productId, array $addons = [], array $gifts = []): void
     {
         if (! $this->businessHours->isOpen) {
             $this->showCart = true;
@@ -71,9 +81,10 @@ class Menu extends Component
             return;
         }
 
-        Cart::addSimple($productId, addons: $addons);
+        Cart::addSimple($productId, addons: $addons, gifts: $gifts);
         $this->showCart = true;
         $this->addonSelections = [];
+        $this->giftSelections = [];
         unset($this->cartLines);
     }
 
@@ -81,12 +92,14 @@ class Menu extends Component
     {
         $this->viewingProductId = $productId;
         $this->addonSelections = [];
+        $this->giftSelections = [];
     }
 
     public function closeProductView(): void
     {
         $this->viewingProductId = null;
         $this->addonSelections = [];
+        $this->giftSelections = [];
     }
 
     public function addFromView(): void
@@ -95,8 +108,31 @@ class Menu extends Component
             return;
         }
 
-        $this->addToCart($this->viewingProductId, $this->addonSelectionsArray());
+        $this->addToCart($this->viewingProductId, $this->addonSelectionsArray(), $this->giftSelectionsArray());
         $this->viewingProductId = null;
+    }
+
+    public function toggleGift(int $giftProductId): void
+    {
+        if ($this->giftSelections[$giftProductId] ?? false) {
+            unset($this->giftSelections[$giftProductId]);
+
+            return;
+        }
+
+        $this->giftSelections[$giftProductId] = true;
+    }
+
+    /**
+     * @return array<int, array{gift_product_id:int, accepted:bool}>
+     */
+    private function giftSelectionsArray(): array
+    {
+        return collect($this->giftSelections)
+            ->filter()
+            ->map(fn (bool $accepted, int $giftProductId) => ['gift_product_id' => $giftProductId, 'accepted' => true])
+            ->values()
+            ->all();
     }
 
     public function setAddonQuantity(int $addonId, int $quantity): void
@@ -171,6 +207,7 @@ class Menu extends Component
             'step' => 'flavors',
         ];
         $this->addonSelections = [];
+        $this->giftSelections = [];
         $this->comboAddonsGate = null;
         $this->viewingProductId = null;
     }
@@ -242,6 +279,28 @@ class Menu extends Component
             return;
         }
 
+        if ($this->comboGifts->isNotEmpty()) {
+            $this->comboBuilder['step'] = 'gifts';
+
+            return;
+        }
+
+        if ($this->comboAddons->isNotEmpty()) {
+            $this->comboBuilder['step'] = 'addons';
+
+            return;
+        }
+
+        $this->finalizeCombo();
+    }
+
+    /**
+     * Sub-passo de brinde do combo (RN-53). Sem gate sim/não — o brinde é
+     * grátis, o cliente só marca o(s) checkbox(es) que quiser; daqui segue
+     * pro passo de adicionais (se houver) ou finaliza.
+     */
+    public function confirmComboGifts(): void
+    {
         if ($this->comboAddons->isNotEmpty()) {
             $this->comboBuilder['step'] = 'addons';
 
@@ -281,11 +340,12 @@ class Menu extends Component
     {
         $flavorIds = $this->comboBuilder['flavor_ids'];
         $addons = $this->addonSelectionsArray();
+        $gifts = $this->giftSelectionsArray();
 
         if ($this->comboBuilder['required_count'] === 1) {
-            Cart::addSimple($flavorIds[0], addons: $addons);
+            Cart::addSimple($flavorIds[0], addons: $addons, gifts: $gifts);
         } else {
-            Cart::addCombo($flavorIds, addons: $addons);
+            Cart::addCombo($flavorIds, addons: $addons, gifts: $gifts);
         }
 
         $this->cancelCombo();
@@ -303,6 +363,7 @@ class Menu extends Component
             'step' => 'flavors',
         ];
         $this->addonSelections = [];
+        $this->giftSelections = [];
         $this->comboAddonsGate = null;
     }
 
@@ -353,6 +414,67 @@ class Menu extends Component
         return Addon::whereHas('products', fn ($query) => $query->where('products.id', $this->viewingProductId))
             ->orderBy('display_order')
             ->get();
+    }
+
+    /**
+     * Brindes ativos oferecidos pelos sabores em montagem no combo (RN-53),
+     * filtrados pela quantidade de sabores atual e deduplicados por produto.
+     *
+     * @return Collection<int, Product>
+     */
+    #[Computed]
+    public function comboGifts(): Collection
+    {
+        $flavorIds = $this->comboBuilder['flavor_ids'];
+        $requiredCount = $this->comboBuilder['required_count'];
+
+        if (empty($flavorIds) || $requiredCount === null) {
+            return new Collection;
+        }
+
+        return $this->activeGiftsFor($flavorIds, $requiredCount);
+    }
+
+    /**
+     * Brindes ativos do produto simples em visualização rápida (RN-53).
+     *
+     * @return Collection<int, Product>
+     */
+    #[Computed]
+    public function viewingProductGifts(): Collection
+    {
+        if ($this->viewingProductId === null) {
+            return new Collection;
+        }
+
+        return $this->activeGiftsFor([$this->viewingProductId], 1);
+    }
+
+    /**
+     * @param  array<int>  $anchorProductIds
+     * @return Collection<int, Product>
+     */
+    private function activeGiftsFor(array $anchorProductIds, int $flavorCount): Collection
+    {
+        $gifts = Product::whereIn('id', $anchorProductIds)
+            ->with(['gifts' => fn ($query) => $query->wherePivot('is_active', true)->orderBy('display_order')])
+            ->get()
+            ->flatMap(fn (Product $anchor) => $anchor->gifts)
+            ->filter(function (Product $gift) use ($flavorCount, $anchorProductIds) {
+                if (in_array($gift->id, $anchorProductIds, true)) {
+                    return false;
+                }
+
+                $counts = $gift->pivot->flavor_counts;
+
+                return empty($counts) || in_array($flavorCount, array_map('intval', $counts), true);
+            })
+            ->unique('id')
+            ->values();
+
+        // Menu.php tipa Collection como Eloquent\Collection — flatMap devolve
+        // Support\Collection, então re-embrulha (mesma armadilha de comboFlavorOptionsFor).
+        return new Collection($gifts->all());
     }
 
     public function comboAllowsWholeProduct(Addon $addon): bool
@@ -550,6 +672,10 @@ class Menu extends Component
         $product->setAttribute('resolved_flavor_combo_max', $promotion?->allows_flavors ? $promotion->max_flavors : null);
         $product->setAttribute('resolved_has_addons', $product->addons()->exists());
 
+        $activeGifts = $product->gifts()->wherePivot('is_active', true)->orderBy('display_order')->get();
+        $product->setAttribute('resolved_has_gifts', $activeGifts->isNotEmpty());
+        $product->setAttribute('resolved_gift_names', $activeGifts->pluck('name')->all());
+
         return $product;
     }
 
@@ -603,6 +729,8 @@ class Menu extends Component
         $addonNames = $addonIds->isEmpty() ? collect() : Addon::whereIn('id', $addonIds)->pluck('name', 'id');
         $flavorIds = collect($cartItems)->flatMap(fn (array $item) => $item['flavor_ids'])->unique()->values();
         $flavorNames = $flavorIds->isEmpty() ? collect() : Product::whereIn('id', $flavorIds)->pluck('name', 'id');
+        $giftIds = collect($cartItems)->flatMap(fn (array $item) => $item['gifts'] ?? [])->pluck('gift_product_id')->unique()->values();
+        $giftNames = $giftIds->isEmpty() ? collect() : Product::whereIn('id', $giftIds)->pluck('name', 'id');
 
         foreach ($cartItems as $index => $item) {
             try {
@@ -628,6 +756,12 @@ class Menu extends Component
                 return "{$selection['quantity']}x {$addonName} ({$target})";
             })->all();
 
+            $giftsDisplay = collect($resolved['gifts'] ?? [])
+                ->filter(fn (array $gift) => $gift['accepted'] === true)
+                ->map(fn (array $gift) => "🎁 {$gift['quantity']}x ".($giftNames->get($gift['gift_product_id']) ?? 'Brinde removido').' — grátis')
+                ->values()
+                ->all();
+
             $lines[] = [
                 'index' => $index,
                 'name' => $name,
@@ -636,6 +770,7 @@ class Menu extends Component
                 'original_unit_price' => $resolved['original_unit_price'],
                 'addons_total' => $resolved['addons_total'],
                 'addons_display' => $addonsDisplay,
+                'gifts_display' => $giftsDisplay,
                 'line_total' => round(($resolved['unit_price'] + $resolved['addons_total']) * $item['quantity'], 2),
                 'note' => $item['note'],
                 'image_url' => $imageUrl,

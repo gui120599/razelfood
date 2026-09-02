@@ -33,7 +33,11 @@ use InvalidArgumentException;
  * sabor no momento da criação não estiver mais ativa/vigente no momento da
  * edição, a reversão não credita de volta aquela promoção específica (ela
  * já não é mais "resolvível"). É um cenário raro (promoção mudou entre a
- * criação e a edição do mesmo pedido) e não bloqueia a edição.
+ * criação e a edição do mesmo pedido) e não bloqueia a edição. O mesmo vale
+ * para brindes (RN-53): se o vínculo product_gift mudou (quantidade, ativo)
+ * ou foi removido entre a criação e a edição, a reversão de stock_quantity do
+ * produto-brinde pode não bater exatamente com o que foi debitado. A exibição
+ * e o total do pedido não são afetados (vêm do snapshot JSON em order_items.gifts).
  */
 class UpdateOrderFromCart
 {
@@ -43,7 +47,7 @@ class UpdateOrderFromCart
     ) {}
 
     /**
-     * @param  array<int, array{type: string, product_id: int, flavor_ids: array<int>, quantity: int, note: ?string, addons?: array<int, array{addon_id:int, quantity:int, target:?int}>}>  $cartItems
+     * @param  array<int, array{type: string, product_id: int, flavor_ids: array<int>, quantity: int, note: ?string, addons?: array<int, array{addon_id:int, quantity:int, target:?int}>, gifts?: array<int, array{gift_product_id:int, accepted:bool}>}>  $cartItems
      * @param  array{phone: string, name: string, cpf?: ?string, zip_code: ?string, street: ?string, number: ?string, complement: ?string, neighborhood: ?string, city: ?string, state: ?string, delivery_option_id: ?int, payments: array<int, array{payment_option_id: int, amount: float, change_for: ?float}>, notes: ?string}  $checkoutData
      */
     public function __invoke(Order $order, array $cartItems, array $checkoutData): Order
@@ -68,8 +72,8 @@ class UpdateOrderFromCart
                 'resolved' => $resolvePriceForCartLine($item),
             ]);
 
-            [$oldPromoConsumption, $oldStockConsumption, $oldAddonConsumption] = $this->ledger->buildConsumptionMaps($oldResolvedLines);
-            [$newPromoConsumption, $newStockConsumption, $newAddonConsumption] = $this->ledger->buildConsumptionMaps($newResolvedLines);
+            [$oldPromoConsumption, $oldStockConsumption, $oldAddonConsumption, $oldGiftSalesExclusion] = $this->ledger->buildConsumptionMaps($oldResolvedLines);
+            [$newPromoConsumption, $newStockConsumption, $newAddonConsumption, $newGiftSalesExclusion] = $this->ledger->buildConsumptionMaps($newResolvedLines);
 
             $allPromoConsumption = $this->mergeConsumptionKeys($oldPromoConsumption, $newPromoConsumption);
             $allStockConsumption = $this->mergeConsumptionKeys($oldStockConsumption, $newStockConsumption);
@@ -82,7 +86,7 @@ class UpdateOrderFromCart
 
             // 1) Reverte o consumo dos itens antigos (devolve estoque/saldo).
             $oldPromoTotalConsumption = $this->sumByPromoId($oldPromoConsumption);
-            $this->ledger->applyIncrements($promotions, $oldPromoTotalConsumption, $pivots, $oldPromoConsumption, $stockControlledProducts, $oldStockConsumption, $stockControlledAddons, $oldAddonConsumption);
+            $this->ledger->applyIncrements($promotions, $oldPromoTotalConsumption, $pivots, $oldPromoConsumption, $stockControlledProducts, $oldStockConsumption, $stockControlledAddons, $oldAddonConsumption, $oldGiftSalesExclusion);
 
             // 2) Valida e aplica o consumo dos itens novos, com o saldo já revertido.
             // stockControlledProducts/stockControlledAddons foram travados com a
@@ -97,7 +101,7 @@ class UpdateOrderFromCart
             $newPromoTotalConsumption = $this->ledger->assertPivotAndPerOrderLimits($newPromoConsumption, $pivots, $promotions);
             $this->ledger->assertStockAvailable($newStockControlledProducts, $newStockConsumption);
             $this->ledger->assertAddonStockAvailable($newStockControlledAddons, $newAddonConsumption);
-            $this->ledger->applyDecrements($promotions, $newPromoTotalConsumption, $pivots, $newPromoConsumption, $newStockControlledProducts, $newStockConsumption, $newStockControlledAddons, $newAddonConsumption);
+            $this->ledger->applyDecrements($promotions, $newPromoTotalConsumption, $pivots, $newPromoConsumption, $newStockControlledProducts, $newStockConsumption, $newStockControlledAddons, $newAddonConsumption, $newGiftSalesExclusion);
 
             // 3) Substitui os itens do pedido (delete + recria, sem diff fino).
             $order->items()->delete();
@@ -114,6 +118,7 @@ class UpdateOrderFromCart
                     'flavors' => $line['item']['type'] === 'combo' ? $line['item']['flavor_ids'] : null,
                     'addons' => empty($line['item']['addons']) ? null : $line['item']['addons'],
                     'addons_total' => $line['resolved']['addons_total'],
+                    'gifts' => empty($line['resolved']['gifts']) ? null : $line['resolved']['gifts'],
                 ]);
             }
 
@@ -147,6 +152,7 @@ class UpdateOrderFromCart
                 'quantity' => $item->quantity,
                 'note' => $item->note,
                 'addons' => $item->addons ?? [],
+                'gifts' => $item->gifts ?? [],
             ];
 
             try {

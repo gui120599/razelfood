@@ -58,6 +58,10 @@
                                         <p class="mt-0.5 truncate text-xs text-gray-400 dark:text-gray-500">+ {{ $addonLine }}</p>
                                     @endforeach
 
+                                    @foreach ($line['gifts_display'] ?? [] as $giftLine)
+                                        <p class="mt-0.5 truncate text-xs font-semibold text-emerald-600 dark:text-emerald-400">{{ $giftLine }} — grátis</p>
+                                    @endforeach
+
                                     <div x-data="{ open: @js(filled($line['note'])) }" class="mt-1">
                                         <div class="flex flex-wrap items-center gap-3">
                                             <button

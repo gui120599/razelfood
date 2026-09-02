@@ -109,4 +109,28 @@ class BuildOrderItemLinesTest extends TestCase
 
         $this->assertSame('Produto removido', $line['name']);
     }
+
+    public function test_builds_gift_display_for_accepted_and_declined_gifts(): void
+    {
+        $order = $this->makeOrder();
+        $product = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $this->category->id, 'name' => 'Pizza Calabresa', 'price' => 65]);
+        $soda = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $this->category->id, 'name' => 'Guaraná 1,5L', 'price' => 12]);
+        $juice = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $this->category->id, 'name' => 'Suco de Laranja', 'price' => 9]);
+
+        OrderItem::create([
+            'order_id' => $order->id, 'product_id' => $product->id, 'quantity' => 1,
+            'unit_price' => 65, 'original_unit_price' => 65, 'addons_total' => 0,
+            'gifts' => [
+                ['gift_product_id' => $soda->id, 'quantity' => 2, 'accepted' => true],
+                ['gift_product_id' => $juice->id, 'quantity' => 1, 'accepted' => false],
+            ],
+        ]);
+
+        $line = app(BuildOrderItemLines::class)($order->fresh('items'))->first();
+
+        $this->assertSame([
+            '🎁 2x Guaraná 1,5L',
+            '🎁 Suco de Laranja — recusado pelo cliente',
+        ], $line['gifts_display']);
+    }
 }

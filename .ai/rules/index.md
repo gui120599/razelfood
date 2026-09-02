@@ -23,6 +23,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 | resources/views/{orders/ticket.blade.php,components/reports/print-layout.blade.php,reports/*-print.blade.php} | .ai/rules/orders-reports.md |
 | app/Filament/Tenant/{Pages,Livewire}/Orders/** | .ai/rules/orders.md |
 | app/Filament/Tenant/Pages/**/*.php | .ai/rules/pages.md |
+| app/{Actions/Menu/ResolvePriceForCartLine.php,Actions/Orders/Support/CartStockAndPromotionLedger.php,Models/ProductGift.php,Filament/Tenant/Resources/Products/RelationManagers/GiftsRelationManager.php} | .ai/rules/products-relation-managers.md |
 | app/Filament/Tenant/Resources/Categories/RelationManagers/FlavorQuantityOptionsRelationManager.php | .ai/rules/relation-managers.md |
 | app/Filament/Tenant/Pages/{Dashboard.php,Reports.php},app/Filament/Tenant/Widgets/Reports/** | .ai/rules/reports.md |
 | app/Filament/Tenant/Resources/**/*Resource.php | .ai/rules/resources.md |

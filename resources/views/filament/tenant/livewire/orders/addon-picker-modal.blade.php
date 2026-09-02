@@ -39,9 +39,28 @@
                                 </button>
                             </div>
                         </div>
-                    @elseif ($this->availableAddons->isEmpty())
-                        <p class="py-6 text-center text-sm text-gray-500 dark:text-gray-500">Nenhum adicional disponível.</p>
                     @else
+                        @if ($this->availableAddons->isEmpty() && $this->availableGifts->isEmpty())
+                            <p class="py-6 text-center text-sm text-gray-500 dark:text-gray-500">Nenhum adicional disponível.</p>
+                        @endif
+
+                        @if ($this->availableGifts->isNotEmpty())
+                            <div class="mb-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3">
+                                <p class="mb-2 text-sm font-bold text-emerald-700 dark:text-emerald-300">🎁 Este item dá direito a brinde</p>
+                                @foreach ($this->availableGifts as $gift)
+                                    <label class="flex cursor-pointer items-center gap-2 py-1">
+                                        <input type="checkbox" wire:click="toggleGift({{ $gift->id }})"
+                                               @checked($giftSelections[$gift->id] ?? false)
+                                               class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-0 dark:border-white/20 dark:bg-transparent">
+                                        <span class="text-sm text-gray-800 dark:text-gray-100">
+                                            {{ $gift->pivot->quantity }}x {{ $gift->name }} <span class="font-semibold text-emerald-600 dark:text-emerald-400">grátis</span>
+                                        </span>
+                                    </label>
+                                @endforeach
+                            </div>
+                        @endif
+
+                        @if ($this->availableAddons->isNotEmpty())
                         <p class="mb-2 text-xs text-gray-500 dark:text-gray-500">Deixe a quantidade em 0 nos adicionais que não quiser — eles não serão vinculados ao item.</p>
                         <ul class="divide-y divide-gray-200 dark:divide-white/10">
                             @foreach ($this->availableAddons as $addon)
@@ -103,11 +122,13 @@
                                 </li>
                             @endforeach
                         </ul>
+                        @endif
                     @endif
                 </div>
 
                 @if ($wantsAddons === true)
                     <div class="flex gap-2 border-t border-gray-200 p-4 dark:border-white/10">
+                        @if ($this->availableAddons->isNotEmpty())
                         <button
                             type="button"
                             wire:click="skipAddons"
@@ -115,6 +136,7 @@
                         >
                             {{ $editingIndex !== null ? 'Remover todos' : 'Prosseguir sem adicionais' }}
                         </button>
+                        @endif
                         <button
                             type="button"
                             wire:click="confirmAddons"

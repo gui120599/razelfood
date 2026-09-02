@@ -53,7 +53,7 @@
                 <x-heroicon-o-truck class="h-4 w-4" />
                 Como deseja receber?
             </h2>
-            <div class="grid grid-cols-2 gap-2">
+            <div class="grid grid-cols-3 gap-2">
                 @foreach ($this->deliveryOptions as $option)
                     <button type="button" wire:key="delivery-{{ $option->id }}"
                             wire:click="$set('deliveryOptionId', {{ $option->id }})"
@@ -75,71 +75,127 @@
 
     {{-- 3. Endereço (só aparece pra opções que exigem endereço, ex.: entrega por motoboy) --}}
     @if ($this->requiresAddress)
+        @php($fieldClass = 'w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:border-[var(--tenant-primary)] focus:outline-none')
         <div class="space-y-3 rounded-xl border border-white/10 bg-gray-900 p-4">
             <h2 class="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-gray-400">
                 <x-heroicon-o-map-pin class="h-4 w-4" />
                 Endereço de entrega
             </h2>
 
+            @if ($this->addressIsRestricted)
+                <p class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[11px] leading-snug text-gray-400">
+                    <x-heroicon-o-information-circle class="mr-0.5 inline h-3.5 w-3.5 align-text-bottom" />
+                    Entregamos apenas nas cidades e bairros já cadastrados pela loja. Não encontrou o seu? Combine a entrega pelo WhatsApp.
+                </p>
+            @endif
+
+            {{-- Passo 1: CEP primeiro --}}
             <div>
                 <label class="mb-1 block text-xs text-gray-500">CEP</label>
-                <input type="text" wire:model="zipCode" wire:blur="lookupCep"
+                <input type="text" wire:model="zipCode" wire:blur="lookupCep" data-field="zipCode"
                        x-on:input="$el.value = window.maskCep($el.value)"
                        placeholder="00000-000" maxlength="9" inputmode="numeric"
-                       class="w-full max-w-[160px] rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:border-[var(--tenant-primary)] focus:outline-none">
+                       class="max-w-[160px] {{ $fieldClass }}">
                 @if ($cepNotFound)
-                    <p class="mt-1 text-xs text-yellow-400">CEP não encontrado — preencha o endereço manualmente.</p>
+                    <p class="mt-1 text-xs text-yellow-400">CEP não encontrado — preencha o endereço abaixo.</p>
+                @endif
+                @if (! $addressUnlocked)
+                    <button type="button" wire:click="revealManualAddress"
+                            class="mt-2 flex cursor-pointer items-center gap-1 text-xs font-semibold text-[var(--tenant-primary)]">
+                        <x-heroicon-o-question-mark-circle class="h-3.5 w-3.5" /> Não sei meu CEP
+                    </button>
                 @endif
             </div>
 
-            <div class="grid grid-cols-3 gap-2">
-                <div class="col-span-2">
-                    <label class="mb-1 block text-xs text-gray-500">Rua</label>
-                    <input type="text" wire:model="street" data-field="street"
-                           class="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:border-[var(--tenant-primary)] focus:outline-none">
-                    @error('street') <p class="mt-1 text-xs text-red-400">{{ $message }}</p> @enderror
-                </div>
-                <div>
-                    <label class="mb-1 block text-xs text-gray-500">Número</label>
-                    <input type="text" wire:model="number"
-                           placeholder="Nº ou S/N"
-                           class="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:border-[var(--tenant-primary)] focus:outline-none">
-                </div>
-            </div>
+            @if ($addressUnlocked)
+                {{-- Passo 2: estado + cidade --}}
+                @if ($this->addressIsRestricted)
+                    <div class="grid grid-cols-3 gap-2">
+                        <div>
+                            <label class="mb-1 block text-xs text-gray-500">UF</label>
+                            <select wire:model.live="state" data-field="state" class="{{ $fieldClass }}">
+                                <option value="">—</option>
+                                @foreach ($this->servedStates as $servedState)
+                                    <option value="{{ $servedState->uf }}">{{ $servedState->uf }}</option>
+                                @endforeach
+                            </select>
+                            @error('state') <p class="mt-1 text-xs text-red-400">{{ $message }}</p> @enderror
+                        </div>
+                        <div class="col-span-2">
+                            <label class="mb-1 block text-xs text-gray-500">Cidade</label>
+                            <x-menu.combobox
+                                wire:key="checkout-city-{{ $state }}"
+                                data-field="city"
+                                name="cityId"
+                                :options="$this->cityOptionsForState->pluck('name', 'id')->all()"
+                                placeholder="Escolha a cidade…"
+                                search-placeholder="Buscar cidade…"
+                                :disabled="blank($state)" />
+                            @error('city') <p class="mt-1 text-xs text-red-400">{{ $message }}</p> @enderror
+                        </div>
+                    </div>
+                @else
+                    <div class="grid grid-cols-3 gap-2">
+                        <div class="col-span-2">
+                            <label class="mb-1 block text-xs text-gray-500">Cidade</label>
+                            <input type="text" wire:model="city" data-field="city" class="{{ $fieldClass }}">
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-xs text-gray-500">UF</label>
+                            <input type="text" wire:model="state" data-field="state" maxlength="2" class="uppercase {{ $fieldClass }}">
+                        </div>
+                    </div>
+                @endif
 
-            <div class="grid grid-cols-2 gap-2">
-                <div>
-                    <label class="mb-1 block text-xs text-gray-500">
-                        Complemento
-                        @if (blank($number))
-                            <span class="text-yellow-400">(obrigatório sem número)</span>
+                {{-- Passo 3: bairro --}}
+                @if (! $this->addressIsRestricted || filled($city))
+                    <div>
+                        <label class="mb-1 block text-xs text-gray-500">Bairro</label>
+                        @if ($this->addressIsRestricted)
+                            <x-menu.combobox
+                                wire:key="checkout-neighborhood-{{ $cityId }}"
+                                data-field="neighborhood"
+                                name="neighborhood"
+                                :options="$this->neighborhoodOptions"
+                                placeholder="Escolha o bairro…"
+                                search-placeholder="Buscar bairro…"
+                                empty-text="Bairro não encontrado no catálogo desta cidade."
+                                :disabled="blank($cityId)" />
+                        @else
+                            <input type="text" wire:model.live.debounce.500ms="neighborhood" data-field="neighborhood" class="{{ $fieldClass }}">
                         @endif
-                    </label>
-                    <input type="text" wire:model="complement" data-field="complement"
-                           placeholder="Ponto de referência"
-                           class="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:border-[var(--tenant-primary)] focus:outline-none">
-                    @error('complement') <p class="mt-1 text-xs text-red-400">{{ $message }}</p> @enderror
-                </div>
-                <div>
-                    <label class="mb-1 block text-xs text-gray-500">Bairro</label>
-                    <input type="text" wire:model.live.debounce.500ms="neighborhood" data-field="neighborhood"
-                           class="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:border-[var(--tenant-primary)] focus:outline-none">
-                    @error('neighborhood') <p class="mt-1 text-xs text-red-400">{{ $message }}</p> @enderror
-                </div>
-            </div>
+                        @error('neighborhood') <p class="mt-1 text-xs text-red-400">{{ $message }}</p> @enderror
+                    </div>
+                @endif
 
-            <div class="grid grid-cols-3 gap-2">
-                <div class="col-span-2">
-                    <label class="mb-1 block text-xs text-gray-500">Cidade</label>
-                    <input type="text" wire:model="city"
-                           class="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:border-[var(--tenant-primary)] focus:outline-none">
-                </div>
-                <div>
-                    <label class="mb-1 block text-xs text-gray-500">UF</label>
-                    <input type="text" wire:model="state" maxlength="2"
-                           class="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm uppercase text-white placeholder-gray-600 focus:border-[var(--tenant-primary)] focus:outline-none">
-                </div>
-            </div>
+                {{-- Passo 4: rua, número, complemento --}}
+                @if (! $this->addressIsRestricted || filled($street) || filled($neighborhood))
+                    <div class="grid grid-cols-3 gap-2">
+                        <div class="col-span-2">
+                            <label class="mb-1 block text-xs text-gray-500">Rua</label>
+                            <input type="text" wire:model="street" data-field="street" class="{{ $fieldClass }}">
+                            @error('street') <p class="mt-1 text-xs text-red-400">{{ $message }}</p> @enderror
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-xs text-gray-500">Número</label>
+                            <input type="text" wire:model="number" placeholder="Nº ou S/N" class="{{ $fieldClass }}">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="mb-1 block text-xs text-gray-500">
+                            Complemento
+                            @if (blank($number))
+                                <span class="text-yellow-400">(obrigatório sem número)</span>
+                            @endif
+                        </label>
+                        <input type="text" wire:model="complement" data-field="complement"
+                               placeholder="Ponto de referência"
+                               class="{{ $fieldClass }}">
+                        @error('complement') <p class="mt-1 text-xs text-red-400">{{ $message }}</p> @enderror
+                    </div>
+                @endif
+            @endif
 
             @if ($errorMessage && $errorSection === 'delivery')
                 <div class="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-400">{{ $errorMessage }}</div>
@@ -253,23 +309,35 @@
         @endif
 
         @forelse ($this->cartLines as $line)
-            <div wire:key="checkout-line-{{ $line['index'] }}" class="border-b border-white/5 py-1.5 last:border-b-0">
-                <div class="flex justify-between text-sm text-gray-200">
-                    <span class="min-w-0 truncate pr-2">
-                        {{ $line['quantity'] }}x
-                        @if ($line['category_name'])
-                            <span class="mx-1 rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-gray-400">{{ $line['category_name'] }}</span>
-                        @endif
-                        {{ $line['name'] }}
-                    </span>
-                    <span class="shrink-0 font-medium">R$ {{ number_format($line['line_total'], 2, ',', '.') }}</span>
+            <div wire:key="checkout-line-{{ $line['index'] }}" class="flex gap-3 border-b border-white/5 py-2 last:border-b-0">
+                <div class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white/5">
+                    @if ($line['image_url'])
+                        <img src="{{ $line['image_url'] }}" alt="" class="h-full w-full object-cover">
+                    @else
+                        <x-heroicon-o-photo class="h-5 w-5 text-gray-600" />
+                    @endif
                 </div>
-                @foreach ($line['addons_display'] as $addonLine)
-                    <p class="pl-4 text-xs text-gray-500">+ {{ $addonLine }}</p>
-                @endforeach
-                @if ($line['note'])
-                    <p class="pl-4 text-xs italic text-gray-500">"{{ $line['note'] }}"</p>
-                @endif
+                <div class="min-w-0 flex-1">
+                    <div class="flex justify-between text-sm text-gray-200">
+                        <span class="min-w-0 truncate pr-2">
+                            {{ $line['quantity'] }}x
+                            @if ($line['category_name'])
+                                <span class="mx-1 rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-gray-400">{{ $line['category_name'] }}</span>
+                            @endif
+                            {{ $line['name'] }}
+                        </span>
+                        <span class="shrink-0 font-medium">R$ {{ number_format($line['line_total'], 2, ',', '.') }}</span>
+                    </div>
+                    @foreach ($line['addons_display'] as $addonLine)
+                        <p class="text-xs text-gray-500">+ {{ $addonLine }}</p>
+                    @endforeach
+                    @foreach ($line['gifts_display'] ?? [] as $giftLine)
+                        <p class="text-xs font-semibold text-emerald-600">{{ $giftLine }}</p>
+                    @endforeach
+                    @if ($line['note'])
+                        <p class="text-xs italic text-gray-500">"{{ $line['note'] }}"</p>
+                    @endif
+                </div>
             </div>
         @empty
             <p class="text-sm text-gray-500">Carrinho vazio.</p>

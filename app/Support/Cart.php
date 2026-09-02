@@ -4,12 +4,14 @@ namespace App\Support;
 
 /**
  * Carrinho em sessão — não guarda preço (RN-13: preço é sempre resolvido de
- * novo no servidor a cada leitura). Item: {type, product_id, flavor_ids, quantity, note, addons}.
+ * novo no servidor a cada leitura). Item: {type, product_id, flavor_ids, quantity, note, addons, gifts}.
  * `product_id` de um combo é o primeiro sabor escolhido (o schema de order_items
  * exige uma FK obrigatória); `flavor_ids` traz todos os sabores, incluindo esse.
  * `addons`: array de {addon_id, quantity, target} — `target` é null (produto/
  * combo inteiro) ou um dos `flavor_ids` (sabor específico), nunca validado
  * aqui (RN-13/RN-48 — validação real acontece em ResolvePriceForCartLine).
+ * `gifts`: array de {gift_product_id, accepted} — só o aceite do cliente; a
+ * quantidade e a validade do vínculo são resolvidas no servidor (RN-53).
  *
  * A chave de sessão é escopada por tenant (`cart:{tenant_id}`): com todos os
  * tenants no mesmo domínio, o cookie de sessão é único e um carrinho montado
@@ -29,7 +31,7 @@ class Cart
     }
 
     /**
-     * @return array<int, array{type: string, product_id: int, flavor_ids: array<int>, quantity: int, note: ?string, addons: array<int, array{addon_id:int, quantity:int, target:?int}>}>
+     * @return array<int, array{type: string, product_id: int, flavor_ids: array<int>, quantity: int, note: ?string, addons: array<int, array{addon_id:int, quantity:int, target:?int}>, gifts: array<int, array{gift_product_id:int, accepted:bool}>}>
      */
     public static function items(): array
     {
@@ -38,8 +40,9 @@ class Cart
 
     /**
      * @param  array<int, array{addon_id:int, quantity:int, target:?int}>  $addons
+     * @param  array<int, array{gift_product_id:int, accepted:bool}>  $gifts
      */
-    public static function addSimple(int $productId, int $quantity = 1, ?string $note = null, array $addons = []): void
+    public static function addSimple(int $productId, int $quantity = 1, ?string $note = null, array $addons = [], array $gifts = []): void
     {
         self::push([
             'type' => 'simple',
@@ -48,14 +51,16 @@ class Cart
             'quantity' => max(1, $quantity),
             'note' => $note,
             'addons' => $addons,
+            'gifts' => $gifts,
         ]);
     }
 
     /**
      * @param  array<int>  $flavorIds
      * @param  array<int, array{addon_id:int, quantity:int, target:?int}>  $addons
+     * @param  array<int, array{gift_product_id:int, accepted:bool}>  $gifts
      */
-    public static function addCombo(array $flavorIds, int $quantity = 1, ?string $note = null, array $addons = []): void
+    public static function addCombo(array $flavorIds, int $quantity = 1, ?string $note = null, array $addons = [], array $gifts = []): void
     {
         $flavorIds = array_values($flavorIds);
 
@@ -66,6 +71,7 @@ class Cart
             'quantity' => max(1, $quantity),
             'note' => $note,
             'addons' => $addons,
+            'gifts' => $gifts,
         ]);
     }
 
@@ -111,6 +117,21 @@ class Cart
         }
 
         $items[$index]['addons'] = $addons;
+        self::store($items);
+    }
+
+    /**
+     * @param  array<int, array{gift_product_id:int, accepted:bool}>  $gifts
+     */
+    public static function setGifts(int $index, array $gifts): void
+    {
+        $items = self::items();
+
+        if (! isset($items[$index])) {
+            return;
+        }
+
+        $items[$index]['gifts'] = $gifts;
         self::store($items);
     }
 

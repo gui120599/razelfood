@@ -29,6 +29,9 @@
                             @foreach ($line['addons_display'] as $addonLine)
                                 <p class="text-xs text-gray-500">+ {{ $addonLine }}</p>
                             @endforeach
+                            @foreach ($line['gifts_display'] ?? [] as $giftLine)
+                                <p class="text-xs font-semibold text-emerald-400">{{ $giftLine }}</p>
+                            @endforeach
                             @if ($line['note'])
                                 <p class="text-xs italic text-gray-500">"{{ $line['note'] }}"</p>
                             @endif

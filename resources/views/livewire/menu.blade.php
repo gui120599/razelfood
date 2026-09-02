@@ -76,6 +76,11 @@
         </div>
     @endif
 
+    {{-- Conteúdo pós-barra: mt-0! elimina a folga do space-y-6 da raiz logo
+         abaixo da barra sticky (o preto do body + a marca d'água apareciam
+         nesse vão); o space-y-6 interno preserva o espaço entre as seções. --}}
+    <div class="mt-0! space-y-6">
+
     {{-- Promoções relâmpago ativas --}}
     @if ($this->activePromotions->isNotEmpty())
         <div class="space-y-4">
@@ -128,7 +133,7 @@
     {{-- Categorias --}}
     @foreach ($this->categories as $category)
         <section wire:key="category-{{ $category->id }}" id="categoria-{{ $category->id }}" class="scroll-mt-28" x-data="{ activeChild: 'all' }">
-            <h2 class="sticky top-[7rem] z-20 -mx-2 bg-black px-2 py-2 text-lg font-bold text-white">{{ $category->name }}</h2>
+            <h2 class="sticky top-[6.5rem] z-20 -mx-2 bg-black px-2 py-2 text-lg font-bold text-white">{{ $category->name }}</h2>
 
             @if ($category->show_description_in_menu && filled($category->description))
                 <p class="mb-2 text-xs text-gray-400">{{ $category->description }}</p>
@@ -177,6 +182,8 @@
             @endforeach
         </section>
     @endforeach
+
+    </div>
     @endif {{-- fim @else de isSearching --}}
 
     {{-- Visualização rápida do produto --}}
@@ -186,9 +193,9 @@
                 <div class="relative">
                     @if ($this->viewingProduct->image_url)
                         <img src="{{ $this->viewingProduct->image_url }}" alt="{{ $this->viewingProduct->name }}"
-                             class="h-56 w-full rounded-t-3xl bg-white object-cover sm:rounded-t-3xl">
+                             class="aspect-square w-full rounded-t-3xl bg-white object-cover sm:rounded-t-3xl">
                     @else
-                        <div class="flex h-56 w-full items-center justify-center rounded-t-3xl bg-gray-800 text-gray-600">
+                        <div class="flex aspect-square w-full items-center justify-center rounded-t-3xl bg-gray-800 text-gray-600">
                             <x-heroicon-o-photo class="h-12 w-12" />
                         </div>
                     @endif
@@ -244,6 +251,22 @@
                             </div>
                         @endif
 
+                        @if ($this->viewingProductGifts->isNotEmpty())
+                            <div class="space-y-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3">
+                                <p class="text-sm font-bold text-emerald-300">🎁 Você ganhou um brinde!</p>
+                                @foreach ($this->viewingProductGifts as $gift)
+                                    <label class="flex cursor-pointer items-center gap-3">
+                                        <input type="checkbox" wire:click="toggleGift({{ $gift->id }})"
+                                               @checked($giftSelections[$gift->id] ?? false)
+                                               class="h-5 w-5 rounded border-white/20 bg-transparent text-emerald-500 focus:ring-0">
+                                        <span class="text-sm text-gray-100">
+                                            Quero receber {{ $gift->pivot->quantity }}x {{ $gift->name }} <span class="font-semibold text-emerald-300">grátis</span>
+                                        </span>
+                                    </label>
+                                @endforeach
+                            </div>
+                        @endif
+
                         <button wire:click="addFromView"
                                 class="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--tenant-primary)] py-3 text-sm font-bold uppercase tracking-wide text-white">
                             <x-heroicon-o-shopping-cart class="h-5 w-5" /> Adicionar ao pedido
@@ -277,6 +300,27 @@
 
                 @if (($comboCategory?->resolvedFlavorQuantityOptions() ?? collect())->isEmpty())
                     <p class="px-4 py-6 text-center text-sm text-gray-500">Nenhuma opção de sabores cadastrada para esta categoria.</p>
+                @elseif ($comboBuilder['step'] === 'gifts')
+                    {{-- Sub-passo de brinde (RN-53) — mesmo modal, sem gate: brinde é grátis, só marcar --}}
+                    <div class="flex-1 space-y-3 overflow-y-auto px-4 py-3">
+                        <p class="text-sm font-bold text-emerald-300">🎁 Você ganhou um brinde!</p>
+                        @foreach ($this->comboGifts as $gift)
+                            <label wire:key="combo-gift-{{ $gift->id }}" class="flex cursor-pointer items-center gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3">
+                                <input type="checkbox" wire:click="toggleGift({{ $gift->id }})"
+                                       @checked($giftSelections[$gift->id] ?? false)
+                                       class="h-5 w-5 rounded border-white/20 bg-transparent text-emerald-500 focus:ring-0">
+                                <span class="text-sm text-gray-100">
+                                    Quero receber {{ $gift->pivot->quantity }}x {{ $gift->name }} <span class="font-semibold text-emerald-300">grátis</span>
+                                </span>
+                            </label>
+                        @endforeach
+                    </div>
+                    <div class="shrink-0 border-t border-white/10 p-4">
+                        <button wire:click="confirmComboGifts"
+                                class="w-full rounded-xl bg-[var(--tenant-primary)] py-3 text-sm font-bold text-white">
+                            Continuar
+                        </button>
+                    </div>
                 @elseif ($comboBuilder['step'] === 'addons' && $comboAddonsGate === null)
                     {{-- Pergunta antes de mostrar a lista — mesmo sub-passo, sem virar modal novo --}}
                     <div class="flex flex-1 flex-col items-center justify-center gap-4 px-4 py-8 text-center">
@@ -493,6 +537,9 @@
                                     @endif
                                     @foreach ($line['addons_display'] as $addonLine)
                                         <p class="truncate text-[10px] text-gray-500">+ {{ $addonLine }}</p>
+                                    @endforeach
+                                    @foreach ($line['gifts_display'] ?? [] as $giftLine)
+                                        <p class="truncate text-[10px] font-semibold text-emerald-400">{{ $giftLine }}</p>
                                     @endforeach
                                 </div>
 

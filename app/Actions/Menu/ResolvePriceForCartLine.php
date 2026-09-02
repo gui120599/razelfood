@@ -25,18 +25,19 @@ class ResolvePriceForCartLine
     ) {}
 
     /**
-     * @param  array{type: string, product_id: int, flavor_ids: array<int>, quantity: int, note: ?string, addons?: array<int, array{addon_id:int, quantity:int, target:?int}>}  $cartItem
-     * @return array{unit_price: float, original_unit_price: float, flash_promotion_id: ?int, flavor_prices: array<int, ResolvedPrice>, flavor_shares: array<int, float>, addons_total: float, addons: array<int, array{addon_id:int, quantity:int, target:?int, target_share:float, unit_cost:float}>}
+     * @param  array{type: string, product_id: int, flavor_ids: array<int>, quantity: int, note: ?string, addons?: array<int, array{addon_id:int, quantity:int, target:?int}>, gifts?: array<int, array{gift_product_id:int, accepted:bool}>}  $cartItem
+     * @return array{unit_price: float, original_unit_price: float, flash_promotion_id: ?int, flavor_prices: array<int, ResolvedPrice>, flavor_shares: array<int, float>, addons_total: float, addons: array<int, array{addon_id:int, quantity:int, target:?int, target_share:float, unit_cost:float}>, gifts: array<int, array{gift_product_id:int, quantity:int, accepted:bool}>}
      */
     public function __invoke(array $cartItem): array
     {
         if ($cartItem['type'] === 'combo') {
-            return $this->resolveCombo($cartItem['flavor_ids'], $cartItem['addons'] ?? []);
+            return $this->resolveCombo($cartItem['flavor_ids'], $cartItem['addons'] ?? [], $cartItem['gifts'] ?? []);
         }
 
         $product = Product::findOrFail($cartItem['product_id']);
         $resolved = ($this->resolvePriceForProduct)($product);
         $addonsResolved = $this->resolveAddons($cartItem['addons'] ?? [], [], [], $product->id);
+        $giftsResolved = $this->resolveGifts($cartItem['gifts'] ?? [], [$product->id], 1);
 
         return [
             'unit_price' => $resolved->finalPrice,
@@ -46,15 +47,17 @@ class ResolvePriceForCartLine
             'flavor_shares' => [],
             'addons_total' => $addonsResolved['addons_total'],
             'addons' => $addonsResolved['addon_lines'],
+            'gifts' => $giftsResolved['gifts'],
         ];
     }
 
     /**
      * @param  array<int>  $flavorIds
      * @param  array<int, array{addon_id:int, quantity:int, target:?int}>  $addonSelections
-     * @return array{unit_price: float, original_unit_price: float, flash_promotion_id: ?int, flavor_prices: array<int, ResolvedPrice>, flavor_shares: array<int, float>, addons_total: float, addons: array<int, array{addon_id:int, quantity:int, target:?int, target_share:float, unit_cost:float}>}
+     * @param  array<int, array{gift_product_id:int, accepted:bool}>  $giftSelections
+     * @return array{unit_price: float, original_unit_price: float, flash_promotion_id: ?int, flavor_prices: array<int, ResolvedPrice>, flavor_shares: array<int, float>, addons_total: float, addons: array<int, array{addon_id:int, quantity:int, target:?int, target_share:float, unit_cost:float}>, gifts: array<int, array{gift_product_id:int, quantity:int, accepted:bool}>}
      */
-    private function resolveCombo(array $flavorIds, array $addonSelections = []): array
+    private function resolveCombo(array $flavorIds, array $addonSelections = [], array $giftSelections = []): array
     {
         $flavorIds = array_values(array_unique($flavorIds));
 
@@ -108,6 +111,7 @@ class ResolvePriceForCartLine
             ->all();
 
         $addonsResolved = $this->resolveAddons($addonSelections, $flavorIds, $shares, $flavorIds[0]);
+        $giftsResolved = $this->resolveGifts($giftSelections, $flavorIds, count($flavorIds));
 
         return [
             'unit_price' => round($prices->avg('finalPrice'), 2),
@@ -117,6 +121,7 @@ class ResolvePriceForCartLine
             'flavor_shares' => $shares,
             'addons_total' => $addonsResolved['addons_total'],
             'addons' => $addonsResolved['addon_lines'],
+            'gifts' => $giftsResolved['gifts'],
         ];
     }
 
@@ -194,6 +199,58 @@ class ResolvePriceForCartLine
         }
 
         return ['addons_total' => round($total, 2), 'addon_lines' => $addonLines];
+    }
+
+    /**
+     * Resolve os brindes de uma linha (RN-53). A fonte da verdade é SEMPRE o
+     * servidor: itera sobre os vínculos `product_gift` ativos dos produtos-âncora
+     * (produto simples, ou cada sabor do combo) e só consulta a seleção do
+     * cliente como um lookup booleano de aceite. Um `gift_product_id` forjado,
+     * não vinculado, inativo, de si mesmo, ou de uma quantidade de sabores não
+     * habilitada é simplesmente ignorado (não lança — não deve travar o
+     * checkout do cliente). O brinde NUNCA tem preço: não entra em unit_price,
+     * addons_total nem no desconto.
+     *
+     * @param  array<int, array{gift_product_id:int, accepted:bool}>  $giftSelections
+     * @param  array<int>  $anchorProductIds  [product_id] no simples; flavor_ids no combo
+     * @param  int  $flavorCount  1 no produto simples; count($flavorIds) no combo
+     * @return array{gifts: array<int, array{gift_product_id:int, quantity:int, accepted:bool}>}
+     */
+    private function resolveGifts(array $giftSelections, array $anchorProductIds, int $flavorCount): array
+    {
+        $acceptedIds = collect($giftSelections)
+            ->filter(fn ($selection) => ($selection['accepted'] ?? false) === true)
+            ->pluck('gift_product_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        // Via a relação gifts() (escopada por tenant + exclui produto-brinde
+        // soft-deleted). No máximo 4 produtos-âncora (combo de até 4 sabores).
+        $anchors = Product::whereIn('id', $anchorProductIds)
+            ->with(['gifts' => fn ($query) => $query->wherePivot('is_active', true)])
+            ->get();
+
+        $lines = $anchors
+            ->flatMap(fn (Product $anchor) => $anchor->gifts)
+            ->filter(function (Product $gift) use ($flavorCount, $anchorProductIds) {
+                if (in_array($gift->id, $anchorProductIds, true)) {
+                    return false; // um produto não é brinde de si mesmo
+                }
+
+                $counts = $gift->pivot->flavor_counts;
+
+                return empty($counts) || in_array($flavorCount, array_map('intval', $counts), true);
+            })
+            ->groupBy('id')
+            ->map(fn (Collection $group) => [
+                'gift_product_id' => (int) $group->first()->id,
+                'quantity' => max(1, (int) $group->max(fn (Product $gift) => $gift->pivot->quantity)),
+                'accepted' => in_array((int) $group->first()->id, $acceptedIds, true),
+            ])
+            ->values()
+            ->all();
+
+        return ['gifts' => $lines];
     }
 
     /**
