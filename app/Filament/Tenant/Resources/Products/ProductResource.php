@@ -7,6 +7,7 @@ use App\Filament\Tenant\Resources\Products\Pages\CreateProduct;
 use App\Filament\Tenant\Resources\Products\Pages\EditProduct;
 use App\Filament\Tenant\Resources\Products\Pages\ListProducts;
 use App\Filament\Tenant\Resources\Products\RelationManagers\AddonsRelationManager;
+use App\Filament\Tenant\Resources\Products\RelationManagers\GiftsRelationManager;
 use App\Filament\Tenant\Resources\Products\Schemas\ProductForm;
 use App\Filament\Tenant\Resources\Products\Tables\ProductsTable;
 use App\Models\Product;
@@ -46,7 +47,7 @@ class ProductResource extends Resource
 
     public static function getRelations(): array
     {
-        return [AddonsRelationManager::class];
+        return [AddonsRelationManager::class, GiftsRelationManager::class];
     }
 
     public static function getPages(): array

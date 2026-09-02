@@ -62,6 +62,14 @@
                                 </span>
                             @endif
                         </div>
+                        @foreach ($item->gifts ?? [] as $gift)
+                            @php($giftName = \App\Models\Product::withTrashed()->find($gift['gift_product_id'])?->name ?? 'Brinde removido')
+                            <p class="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                                {{ ($gift['accepted'] ?? false) === true
+                                    ? "🎁 {$gift['quantity']}x {$giftName}"
+                                    : "🎁 {$giftName} — recusado pelo cliente" }}
+                            </p>
+                        @endforeach
                         @if ($item->note)
                             <p class="text-xs italic text-gray-500 dark:text-gray-400">Obs: {{ $item->note }}</p>
                         @endif

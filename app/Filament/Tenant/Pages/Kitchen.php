@@ -261,6 +261,12 @@ class Kitchen extends Page
             ? collect()
             : Addon::withTrashed()->whereIn('id', $addonIds)->get(['id', 'name'])->keyBy('id');
 
+        $giftIds = $allItems->flatMap(fn (OrderItem $item) => $item->gifts ?? [])->pluck('gift_product_id')->unique()->values();
+
+        $giftNames = $giftIds->isEmpty()
+            ? collect()
+            : Product::withTrashed()->whereIn('id', $giftIds)->get(['id', 'name'])->keyBy('id');
+
         foreach ($orders as $order) {
             foreach ($order->items as $item) {
                 $item->displayName = $item->flavors
@@ -272,6 +278,14 @@ class Kitchen extends Page
                     $target = $selection['target'] !== null ? ($flavorProducts->get($selection['target'])?->name ?? 'sabor removido') : 'produto inteiro';
 
                     return "{$selection['quantity']}x {$name} ({$target})";
+                })->all();
+
+                $item->giftsDisplay = collect($item->gifts ?? [])->map(function (array $gift) use ($giftNames) {
+                    $name = $giftNames->get($gift['gift_product_id'])?->name ?? 'Brinde removido';
+
+                    return ($gift['accepted'] ?? false) === true
+                        ? "🎁 {$gift['quantity']}x {$name}"
+                        : "🎁 {$name} — recusado pelo cliente";
                 })->all();
             }
         }
@@ -408,7 +422,7 @@ class Kitchen extends Page
             ->with([
                 'client:id,name,phone',
                 'assignedDeliveryUser:id,name',
-                'items:id,order_id,product_id,quantity,flavors,addons',
+                'items:id,order_id,product_id,quantity,flavors,addons,gifts',
                 'items.product:id,name,category_id',
                 'items.product.category:id,name',
             ])

@@ -11,15 +11,21 @@ use App\Exceptions\CheckoutException;
 use App\Filament\Support\InputMasks;
 use App\Livewire\Concerns\EstablishesTenantContext;
 use App\Models\Addon;
+use App\Models\City;
 use App\Models\Client;
 use App\Models\DeliveryOption;
+use App\Models\DeliveryZoneNeighborhood;
+use App\Models\Neighborhood;
 use App\Models\PaymentOption;
 use App\Models\Product;
+use App\Models\State;
 use App\Rules\ValidCpf;
 use App\Services\Address\ViaCepClient;
 use App\Services\Security\RecaptchaVerifier;
 use App\Support\Cart;
 use App\Support\CurrentTenant;
+use App\Support\NeighborhoodNormalizer;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use Livewire\Attributes\Computed;
@@ -48,6 +54,18 @@ class Checkout extends Component
     public ?string $city = null;
 
     public ?string $state = null;
+
+    /**
+     * Cidade do catálogo global escolhida no select (modo restrito). Deriva
+     * `$city` (nome) e alimenta as opções de bairro. Null no modo texto livre.
+     */
+    public ?int $cityId = null;
+
+    /**
+     * Endereço só aparece depois que o cliente informa o CEP (achou ou não)
+     * ou clica em "Não sei meu CEP" — força o uso do campo de CEP primeiro.
+     */
+    public bool $addressUnlocked = false;
 
     public ?int $deliveryOptionId = null;
 
@@ -226,9 +244,56 @@ class Checkout extends Component
             $this->city = $client->city;
             $this->state = $client->state;
             $this->clientFound = true;
+
+            if (filled($client->street) || filled($client->neighborhood)) {
+                $this->addressUnlocked = true;
+                $this->syncCityIdFromNames();
+            }
         } else {
             $this->clientFound = false;
         }
+    }
+
+    /**
+     * Botão "Não sei meu CEP" — revela os campos de endereço (selects de
+     * estado/cidade/bairro no modo restrito, texto livre no modo padrão).
+     */
+    public function revealManualAddress(): void
+    {
+        $this->addressUnlocked = true;
+    }
+
+    public function updatedState(): void
+    {
+        $this->cityId = null;
+        $this->city = null;
+        $this->neighborhood = null;
+    }
+
+    public function updatedCityId(): void
+    {
+        $city = $this->cityId ? City::find($this->cityId) : null;
+        $this->city = $city?->name;
+        $this->state = $city?->state?->uf ?? $this->state;
+        $this->neighborhood = null;
+    }
+
+    /**
+     * No modo restrito, tenta casar a cidade/UF já preenchidas (via cliente
+     * ou ViaCEP) a uma das cidades atendidas, para pré-selecionar o select.
+     */
+    private function syncCityIdFromNames(): void
+    {
+        if (! $this->addressIsRestricted || blank($this->city)) {
+            return;
+        }
+
+        $normalizedCity = NeighborhoodNormalizer::normalize($this->city);
+
+        $this->cityId = $this->servedCities
+            ->first(fn (City $city) => $city->normalized_name === $normalizedCity
+                && (blank($this->state) || $city->state?->uf === $this->state))
+            ?->id;
     }
 
     /**
@@ -246,6 +311,10 @@ class Checkout extends Component
 
         $address = app(ViaCepClient::class)->lookup($this->zipCode);
 
+        // Achou ou não, o cliente já usou o campo de CEP — libera o resto do
+        // endereço (no "não achou" ele preenche/escolhe manualmente).
+        $this->addressUnlocked = true;
+
         if ($address === null) {
             $this->cepNotFound = true;
 
@@ -253,9 +322,19 @@ class Checkout extends Component
         }
 
         $this->street = $address['street'] ?? $this->street;
-        $this->neighborhood = $address['neighborhood'] ?? $this->neighborhood;
         $this->city = $address['city'] ?? $this->city;
         $this->state = $address['state'] ?? $this->state;
+
+        if ($this->addressIsRestricted) {
+            $this->syncCityIdFromNames();
+            // Pré-seleciona o bairro só se ele existir no catálogo da cidade.
+            $viaCepNeighborhood = $address['neighborhood'] ?? null;
+            $this->neighborhood = $viaCepNeighborhood !== null && in_array($viaCepNeighborhood, $this->neighborhoodOptions, true)
+                ? $viaCepNeighborhood
+                : null;
+        } else {
+            $this->neighborhood = $address['neighborhood'] ?? $this->neighborhood;
+        }
     }
 
     #[Computed]
@@ -286,6 +365,8 @@ class Checkout extends Component
             'phone.required' => 'Informe seu telefone.',
             'name.required' => 'Informe seu nome.',
             'cpf.required' => 'Informe seu CPF.',
+            'state.required' => 'Escolha o estado da entrega.',
+            'city.required' => 'Escolha a cidade da entrega.',
             'street.required' => 'Informe a rua para entrega.',
             'neighborhood.required' => 'Informe o bairro para entrega.',
             'complement.required' => 'Sem número? Informe um complemento ou ponto de referência.',
@@ -296,13 +377,39 @@ class Checkout extends Component
         }
 
         if ($this->requiresAddress) {
-            $rules['street'] = ['required', 'string', 'max:255'];
-            $rules['neighborhood'] = ['required', 'string', 'max:255'];
-            $rules['number'] = ['nullable', 'string', 'max:20'];
+            // Força o cliente a começar pelo CEP: enquanto o endereço não foi
+            // destravado (CEP consultado ou "Não sei meu CEP"), nem valida o
+            // resto — só pede o CEP.
+            if (! $this->addressUnlocked) {
+                $this->errorMessage = 'Informe o endereço de entrega — comece pelo CEP.';
+                $this->errorSection = 'delivery';
+                $this->dispatch('checkout-validation-failed', field: 'zipCode');
+
+                return;
+            }
+
+            // Ordem das regras = ordem visual dos campos, para o
+            // checkout-validation-failed focar o 1º campo pendente que o
+            // cliente realmente está vendo.
+            $addressRules = [];
+
+            if ($this->addressIsRestricted) {
+                $addressRules['state'] = ['required', 'string'];
+                $addressRules['city'] = ['required', 'string'];
+                $addressRules['neighborhood'] = ['required', 'string', 'max:255'];
+                $addressRules['street'] = ['required', 'string', 'max:255'];
+            } else {
+                $addressRules['street'] = ['required', 'string', 'max:255'];
+                $addressRules['neighborhood'] = ['required', 'string', 'max:255'];
+            }
+
+            $addressRules['number'] = ['nullable', 'string', 'max:20'];
             // Número pode ser "S/N" ou ficar em branco — mas aí o complemento
             // (ponto de referência) vira obrigatório, senão o endereço fica
             // impossível de localizar.
-            $rules['complement'] = [blank($this->number) ? 'required' : 'nullable', 'string', 'max:255'];
+            $addressRules['complement'] = [blank($this->number) ? 'required' : 'nullable', 'string', 'max:255'];
+
+            $rules += $addressRules;
         }
 
         try {
@@ -427,8 +534,19 @@ class Checkout extends Component
 
         $addonIds = collect($items)->flatMap(fn (array $item) => $item['addons'] ?? [])->pluck('addon_id')->unique()->values();
         $addonNames = $addonIds->isEmpty() ? collect() : Addon::whereIn('id', $addonIds)->pluck('name', 'id');
-        $flavorIds = collect($items)->flatMap(fn (array $item) => $item['flavor_ids'] ?? [])->unique();
-        $flavorNames = $flavorIds->isEmpty() ? collect() : Product::whereIn('id', $flavorIds)->pluck('name', 'id');
+
+        $giftIds = collect($items)->flatMap(fn (array $item) => $item['gifts'] ?? [])->pluck('gift_product_id')->unique()->values();
+        $giftNames = $giftIds->isEmpty() ? collect() : Product::whereIn('id', $giftIds)->pluck('name', 'id');
+
+        $productIds = collect($items)
+            ->flatMap(fn (array $item) => [$item['product_id'] ?? null, ...($item['flavor_ids'] ?? [])])
+            ->filter()
+            ->unique()
+            ->values();
+
+        $products = $productIds->isEmpty()
+            ? collect()
+            : Product::with('category:id,name')->whereIn('id', $productIds)->get()->keyBy('id');
 
         foreach ($items as $index => $item) {
             try {
@@ -437,29 +555,37 @@ class Checkout extends Component
                 continue;
             }
 
+            $mainProductId = $item['type'] === 'combo' ? ($item['flavor_ids'][0] ?? null) : $item['product_id'];
+            $mainProduct = $mainProductId ? $products->get($mainProductId) : null;
+
             $name = $item['type'] === 'combo'
-                ? Product::whereIn('id', $item['flavor_ids'])->pluck('name')->implode(' / ')
-                : (Product::find($item['product_id'])?->name ?? 'Produto removido');
+                ? collect($item['flavor_ids'])->map(fn (int $id) => $products->get($id)?->name)->filter()->implode(' / ')
+                : ($mainProduct?->name ?? 'Produto removido');
 
-            $categoryProductId = $item['type'] === 'combo' ? ($item['flavor_ids'][0] ?? null) : $item['product_id'];
-            $categoryName = $categoryProductId ? Product::find($categoryProductId)?->category?->name : null;
-
-            $addonsDisplay = collect($item['addons'] ?? [])->map(function (array $selection) use ($addonNames, $flavorNames) {
+            $addonsDisplay = collect($item['addons'] ?? [])->map(function (array $selection) use ($addonNames, $products) {
                 $addonName = $addonNames->get($selection['addon_id'], 'Adicional removido');
-                $target = $selection['target'] !== null ? ($flavorNames->get($selection['target']) ?? 'sabor removido') : 'produto inteiro';
+                $target = $selection['target'] !== null ? ($products->get($selection['target'])?->name ?? 'sabor removido') : 'produto inteiro';
 
                 return "{$selection['quantity']}x {$addonName} ({$target})";
             })->all();
 
+            $giftsDisplay = collect($resolved['gifts'] ?? [])
+                ->filter(fn (array $gift) => $gift['accepted'] === true)
+                ->map(fn (array $gift) => "🎁 {$gift['quantity']}x ".($giftNames->get($gift['gift_product_id']) ?? 'Brinde removido').' — grátis')
+                ->values()
+                ->all();
+
             $lines[] = [
                 'index' => $index,
                 'name' => $name,
-                'category_name' => $categoryName,
+                'category_name' => $mainProduct?->category?->name,
+                'image_url' => $mainProduct?->image_url,
                 'quantity' => $item['quantity'],
                 'note' => $item['note'] ?? null,
                 'unit_price' => $resolved['unit_price'],
                 'addons_total' => $resolved['addons_total'],
                 'addons_display' => $addonsDisplay,
+                'gifts_display' => $giftsDisplay,
                 'line_total' => round(($resolved['unit_price'] + $resolved['addons_total']) * $item['quantity'], 2),
             ];
         }
@@ -490,6 +616,88 @@ class Checkout extends Component
     public function requiresAddress(): bool
     {
         return (bool) $this->selectedDeliveryOption?->requires_address;
+    }
+
+    /**
+     * Modo restrito: o cliente escolhe cidade/bairro em listas em vez de
+     * digitar. Só quando o tenant desligou "digitar endereço livremente" E
+     * tem setores de entrega cadastrados (sem setores não há o que listar).
+     */
+    #[Computed]
+    public function addressIsRestricted(): bool
+    {
+        $tenant = CurrentTenant::get();
+
+        return $tenant !== null
+            && ! ($tenant->allow_free_form_address ?? true)
+            && $tenant->deliveryZones()->exists();
+    }
+
+    /**
+     * Cidades que o tenant atende (têm bairro em algum setor de entrega),
+     * resolvidas contra o catálogo global via `city_id`.
+     *
+     * @return Collection<int, City>
+     */
+    #[Computed]
+    public function servedCities(): Collection
+    {
+        $cityIds = DeliveryZoneNeighborhood::query()
+            ->whereNotNull('city_id')
+            ->distinct()
+            ->pluck('city_id');
+
+        return City::query()
+            ->whereIn('id', $cityIds)
+            ->with('state')
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * @return Collection<int, State>
+     */
+    #[Computed]
+    public function servedStates(): Collection
+    {
+        return $this->servedCities
+            ->pluck('state')
+            ->filter()
+            ->unique('id')
+            ->sortBy('name')
+            ->values();
+    }
+
+    /**
+     * @return Collection<int, City>
+     */
+    #[Computed]
+    public function cityOptionsForState(): Collection
+    {
+        return $this->servedCities
+            ->filter(fn (City $city) => blank($this->state) || $city->state?->uf === $this->state)
+            ->values();
+    }
+
+    /**
+     * Bairros do catálogo global da cidade escolhida — lista todos os bairros
+     * reais da cidade (o casamento com um setor, ou a taxa de bairro não
+     * mapeado, acontece depois em ResolveDeliveryFee).
+     *
+     * @return array<string, string>
+     */
+    #[Computed]
+    public function neighborhoodOptions(): array
+    {
+        if ($this->cityId === null) {
+            return [];
+        }
+
+        return Neighborhood::query()
+            ->where('city_id', $this->cityId)
+            ->orderBy('name')
+            ->pluck('name', 'name')
+            ->all();
     }
 
     /**

@@ -52,6 +52,9 @@
                     @foreach ($item->addonsDisplay ?? [] as $addonLine)
                         <p class="truncate pl-3 text-gray-400">+ {{ $addonLine }}</p>
                     @endforeach
+                    @foreach ($item->giftsDisplay ?? [] as $giftLine)
+                        <p class="truncate pl-3 font-semibold text-emerald-600 dark:text-emerald-400">{{ $giftLine }}</p>
+                    @endforeach
                 @endforeach
                 @if ($remainingItemsCount > 0)
                     <p class="font-medium text-gray-400">+ {{ $remainingItemsCount }} {{ $remainingItemsCount === 1 ? 'item' : 'itens' }}</p>

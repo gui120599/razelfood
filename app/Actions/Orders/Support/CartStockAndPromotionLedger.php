@@ -25,13 +25,14 @@ class CartStockAndPromotionLedger
 {
     /**
      * @param  Collection<int, array{item: array, resolved: array}>  $resolvedLines
-     * @return array{0: array<string, int>, 1: array<int, float>, 2: array<int, float>}
+     * @return array{0: array<string, int>, 1: array<int, float>, 2: array<int, float>, 3: array<int, float>}
      */
     public function buildConsumptionMaps(Collection $resolvedLines): array
     {
-        $promoConsumption = []; // "{promoId}:{productId}" => qty
-        $stockConsumption = []; // productId => qty
-        $addonConsumption = []; // addonId => qty (fração, via target_share)
+        $promoConsumption = [];    // "{promoId}:{productId}" => qty
+        $stockConsumption = [];    // productId => qty
+        $addonConsumption = [];    // addonId => qty (fração, via target_share)
+        $giftSalesExclusion = []; // productId => qty de brinde (some de sales_count, NÃO de stock_quantity — RN-53 decisão #3)
 
         foreach ($resolvedLines as $line) {
             $quantity = $line['item']['quantity'];
@@ -39,6 +40,21 @@ class CartStockAndPromotionLedger
             foreach ($line['resolved']['addons'] ?? [] as $addonLine) {
                 $addonConsumption[$addonLine['addon_id']] = ($addonConsumption[$addonLine['addon_id']] ?? 0)
                     + ($quantity * $addonLine['quantity'] * $addonLine['target_share']);
+            }
+
+            // Brinde aceito (RN-53): sai do estoque físico pelo mesmo fluxo dos
+            // demais produtos (entra em $stockConsumption → lock + assert +
+            // débito de stock_quantity), mas é registrado em $giftSalesExclusion
+            // para NÃO inflar sales_count / "mais vendidos" (RN-15).
+            foreach ($line['resolved']['gifts'] ?? [] as $giftLine) {
+                if (($giftLine['accepted'] ?? false) !== true) {
+                    continue;
+                }
+
+                $giftProductId = $giftLine['gift_product_id'];
+                $giftUnits = $quantity * $giftLine['quantity'];
+                $stockConsumption[$giftProductId] = ($stockConsumption[$giftProductId] ?? 0) + $giftUnits;
+                $giftSalesExclusion[$giftProductId] = ($giftSalesExclusion[$giftProductId] ?? 0) + $giftUnits;
             }
 
             if ($line['item']['type'] === 'combo') {
@@ -72,7 +88,7 @@ class CartStockAndPromotionLedger
             }
         }
 
-        return [$promoConsumption, $stockConsumption, $addonConsumption];
+        return [$promoConsumption, $stockConsumption, $addonConsumption, $giftSalesExclusion];
     }
 
     /**
@@ -270,6 +286,7 @@ class CartStockAndPromotionLedger
      * @param  array<int, float>  $stockConsumption
      * @param  Collection<int, Addon>  $stockControlledAddons
      * @param  array<int, float>  $addonConsumption
+     * @param  array<int, float>  $giftSalesExclusion  unidades de brinde a NÃO contar em sales_count (RN-53)
      */
     public function applyDecrements(
         Collection $promotions,
@@ -280,6 +297,7 @@ class CartStockAndPromotionLedger
         array $stockConsumption,
         Collection $stockControlledAddons,
         array $addonConsumption,
+        array $giftSalesExclusion = [],
     ): void {
         foreach ($promoTotalConsumption as $promoId => $quantity) {
             $promotions->get($promoId)->increment('sold_quantity', $quantity);
@@ -294,9 +312,14 @@ class CartStockAndPromotionLedger
         }
 
         // sales_count (RN-15) incrementa pra TODOS os produtos vendidos, não só
-        // os com controle de estoque.
+        // os com controle de estoque. As unidades entregues como brinde (RN-53)
+        // são descontadas — brinde grátis move estoque mas não vira "mais vendido".
         foreach ($stockConsumption as $productId => $quantity) {
-            Product::where('id', $productId)->increment('sales_count', $quantity);
+            $net = $quantity - ($giftSalesExclusion[$productId] ?? 0);
+
+            if (abs($net) > 1e-9) {
+                Product::where('id', $productId)->increment('sales_count', $net);
+            }
         }
 
         foreach ($stockControlledAddons as $addon) {
@@ -324,6 +347,7 @@ class CartStockAndPromotionLedger
      * @param  array<int, float>  $stockConsumption
      * @param  Collection<int, Addon>  $stockControlledAddons
      * @param  array<int, float>  $addonConsumption
+     * @param  array<int, float>  $giftSalesExclusion  unidades de brinde que não foram contadas em sales_count (RN-53)
      */
     public function applyIncrements(
         Collection $promotions,
@@ -334,6 +358,7 @@ class CartStockAndPromotionLedger
         array $stockConsumption,
         Collection $stockControlledAddons,
         array $addonConsumption,
+        array $giftSalesExclusion = [],
     ): void {
         foreach ($promoTotalConsumption as $promoId => $quantity) {
             $promotions->get($promoId)?->decrement('sold_quantity', $quantity);
@@ -350,7 +375,11 @@ class CartStockAndPromotionLedger
         }
 
         foreach ($stockConsumption as $productId => $quantity) {
-            Product::where('id', $productId)->decrement('sales_count', $quantity);
+            $net = $quantity - ($giftSalesExclusion[$productId] ?? 0);
+
+            if (abs($net) > 1e-9) {
+                Product::where('id', $productId)->decrement('sales_count', $net);
+            }
         }
 
         foreach ($stockControlledAddons as $addon) {

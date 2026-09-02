@@ -132,6 +132,9 @@ class AttendOrder extends Page
             'quantity' => $item->quantity,
             'note' => $item->note,
             'addons' => $item->addons ?? [],
+            'gifts' => collect($item->gifts ?? [])
+                ->map(fn (array $gift) => ['gift_product_id' => $gift['gift_product_id'], 'accepted' => ($gift['accepted'] ?? false) === true])
+                ->all(),
         ])->values()->all();
 
         $client = $order->client;
@@ -168,7 +171,7 @@ class AttendOrder extends Page
     #[On('order-item-selected')]
     public function addSimpleItem(int $productId): void
     {
-        $this->cartItems[] = ['type' => 'simple', 'product_id' => $productId, 'flavor_ids' => [], 'quantity' => 1, 'note' => null, 'addons' => []];
+        $this->cartItems[] = ['type' => 'simple', 'product_id' => $productId, 'flavor_ids' => [], 'quantity' => 1, 'note' => null, 'addons' => [], 'gifts' => []];
         unset($this->cartLines);
     }
 
@@ -277,6 +280,9 @@ class AttendOrder extends Page
         $addonIds = collect($this->cartItems)->flatMap(fn (array $item) => $item['addons'] ?? [])->pluck('addon_id')->unique()->values();
         $addonNames = $addonIds->isEmpty() ? collect() : Addon::whereIn('id', $addonIds)->pluck('name', 'id');
 
+        $giftIds = collect($this->cartItems)->flatMap(fn (array $item) => $item['gifts'] ?? [])->pluck('gift_product_id')->unique()->values();
+        $giftNames = $giftIds->isEmpty() ? collect() : Product::whereIn('id', $giftIds)->pluck('name', 'id');
+
         foreach ($this->cartItems as $index => $item) {
             try {
                 $resolved = $resolve($item);
@@ -299,6 +305,12 @@ class AttendOrder extends Page
                 return "{$selection['quantity']}x {$addonName} ({$target})";
             })->all();
 
+            $giftsDisplay = collect($resolved['gifts'] ?? [])
+                ->filter(fn (array $gift) => $gift['accepted'] === true)
+                ->map(fn (array $gift) => "🎁 {$gift['quantity']}x ".($giftNames->get($gift['gift_product_id']) ?? 'Brinde removido'))
+                ->values()
+                ->all();
+
             $lines[] = [
                 'index' => $index,
                 'name' => $name,
@@ -310,6 +322,7 @@ class AttendOrder extends Page
                 'unit_price' => $resolved['unit_price'],
                 'addons_total' => $resolved['addons_total'],
                 'addons_display' => $addonsDisplay,
+                'gifts_display' => $giftsDisplay,
                 'line_total' => round(($resolved['unit_price'] + $resolved['addons_total']) * $item['quantity'], 2),
                 'is_combo' => $item['type'] === 'combo',
             ];

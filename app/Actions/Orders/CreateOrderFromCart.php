@@ -33,7 +33,7 @@ class CreateOrderFromCart
     ) {}
 
     /**
-     * @param  array<int, array{type: string, product_id: int, flavor_ids: array<int>, quantity: int, note: ?string, addons?: array<int, array{addon_id:int, quantity:int, target:?int}>}>  $cartItems
+     * @param  array<int, array{type: string, product_id: int, flavor_ids: array<int>, quantity: int, note: ?string, addons?: array<int, array{addon_id:int, quantity:int, target:?int}>, gifts?: array<int, array{gift_product_id:int, accepted:bool}>}>  $cartItems
      * @param  array{phone: string, name: string, cpf?: ?string, zip_code: ?string, street: ?string, number: ?string, complement: ?string, neighborhood: ?string, city: ?string, state: ?string, delivery_option_id: ?int, payments: array<int, array{payment_option_id: int, amount: float, change_for: ?float}>, notes: ?string}  $checkoutData
      * @param  OrderOrigin  $origin  Origem gravada no pedido — Menu (cardápio público, default) ou Staff (lançado pelo painel do tenant).
      * @param  bool  $bypassBusinessHours  Pula a checagem de horário de funcionamento — só usado pelo painel (atendente pode lançar mesmo "fechado").
@@ -81,7 +81,7 @@ class CreateOrderFromCart
                 'resolved' => $resolvePriceForCartLine($item),
             ]);
 
-            [$promoConsumption, $stockConsumption, $addonConsumption] = $this->ledger->buildConsumptionMaps($resolvedLines);
+            [$promoConsumption, $stockConsumption, $addonConsumption, $giftSalesExclusion] = $this->ledger->buildConsumptionMaps($resolvedLines);
 
             $promotions = $this->ledger->lockFlashPromotions($promoConsumption);
             $this->ledger->resetRecurringPromotionsIfNeeded($promotions);
@@ -96,7 +96,7 @@ class CreateOrderFromCart
             $stockControlledAddons = $this->ledger->lockStockControlledAddons($addonConsumption);
             $this->ledger->assertAddonStockAvailable($stockControlledAddons, $addonConsumption);
 
-            $this->ledger->applyDecrements($promotions, $promoTotalConsumption, $pivots, $promoConsumption, $stockControlledProducts, $stockConsumption, $stockControlledAddons, $addonConsumption);
+            $this->ledger->applyDecrements($promotions, $promoTotalConsumption, $pivots, $promoConsumption, $stockControlledProducts, $stockConsumption, $stockControlledAddons, $addonConsumption, $giftSalesExclusion);
 
             return $this->createOrderAndItems($client, $resolvedLines, $checkoutData, $origin);
         }, attempts: 3);
@@ -184,6 +184,7 @@ class CreateOrderFromCart
                 'flavors' => $line['item']['type'] === 'combo' ? $line['item']['flavor_ids'] : null,
                 'addons' => empty($line['item']['addons']) ? null : $line['item']['addons'],
                 'addons_total' => $line['resolved']['addons_total'],
+                'gifts' => empty($line['resolved']['gifts']) ? null : $line['resolved']['gifts'],
             ]);
         }
 

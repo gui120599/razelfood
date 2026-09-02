@@ -34,6 +34,14 @@ class AddonPickerModal extends Component
     public array $selections = [];
 
     /**
+     * Brindes aceitos pelo atendente para a linha em montagem (RN-53) — keyed
+     * por gift_product_id => true. Quantidade/validade resolvidas no servidor.
+     *
+     * @var array<int, bool>
+     */
+    public array $giftSelections = [];
+
+    /**
      * null = fluxo normal (adicionar item novo ao carrinho, confirma via
      * `order-cart-line-confirmed`); int = editando os adicionais de uma linha
      * já existente naquele índice, confirma via `order-line-addons-updated`.
@@ -59,8 +67,11 @@ class AddonPickerModal extends Component
         $this->productId = $productId;
         $this->flavorIds = $flavorIds;
         $this->selections = [];
+        $this->giftSelections = [];
         $this->editingIndex = null;
-        $this->wantsAddons = null;
+        // Pula o gate "quer adicionais?" quando não há adicionais, ou quando há
+        // brinde a escolher (a lista já mostra tudo; adicional fica em qtd 0).
+        $this->wantsAddons = ($this->availableAddons->isEmpty() || $this->availableGifts->isNotEmpty()) ? true : null;
         $this->errorMessage = null;
         $this->open = true;
     }
@@ -82,6 +93,8 @@ class AddonPickerModal extends Component
         $this->selections = collect($addons)
             ->mapWithKeys(fn (array $addon) => [$addon['addon_id'] => ['quantity' => $addon['quantity'], 'target' => $addon['target']]])
             ->all();
+        // Edição de adicionais de uma linha existente não mexe nos brindes dela.
+        $this->giftSelections = [];
         $this->editingIndex = $index;
         $this->wantsAddons = true;
         $this->errorMessage = null;
@@ -120,6 +133,17 @@ class AddonPickerModal extends Component
         $this->selections[$addonId]['target'] = $target;
     }
 
+    public function toggleGift(int $giftProductId): void
+    {
+        if ($this->giftSelections[$giftProductId] ?? false) {
+            unset($this->giftSelections[$giftProductId]);
+
+            return;
+        }
+
+        $this->giftSelections[$giftProductId] = true;
+    }
+
     /**
      * Atalho pra quando o cliente já está vendo a lista mas decide não
      * levar nenhum adicional (achou caro, não gostou das opções etc.) —
@@ -143,9 +167,15 @@ class AddonPickerModal extends Component
             ->values()
             ->all();
 
+        $gifts = collect($this->giftSelections)
+            ->filter()
+            ->map(fn (bool $accepted, int $giftProductId) => ['gift_product_id' => $giftProductId, 'accepted' => true])
+            ->values()
+            ->all();
+
         $item = count($this->flavorIds) > 1
-            ? ['type' => 'combo', 'product_id' => $this->flavorIds[0], 'flavor_ids' => $this->flavorIds, 'quantity' => 1, 'note' => null, 'addons' => $addons]
-            : ['type' => 'simple', 'product_id' => $this->productId, 'flavor_ids' => [], 'quantity' => 1, 'note' => null, 'addons' => $addons];
+            ? ['type' => 'combo', 'product_id' => $this->flavorIds[0], 'flavor_ids' => $this->flavorIds, 'quantity' => 1, 'note' => null, 'addons' => $addons, 'gifts' => $gifts]
+            : ['type' => 'simple', 'product_id' => $this->productId, 'flavor_ids' => [], 'quantity' => 1, 'note' => null, 'addons' => $addons, 'gifts' => $gifts];
 
         try {
             app(ResolvePriceForCartLine::class)($item);
@@ -171,6 +201,7 @@ class AddonPickerModal extends Component
         $this->productId = null;
         $this->flavorIds = [];
         $this->selections = [];
+        $this->giftSelections = [];
         $this->editingIndex = null;
         $this->wantsAddons = null;
         $this->errorMessage = null;
@@ -194,6 +225,41 @@ class AddonPickerModal extends Component
             ->with(['products' => fn ($query) => $query->whereIn('products.id', $productIds)])
             ->orderBy('display_order')
             ->get();
+    }
+
+    /**
+     * Brindes ativos disponíveis pro contexto atual (RN-53), filtrados pela
+     * quantidade de sabores e deduplicados por produto. Sempre resolvidos de
+     * novo no servidor em ResolvePriceForCartLine::resolveGifts().
+     *
+     * @return Collection<int, Product>
+     */
+    #[Computed]
+    public function availableGifts(): Collection
+    {
+        $anchorIds = count($this->flavorIds) > 1 ? $this->flavorIds : array_filter([$this->productId]);
+
+        if (empty($anchorIds)) {
+            return collect();
+        }
+
+        $flavorCount = count($this->flavorIds) > 1 ? count($this->flavorIds) : 1;
+
+        return Product::whereIn('id', $anchorIds)
+            ->with(['gifts' => fn ($query) => $query->wherePivot('is_active', true)->orderBy('display_order')])
+            ->get()
+            ->flatMap(fn (Product $anchor) => $anchor->gifts)
+            ->filter(function (Product $gift) use ($flavorCount, $anchorIds) {
+                if (in_array($gift->id, $anchorIds, true)) {
+                    return false;
+                }
+
+                $counts = $gift->pivot->flavor_counts;
+
+                return empty($counts) || in_array($flavorCount, array_map('intval', $counts), true);
+            })
+            ->unique('id')
+            ->values();
     }
 
     public function allowsWholeProduct(Addon $addon): bool

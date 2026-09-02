@@ -16,7 +16,7 @@ use Illuminate\Support\Collection;
  * app/Models/OrderItem.php). Compartilhado entre a página de acompanhamento
  * (OrderTrackingController) e a comanda impressa (OrderTicketController).
  *
- * @return Collection<int, array{name: string, category_name: ?string, quantity: int, note: ?string, addons_display: array<int, string>, line_total: float}>
+ * @return Collection<int, array{name: string, category_name: ?string, quantity: int, note: ?string, addons_display: array<int, string>, gifts_display: array<int, string>, line_total: float}>
  */
 class BuildOrderItemLines
 {
@@ -27,12 +27,15 @@ class BuildOrderItemLines
         $addonIds = $items->flatMap(fn (OrderItem $item) => $item->addons ?? [])->pluck('addon_id')->unique();
         $addonNames = $addonIds->isEmpty() ? collect() : Addon::withTrashed()->whereIn('id', $addonIds)->pluck('name', 'id');
 
+        $giftIds = $items->flatMap(fn (OrderItem $item) => $item->gifts ?? [])->pluck('gift_product_id')->unique();
+        $giftNames = $giftIds->isEmpty() ? collect() : Product::withTrashed()->whereIn('id', $giftIds)->pluck('name', 'id');
+
         $flavorIds = $items->flatMap(fn (OrderItem $item) => $item->flavors ?? [])->unique();
         $flavorProducts = $flavorIds->isEmpty()
             ? collect()
             : Product::withTrashed()->whereIn('id', $flavorIds)->with('category')->get()->keyBy('id');
 
-        return $items->map(function (OrderItem $item) use ($addonNames, $flavorProducts) {
+        return $items->map(function (OrderItem $item) use ($addonNames, $giftNames, $flavorProducts) {
             if ($item->flavors) {
                 $flavors = collect($item->flavors)->map(fn (int $id) => $flavorProducts->get($id))->filter();
                 $name = $flavors->pluck('name')->implode(' / ');
@@ -49,12 +52,21 @@ class BuildOrderItemLines
                 return "{$selection['quantity']}x {$addonName} ({$target})";
             })->all();
 
+            $giftsDisplay = collect($item->gifts ?? [])->map(function (array $gift) use ($giftNames) {
+                $giftName = $giftNames->get($gift['gift_product_id'], 'Brinde removido');
+
+                return ($gift['accepted'] ?? false) === true
+                    ? "🎁 {$gift['quantity']}x {$giftName}"
+                    : "🎁 {$giftName} — recusado pelo cliente";
+            })->all();
+
             return [
                 'name' => $name,
                 'category_name' => $categoryName,
                 'quantity' => $item->quantity,
                 'note' => $item->note,
                 'addons_display' => $addonsDisplay,
+                'gifts_display' => $giftsDisplay,
                 'line_total' => round(((float) $item->unit_price + (float) $item->addons_total) * $item->quantity, 2),
             ];
         })->values();

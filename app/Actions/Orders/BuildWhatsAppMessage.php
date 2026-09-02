@@ -26,6 +26,11 @@ class BuildWhatsAppMessage
             ? collect()
             : Addon::withTrashed()->whereIn('id', $addonIds)->pluck('name', 'id');
 
+        $giftIds = $order->items->flatMap(fn ($item) => $item->gifts ?? [])->pluck('gift_product_id')->unique()->values();
+        $giftNames = $giftIds->isEmpty()
+            ? collect()
+            : Product::withTrashed()->whereIn('id', $giftIds)->pluck('name', 'id');
+
         foreach ($order->items as $item) {
             $name = $item->flavors
                 ? Product::whereIn('id', $item->flavors)->pluck('name')->implode(' / ')
@@ -41,6 +46,15 @@ class BuildWhatsAppMessage
             foreach ($item->addons ?? [] as $selection) {
                 $addonName = $addonNames->get($selection['addon_id'], 'Adicional removido');
                 $lines[] = "   + {$selection['quantity']}x {$addonName}";
+            }
+
+            foreach ($item->gifts ?? [] as $gift) {
+                if (($gift['accepted'] ?? false) !== true) {
+                    continue;
+                }
+
+                $giftName = $giftNames->get($gift['gift_product_id'], 'Brinde removido');
+                $lines[] = "   🎁 {$gift['quantity']}x {$giftName} (brinde)";
             }
         }
 

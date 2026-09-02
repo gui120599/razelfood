@@ -108,6 +108,9 @@
             @foreach ($line['addons_display'] as $addonLine)
                 <div class="sub">+ {{ $addonLine }}</div>
             @endforeach
+            @foreach ($line['gifts_display'] ?? [] as $giftLine)
+                <div class="sub bold">{{ $giftLine }}</div>
+            @endforeach
             @if ($line['note'])
                 <div class="sub bold">** {{ $line['note'] }}</div>
             @endif

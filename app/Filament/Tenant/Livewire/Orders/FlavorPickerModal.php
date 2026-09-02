@@ -6,6 +6,7 @@ use App\Actions\Menu\ResolvePriceForCartLine;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductAddon;
+use App\Models\ProductGift;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
 use Livewire\Attributes\Computed;
@@ -97,8 +98,8 @@ class FlavorPickerModal extends Component
         }
 
         $item = $requiredCount === 1
-            ? ['type' => 'simple', 'product_id' => $flavorIds[0], 'flavor_ids' => [], 'quantity' => 1, 'note' => null]
-            : ['type' => 'combo', 'product_id' => $flavorIds[0], 'flavor_ids' => $flavorIds, 'quantity' => 1, 'note' => null];
+            ? ['type' => 'simple', 'product_id' => $flavorIds[0], 'flavor_ids' => [], 'quantity' => 1, 'note' => null, 'addons' => [], 'gifts' => []]
+            : ['type' => 'combo', 'product_id' => $flavorIds[0], 'flavor_ids' => $flavorIds, 'quantity' => 1, 'note' => null, 'addons' => [], 'gifts' => []];
 
         try {
             app(ResolvePriceForCartLine::class)($item);
@@ -108,7 +109,12 @@ class FlavorPickerModal extends Component
             return;
         }
 
-        if (ProductAddon::whereIn('product_id', $flavorIds)->exists()) {
+        $anchorIds = $requiredCount === 1 ? [$flavorIds[0]] : $flavorIds;
+
+        $hasExtras = ProductAddon::whereIn('product_id', $anchorIds)->exists()
+            || ProductGift::whereIn('product_id', $anchorIds)->where('is_active', true)->exists();
+
+        if ($hasExtras) {
             $this->dispatch('order-addons-requested', type: $item['type'], productId: $item['product_id'], flavorIds: $item['flavor_ids']);
             $this->closeModal();
 

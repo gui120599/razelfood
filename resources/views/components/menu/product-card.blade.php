@@ -10,12 +10,12 @@
 <div {{ $attributes->class(['relative']) }}>
     <button type="button" wire:click="viewProduct({{ $product->id }})" class="block w-full text-left">
         <div class="flex items-start gap-3 rounded-xl p-2 transition hover:bg-white/5">
-            <div class="relative w-2/5 shrink-0">
+            <div class="relative h-28 w-28 shrink-0">
                 @if ($product->image_url)
                     <img src="{{ $product->image_url }}" alt="{{ $product->name }}"
-                         class="h-28 w-full rounded-lg bg-white object-cover">
+                         class="h-full w-full rounded-lg bg-white object-cover">
                 @else
-                    <div class="flex h-28 w-full items-center justify-center rounded-lg bg-gray-800 text-gray-600">
+                    <div class="flex h-full w-full items-center justify-center rounded-lg bg-gray-800 text-gray-600">
                         <x-heroicon-o-photo class="h-8 w-8" />
                     </div>
                 @endif
@@ -55,6 +55,12 @@
                     @if ($category?->allows_flavors && ($product->resolved_flavor_combo_blocked ?? false))
                         <p class="text-[10px] font-semibold uppercase text-orange-300">Promoção só na unidade inteira</p>
                     @endif
+
+                    @if (! empty($product->resolved_gift_names ?? []))
+                        <p class="mt-1 flex items-center gap-1 text-[11px] font-bold uppercase leading-tight text-emerald-300">
+                            🎁 Brinde: {{ collect($product->resolved_gift_names)->join(', ', ' e ') }} grátis
+                        </p>
+                    @endif
                 </div>
             </div>
         </div>
@@ -66,7 +72,7 @@
                     class="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--tenant-primary)] text-white shadow-lg transition active:scale-90">
                 <x-heroicon-o-plus class="h-5 w-5" />
             </button>
-        @elseif ($product->resolved_has_addons ?? false)
+        @elseif (($product->resolved_has_addons ?? false) || ($product->resolved_has_gifts ?? false))
             <button wire:click.stop="viewProduct({{ $product->id }})"
                     class="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--tenant-primary)] text-white shadow-lg transition active:scale-90">
                 <x-heroicon-o-plus class="h-5 w-5" />
