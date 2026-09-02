@@ -449,7 +449,7 @@ class Menu extends Component
                     $child->setRelation('products', $this->attachPrices($child->products));
                 }
 
-                $category->setAttribute('nav_thumbnail_url', $this->categoryNavThumbnail($category));
+                $category->setAttribute('nav_thumbnail_url', $category->navigationThumbnailUrl());
 
                 return $category;
             })
@@ -486,27 +486,6 @@ class Menu extends Component
         $category?->setRelation('products', $this->attachPrices($category->products));
 
         return $category;
-    }
-
-    /**
-     * Imagem usada na navegação rápida por categoria (RF-10, melhor
-     * reconhecimento visual que só texto) — primeira imagem entre os
-     * produtos diretos da categoria; se não houver, cai pra primeira
-     * imagem entre os produtos das subcategorias. null se a categoria
-     * (e suas subcategorias) não tiver nenhum produto com foto.
-     */
-    private function categoryNavThumbnail(Category $category): ?string
-    {
-        $direct = $category->products->first(fn (Product $product) => filled($product->image_url));
-
-        if ($direct) {
-            return $direct->image_url;
-        }
-
-        $fromChildren = $category->children->flatMap(fn (Category $child) => $child->products)
-            ->first(fn (Product $product) => filled($product->image_url));
-
-        return $fromChildren?->image_url;
     }
 
     #[Computed]

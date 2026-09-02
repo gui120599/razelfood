@@ -34,6 +34,13 @@ class AddonPickerModal extends Component
     public array $selections = [];
 
     /**
+     * null = fluxo normal (adicionar item novo ao carrinho, confirma via
+     * `order-cart-line-confirmed`); int = editando os adicionais de uma linha
+     * já existente naquele índice, confirma via `order-line-addons-updated`.
+     */
+    public ?int $editingIndex = null;
+
+    /**
      * null = ainda não perguntado; true = usuário quer escolher adicionais
      * (mostra a lista); false = usuário optou por não adicionar nada
      * (confirma a linha sem adicionais direto, sem precisar clicar de novo).
@@ -52,7 +59,31 @@ class AddonPickerModal extends Component
         $this->productId = $productId;
         $this->flavorIds = $flavorIds;
         $this->selections = [];
+        $this->editingIndex = null;
         $this->wantsAddons = null;
+        $this->errorMessage = null;
+        $this->open = true;
+    }
+
+    /**
+     * Reabre o modal para gerenciar os adicionais de uma linha já no carrinho
+     * (AttendOrder). Pula o gate sim/não — o atendente já pediu explicitamente
+     * pra mexer nos adicionais — e pré-carrega as escolhas atuais.
+     *
+     * @param  array<int>  $flavorIds
+     * @param  array<int, array{addon_id:int, quantity:int, target:?int}>  $addons
+     */
+    #[On('order-line-addons-edit-requested')]
+    public function editForLine(int $index, string $type, ?int $productId, array $flavorIds, array $addons): void
+    {
+        $this->type = $type;
+        $this->productId = $productId;
+        $this->flavorIds = $flavorIds;
+        $this->selections = collect($addons)
+            ->mapWithKeys(fn (array $addon) => [$addon['addon_id'] => ['quantity' => $addon['quantity'], 'target' => $addon['target']]])
+            ->all();
+        $this->editingIndex = $index;
+        $this->wantsAddons = true;
         $this->errorMessage = null;
         $this->open = true;
     }
@@ -124,7 +155,12 @@ class AddonPickerModal extends Component
             return;
         }
 
-        $this->dispatch('order-cart-line-confirmed', item: $item);
+        if ($this->editingIndex !== null) {
+            $this->dispatch('order-line-addons-updated', index: $this->editingIndex, addons: $addons);
+        } else {
+            $this->dispatch('order-cart-line-confirmed', item: $item);
+        }
+
         $this->closeModal();
     }
 
@@ -135,6 +171,7 @@ class AddonPickerModal extends Component
         $this->productId = null;
         $this->flavorIds = [];
         $this->selections = [];
+        $this->editingIndex = null;
         $this->wantsAddons = null;
         $this->errorMessage = null;
     }

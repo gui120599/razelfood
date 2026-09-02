@@ -11,12 +11,6 @@
         </div>
 
         <div class="space-y-4 xl:col-span-2">
-            @if ($errorMessage)
-                <div class="rounded-lg border border-rf-danger/40 bg-rf-danger/10 px-4 py-3 text-sm text-rf-danger">
-                    {{ $errorMessage }}
-                </div>
-            @endif
-
             <div class="rounded-xl border border-gray-200 bg-white p-4 dark:border-white/10 dark:bg-white/5">
                 <h2 class="mb-3 flex items-center gap-2 font-heading text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                     <x-heroicon-o-shopping-cart class="h-4 w-4" />
@@ -28,7 +22,15 @@
                 @else
                     <ul class="divide-y divide-gray-200 dark:divide-white/10">
                         @foreach ($this->cartLines as $line)
-                            <li wire:key="cart-line-{{ $line['index'] }}" class="flex items-start justify-between gap-3 py-2.5">
+                            <li wire:key="cart-line-{{ $line['index'] }}" class="flex items-start gap-3 py-2.5">
+                                <div class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gray-100 dark:bg-white/5">
+                                    @if ($line['image_url'])
+                                        <img src="{{ $line['image_url'] }}" alt="" class="h-full w-full object-cover">
+                                    @else
+                                        <x-heroicon-o-photo class="h-5 w-5 text-gray-400 dark:text-gray-600" />
+                                    @endif
+                                </div>
+
                                 <div class="min-w-0 flex-1">
                                     <div class="flex items-center gap-1.5">
                                         @if ($line['category_name'])
@@ -57,15 +59,28 @@
                                     @endforeach
 
                                     <div x-data="{ open: @js(filled($line['note'])) }" class="mt-1">
-                                        <button
-                                            type="button"
-                                            x-show="! open"
-                                            x-on:click="open = true; $nextTick(() => $refs.noteInput?.focus())"
-                                            class="flex items-center gap-1 text-xs font-medium text-rf-orange-600 hover:text-rf-orange-700"
-                                        >
-                                            <x-heroicon-o-chat-bubble-left-ellipsis class="h-3.5 w-3.5" />
-                                            Observação
-                                        </button>
+                                        <div class="flex flex-wrap items-center gap-3">
+                                            <button
+                                                type="button"
+                                                x-show="! open"
+                                                x-on:click="open = true; $nextTick(() => $refs.noteInput?.focus())"
+                                                class="flex items-center gap-1 text-xs font-medium text-rf-orange-600 hover:text-rf-orange-700"
+                                            >
+                                                <x-heroicon-o-chat-bubble-left-ellipsis class="h-3.5 w-3.5" />
+                                                Observação
+                                            </button>
+
+                                            @if ($line['has_addons'])
+                                                <button
+                                                    type="button"
+                                                    wire:click="editLineAddons({{ $line['index'] }})"
+                                                    class="flex items-center gap-1 text-xs font-medium text-rf-orange-600 hover:text-rf-orange-700"
+                                                >
+                                                    <x-heroicon-o-plus-circle class="h-3.5 w-3.5" />
+                                                    Adicionais
+                                                </button>
+                                            @endif
+                                        </div>
 
                                         <input
                                             x-show="open"
@@ -74,7 +89,7 @@
                                             value="{{ $line['note'] }}"
                                             wire:change="updateItemNote({{ $line['index'] }}, $event.target.value)"
                                             placeholder="Obs.: sem cebola, bem passado..."
-                                            class="fi-input block w-full rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
+                                            class="fi-input mt-1 block w-full rounded-lg border border-gray-300 bg-gray-50 px-2 py-1 text-xs text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
                                         >
                                     </div>
                                 </div>
@@ -91,24 +106,12 @@
                 @endif
             </div>
 
-            <div x-data="{ open: false }" class="rounded-xl border border-gray-200 bg-white p-4 dark:border-white/10 dark:bg-white/5">
-                <button type="button" x-on:click="open = ! open" class="flex w-full items-center justify-between">
-                    <h2 class="flex items-center gap-2 font-heading text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                        <x-heroicon-o-user class="h-4 w-4" />
-                        Cliente
-                    </h2>
-                    <x-heroicon-o-chevron-down x-bind:class="open ? 'rotate-180' : ''" class="h-4 w-4 text-gray-400 transition-transform dark:text-gray-500" />
-                </button>
-
-                <div
-                    x-show="open"
-                    x-transition:enter="transition ease-out duration-150"
-                    x-transition:enter-start="opacity-0 -translate-y-1"
-                    x-transition:enter-end="opacity-100 translate-y-0"
-                    class="mt-3"
-                >
-                    @livewire('tenant-order-client-lookup', ['initial' => $clientData], key('attend-order-client'))
-                </div>
+            <div class="rounded-xl border border-gray-200 bg-white p-4 dark:border-white/10 dark:bg-white/5">
+                <h2 class="mb-3 flex items-center gap-2 font-heading text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    <x-heroicon-o-user class="h-4 w-4" />
+                    Cliente
+                </h2>
+                @livewire('tenant-order-client-lookup', ['initial' => $clientData], key('attend-order-client'))
             </div>
 
             <div class="rounded-xl border border-gray-200 bg-white p-4 dark:border-white/10 dark:bg-white/5">
@@ -134,7 +137,7 @@
                     wire:model.live.debounce.500ms="orderNotes"
                     rows="2"
                     placeholder="Ex.: entregar na portaria, sem cebola em tudo, etc."
-                    class="fi-input block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
+                    class="fi-input block w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
                 ></textarea>
             </div>
 

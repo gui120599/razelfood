@@ -1,13 +1,13 @@
 <div class="space-y-4">
     <div>
         <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Como o cliente vai receber?</label>
-        <div class="grid grid-cols-2 gap-2">
+        <div class="grid grid-cols-3 gap-2">
             @foreach ($this->deliveryOptions as $option)
                 <button
                     type="button"
                     wire:click="selectDeliveryOption({{ $option->id }})"
                     @class([
-                        'rounded-lg border px-3 py-2 text-left text-sm transition',
+                        'rounded-lg border px-3 py-2 text-center text-sm transition',
                         'border-rf-orange-600 bg-rf-orange-600/10 text-rf-orange-700 dark:text-white' => $deliveryOptionId === $option->id,
                         'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100 dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10' => $deliveryOptionId !== $option->id,
                     ])

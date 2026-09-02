@@ -1,4 +1,4 @@
-<div class="space-y-3">
+<div class="space-y-3" x-data="{ open: false }">
     <label class="flex items-center gap-2 text-sm">
         <input
             type="checkbox"
@@ -10,6 +10,18 @@
     </label>
 
     @unless ($withoutClient)
+        <button type="button" x-on:click="open = ! open" class="flex w-full items-center justify-between pt-1">
+            <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Dados do cliente</span>
+            <x-heroicon-o-chevron-down x-bind:class="open ? 'rotate-180' : ''" class="h-4 w-4 text-gray-400 transition-transform dark:text-gray-500" />
+        </button>
+
+        <div
+            x-show="open"
+            x-transition:enter="transition ease-out duration-150"
+            x-transition:enter-start="opacity-0 -translate-y-1"
+            x-transition:enter-end="opacity-100 translate-y-0"
+            class="space-y-3"
+        >
         <div class="flex items-center justify-between">
             <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Telefone</label>
             <button type="button" wire:click="openSearchModal" class="flex items-center gap-1 text-xs font-semibold text-rf-orange-600 hover:text-rf-orange-700">
@@ -19,10 +31,14 @@
         </div>
         <div class="relative -mt-2">
             <input
-                type="text"
+                type="tel"
+                inputmode="numeric"
+                maxlength="15"
                 wire:model.live.debounce.500ms="phone"
+                x-init="$nextTick(() => $el.value = window.maskPhone($el.value))"
+                x-on:input="$el.value = window.maskPhone($el.value)"
                 placeholder="(11) 99999-9999"
-                class="fi-input block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
+                class="fi-input block w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
             >
             @if ($clientFound)
                 <span class="absolute right-3 top-1/2 -translate-y-1/2 text-rf-teal-500 dark:text-rf-teal-300" title="Cliente encontrado">
@@ -37,7 +53,7 @@
                 type="text"
                 wire:model.live.debounce.500ms="name"
                 placeholder="Nome do cliente"
-                class="fi-input block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
+                class="fi-input block w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
             >
         </div>
 
@@ -46,10 +62,14 @@
                 <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">CEP</label>
                 <input
                     type="text"
+                    inputmode="numeric"
+                    maxlength="9"
                     wire:model="zipCode"
                     wire:blur="lookupCep"
+                    x-init="$nextTick(() => $el.value = window.maskCep($el.value))"
+                    x-on:input="$el.value = window.maskCep($el.value)"
                     placeholder="00000-000"
-                    class="fi-input block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
+                    class="fi-input block w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
                 >
                 @if ($cepNotFound)
                     <p class="mt-1 text-[11px] text-rf-amber-300">CEP não encontrado — preencha manualmente.</p>
@@ -61,7 +81,7 @@
                 <input
                     type="text"
                     wire:model.live.debounce.500ms="street"
-                    class="fi-input block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
+                    class="fi-input block w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
                 >
             </div>
         </div>
@@ -73,7 +93,7 @@
                     type="text"
                     wire:model.live.debounce.500ms="number"
                     placeholder="S/N"
-                    class="fi-input block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
+                    class="fi-input block w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
                 >
             </div>
 
@@ -83,7 +103,7 @@
                     type="text"
                     wire:model.live.debounce.500ms="complement"
                     placeholder="Ponto de referência"
-                    class="fi-input block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
+                    class="fi-input block w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
                 >
             </div>
         </div>
@@ -94,7 +114,7 @@
                 <input
                     type="text"
                     wire:model.live.debounce.500ms="neighborhood"
-                    class="fi-input block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
+                    class="fi-input block w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
                 >
             </div>
 
@@ -103,9 +123,10 @@
                 <input
                     type="text"
                     wire:model.live.debounce.500ms="city"
-                    class="fi-input block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
+                    class="fi-input block w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
                 >
             </div>
+        </div>
         </div>
     @endunless
 
@@ -125,7 +146,7 @@
                         wire:model.live.debounce.300ms="searchQuery"
                         placeholder="Nome ou telefone..."
                         autofocus
-                        class="fi-input block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
+                        class="fi-input block w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
                     >
                 </div>
 
@@ -153,3 +174,30 @@
         </div>
     @endif
 </div>
+
+@script
+<script>
+    // Máscaras puramente visuais — o servidor sempre normaliza (remove
+    // pontuação) antes de buscar/salvar. Mesmas usadas no checkout público.
+    window.maskCep = (value) => value.replace(/\D/g, '').slice(0, 8).replace(/^(\d{5})(\d)/, '$1-$2');
+
+    window.maskPhone = (value) => {
+        value = value.replace(/\D/g, '').slice(0, 11);
+
+        if (value.length > 10) {
+            return value.replace(/^(\d{2})(\d{5})(\d{0,4}).*/, '($1) $2-$3');
+        }
+        if (value.length > 6) {
+            return value.replace(/^(\d{2})(\d{4})(\d{0,4}).*/, '($1) $2-$3');
+        }
+        if (value.length > 2) {
+            return value.replace(/^(\d{2})(\d{0,5})/, '($1) $2');
+        }
+        if (value.length > 0) {
+            return value.replace(/^(\d*)/, '($1');
+        }
+
+        return value;
+    };
+</script>
+@endscript

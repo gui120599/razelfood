@@ -20,11 +20,19 @@ class ProductCatalogSelector extends Component
 {
     public ?int $categoryId = null;
 
+    public ?int $subcategoryId = null;
+
     public string $search = '';
 
     public function selectCategory(?int $categoryId): void
     {
         $this->categoryId = $categoryId;
+        $this->subcategoryId = null;
+    }
+
+    public function selectSubcategory(?int $subcategoryId): void
+    {
+        $this->subcategoryId = $subcategoryId;
     }
 
     public function selectProduct(int $productId): void
@@ -56,16 +64,36 @@ class ProductCatalogSelector extends Component
         return Category::query()
             ->whereNull('parent_id')
             ->where('show_in_menu', true)
+            ->with([
+                'children' => fn ($query) => $query->where('show_in_menu', true)->orderBy('display_order'),
+                'products:id,category_id,image_path',
+                'children.products:id,category_id,image_path',
+            ])
             ->orderBy('display_order')
-            ->get();
+            ->get()
+            ->each(fn (Category $category) => $category->setAttribute(
+                'nav_thumbnail_url',
+                $category->navigationThumbnailUrl(),
+            ));
     }
 
     #[Computed]
     public function products(): Collection
     {
         return Product::query()
-            ->when($this->categoryId, fn (Builder $query) => $query->where('category_id', $this->categoryId))
+            ->when($this->categoryId, function (Builder $query) {
+                $root = $this->categories->firstWhere('id', $this->categoryId);
+
+                $categoryIds = match (true) {
+                    $this->subcategoryId !== null => [$this->subcategoryId],
+                    $root !== null => $root->children->pluck('id')->push($root->id)->all(),
+                    default => [$this->categoryId],
+                };
+
+                $query->whereIn('category_id', $categoryIds);
+            })
             ->when($this->search !== '', fn (Builder $query) => $query->where('name', 'like', "%{$this->search}%"))
+            ->with('category:id,name')
             ->where('is_visible', true)
             ->where(function (Builder $query) {
                 $query->where('controls_stock', false)
