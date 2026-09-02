@@ -113,14 +113,14 @@
                             wire:click="skipAddons"
                             class="flex-1 cursor-pointer rounded-lg border border-gray-200 bg-gray-50 py-2.5 text-sm font-semibold text-gray-600 transition hover:bg-gray-100 dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10"
                         >
-                            Prosseguir sem adicionais
+                            {{ $editingIndex !== null ? 'Remover todos' : 'Prosseguir sem adicionais' }}
                         </button>
                         <button
                             type="button"
                             wire:click="confirmAddons"
                             class="flex-1 cursor-pointer rounded-lg bg-rf-orange-600 py-2.5 text-sm font-semibold text-white transition hover:bg-rf-orange-700"
                         >
-                            Adicionar ao pedido
+                            {{ $editingIndex !== null ? 'Salvar adicionais' : 'Adicionar ao pedido' }}
                         </button>
                     </div>
                 @endif

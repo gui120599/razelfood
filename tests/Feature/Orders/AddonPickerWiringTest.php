@@ -202,6 +202,40 @@ class AddonPickerWiringTest extends TestCase
             ->assertSet('open', false);
     }
 
+    public function test_edit_for_line_preloads_addons_and_updates_the_line_instead_of_appending(): void
+    {
+        $category = Category::create(['tenant_id' => $this->tenant->id, 'name' => 'Bebidas', 'display_order' => 1]);
+        $product = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $category->id, 'name' => 'Refrigerante', 'price' => 8]);
+        $addon = Addon::create(['tenant_id' => $this->tenant->id, 'name' => 'Gelo extra', 'price' => 1]);
+        ProductAddon::create(['tenant_id' => $this->tenant->id, 'product_id' => $product->id, 'addon_id' => $addon->id]);
+
+        Livewire::test(AddonPickerModal::class)
+            ->call('editForLine', 2, 'simple', $product->id, [], [['addon_id' => $addon->id, 'quantity' => 1, 'target' => null]])
+            ->assertSet('wantsAddons', true)
+            ->assertSet('editingIndex', 2)
+            ->assertSet('selections', [$addon->id => ['quantity' => 1, 'target' => null]])
+            ->call('setQuantity', $addon->id, 3)
+            ->call('confirmAddons')
+            ->assertDispatched('order-line-addons-updated', index: 2, addons: [['addon_id' => $addon->id, 'quantity' => 3, 'target' => null]])
+            ->assertNotDispatched('order-cart-line-confirmed')
+            ->assertSet('open', false)
+            ->assertSet('editingIndex', null);
+    }
+
+    public function test_edit_for_line_skip_removes_every_addon_from_the_line(): void
+    {
+        $category = Category::create(['tenant_id' => $this->tenant->id, 'name' => 'Bebidas', 'display_order' => 1]);
+        $product = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $category->id, 'name' => 'Refrigerante', 'price' => 8]);
+        $addon = Addon::create(['tenant_id' => $this->tenant->id, 'name' => 'Gelo extra', 'price' => 1]);
+        ProductAddon::create(['tenant_id' => $this->tenant->id, 'product_id' => $product->id, 'addon_id' => $addon->id]);
+
+        Livewire::test(AddonPickerModal::class)
+            ->call('editForLine', 0, 'simple', $product->id, [], [['addon_id' => $addon->id, 'quantity' => 2, 'target' => null]])
+            ->call('skipAddons')
+            ->assertDispatched('order-line-addons-updated', index: 0, addons: [])
+            ->assertSet('open', false);
+    }
+
     public function test_target_selector_is_shown_with_multiple_flavors(): void
     {
         $category = Category::create(['tenant_id' => $this->tenant->id, 'name' => 'Pizzas', 'display_order' => 1, 'allows_flavors' => true]);

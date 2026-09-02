@@ -35,6 +35,15 @@ class FulfillmentPicker extends Component
     public float $total = 0;
 
     /**
+     * Último total já refletido nos valores das formas de pagamento. Começa
+     * em 0 (nunca sincronizado) e serve pra distinguir "o total do pedido
+     * mudou" (novo item, taxa de entrega diferente) de um re-render qualquer
+     * — só no primeiro caso os valores são reajustados, nunca enquanto o
+     * atendente digita.
+     */
+    public float $lastSyncedTotal = 0;
+
+    /**
      * @param  array<string, mixed>  $initial
      */
     public function mount(array $initial = []): void
@@ -44,7 +53,7 @@ class FulfillmentPicker extends Component
             ? $initial['payments']
             : [$this->blankPaymentLine()];
 
-        $this->autofillRemaining();
+        $this->applyTotalToAmounts();
         $this->emitChange();
     }
 
@@ -146,6 +155,56 @@ class FulfillmentPicker extends Component
         return true;
     }
 
+    /**
+     * Reage a uma mudança no total do pedido (item novo, endereço com taxa
+     * diferente): mantém os valores das formas de pagamento coerentes com o
+     * novo total sem obrigar o atendente a redigitar. Chamada só quando o
+     * total muda de fato — nunca durante a digitação de um valor.
+     *
+     * @return bool se algum valor foi ajustado
+     */
+    private function applyTotalToAmounts(): bool
+    {
+        if ($this->total <= 0) {
+            return false;
+        }
+
+        if (count($this->payments) === 1) {
+            return $this->setLineAmount(0, $this->total);
+        }
+
+        $hasBlankLine = collect($this->payments)->contains(fn (array $line) => blank($line['amount'] ?? null));
+
+        if ($hasBlankLine) {
+            return $this->autofillRemaining();
+        }
+
+        // Todas as linhas preenchidas: a última absorve a diferença do total.
+        $lastIndex = array_key_last($this->payments);
+        $sumOthers = 0.0;
+
+        foreach ($this->payments as $index => $line) {
+            if ($index !== $lastIndex) {
+                $sumOthers += $this->parseBrl($line['amount']);
+            }
+        }
+
+        return $this->setLineAmount($lastIndex, max(0, round($this->total - $sumOthers, 2)));
+    }
+
+    private function setLineAmount(int $index, float $value): bool
+    {
+        $formatted = number_format($value, 2, ',', '.');
+
+        if (($this->payments[$index]['amount'] ?? null) === $formatted) {
+            return false;
+        }
+
+        $this->payments[$index]['amount'] = $formatted;
+
+        return true;
+    }
+
     private function emitChange(): void
     {
         $this->dispatch('order-fulfillment-changed', data: [
@@ -190,10 +249,19 @@ class FulfillmentPicker extends Component
     public function render()
     {
         // `total` reativo muda de fora sem passar por updating/updated — então
-        // o preenchimento é reavaliado aqui a cada render, inclusive nos que a
-        // página pai dispara ao mudar carrinho/entrega. Só re-emite pro pai se
-        // realmente preencheu algo (evita loop de request pai↔filho).
-        if ($this->autofillRemaining()) {
+        // é reavaliado aqui a cada render, inclusive nos que a página pai
+        // dispara ao mudar carrinho/entrega. Só re-emite pro pai se algo
+        // mudou de fato (evita loop de request pai↔filho).
+        $changed = false;
+
+        if (abs($this->total - $this->lastSyncedTotal) > 0.001) {
+            $this->lastSyncedTotal = $this->total;
+            $changed = $this->applyTotalToAmounts();
+        } elseif ($this->autofillRemaining()) {
+            $changed = true;
+        }
+
+        if ($changed) {
             $this->emitChange();
         }
 

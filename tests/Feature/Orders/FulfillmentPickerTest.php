@@ -59,4 +59,30 @@ class FulfillmentPickerTest extends TestCase
             ->set('payments.0.amount', '20,00')
             ->assertSet('payments.1.amount', '80,00');
     }
+
+    public function test_single_payment_line_follows_the_total_when_it_changes(): void
+    {
+        // `total` reativo não pode ser mutado isolado (CannotMutateReactiveProp);
+        // recriar o componente com o novo total simula o re-render que a
+        // AttendOrder dispara — o valor da linha única acompanha o total.
+        Livewire::test(FulfillmentPicker::class, [
+            'initial' => ['delivery_option_id' => null, 'payments' => [
+                ['payment_option_id' => 1, 'amount' => '55,00', 'change_for' => null],
+            ]],
+            'total' => 95.0,
+        ])->assertSet('payments.0.amount', '95,00');
+    }
+
+    public function test_split_payment_rebalances_the_last_line_when_the_total_changes(): void
+    {
+        Livewire::test(FulfillmentPicker::class, [
+            'initial' => ['delivery_option_id' => null, 'payments' => [
+                ['payment_option_id' => 1, 'amount' => '30,00', 'change_for' => null],
+                ['payment_option_id' => 2, 'amount' => '70,00', 'change_for' => null],
+            ]],
+            'total' => 120.0,
+        ])
+            ->assertSet('payments.0.amount', '30,00')
+            ->assertSet('payments.1.amount', '90,00');
+    }
 }

@@ -108,7 +108,8 @@ class AttendOrderTest extends TestCase
                 'payments' => [['payment_option_id' => $this->paymentOption->id, 'amount' => null, 'change_for' => null]],
             ])
             ->call('save')
-            ->assertSet('errorMessage', null);
+            ->assertNotified()
+            ->assertRedirect();
 
         $this->assertSame(1, Order::count());
 
@@ -199,7 +200,8 @@ class AttendOrderTest extends TestCase
                 'payments' => [['payment_option_id' => $this->paymentOption->id, 'amount' => null, 'change_for' => null]],
             ])
             ->call('save')
-            ->assertSet('errorMessage', null);
+            ->assertNotified()
+            ->assertRedirect();
 
         $order->refresh();
 
@@ -486,13 +488,38 @@ class AttendOrderTest extends TestCase
                 'payments' => [['payment_option_id' => $this->paymentOption->id, 'amount' => null, 'change_for' => null]],
             ])
             ->call('save')
-            ->assertSet('errorMessage', null);
+            ->assertNotified()
+            ->assertRedirect();
 
         $this->assertSame(1, Order::count());
 
         $order = Order::first();
         $this->assertNull($order->client_id);
         $this->assertSame('Sem gelo, por favor', $order->notes);
+    }
+
+    public function test_masked_phone_from_the_client_form_is_normalized_on_save(): void
+    {
+        $this->actingAs($this->userWithRole('Atendente'));
+
+        $category = Category::create(['tenant_id' => $this->tenant->id, 'name' => 'Bebidas', 'display_order' => 1]);
+        $product = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $category->id, 'name' => 'Refrigerante', 'price' => 8]);
+
+        Livewire::test(AttendOrder::class)
+            ->call('addSimpleItem', $product->id)
+            ->call('syncClientData', [
+                'phone' => '(11) 99999-0000', 'name' => 'Cliente Teste', 'zip_code' => null,
+                'street' => null, 'number' => null, 'complement' => null,
+                'neighborhood' => null, 'city' => null, 'state' => null,
+            ])
+            ->call('syncFulfillmentData', [
+                'delivery_option_id' => null,
+                'payments' => [['payment_option_id' => $this->paymentOption->id, 'amount' => '8,00', 'change_for' => null]],
+            ])
+            ->call('save')
+            ->assertRedirect();
+
+        $this->assertSame('11999990000', Client::first()->phone);
     }
 
     public function test_attendant_splits_payment_across_two_methods(): void
@@ -519,7 +546,8 @@ class AttendOrderTest extends TestCase
                 ],
             ])
             ->call('save')
-            ->assertSet('errorMessage', null);
+            ->assertNotified()
+            ->assertRedirect();
 
         $order = Order::first();
         $this->assertSame(2, $order->payments()->count());
@@ -545,7 +573,9 @@ class AttendOrderTest extends TestCase
                 'delivery_option_id' => null,
                 'payments' => [['payment_option_id' => $this->paymentOption->id, 'amount' => '50,00', 'change_for' => null]],
             ])
-            ->call('save');
+            ->call('save')
+            ->assertNotified()
+            ->assertNoRedirect();
 
         $this->assertSame(0, Order::count());
     }
@@ -564,6 +594,64 @@ class AttendOrderTest extends TestCase
             ->call('addSimpleItem', $product->id);
 
         $this->assertSame(55.0, $component->instance()->grandTotalPreview);
+    }
+
+    public function test_attendant_adds_addons_to_an_existing_cart_line_and_totals_update(): void
+    {
+        $this->actingAs($this->userWithRole('Atendente'));
+
+        $category = Category::create(['tenant_id' => $this->tenant->id, 'name' => 'Bebidas', 'display_order' => 1]);
+        $product = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $category->id, 'name' => 'Refrigerante', 'price' => 8]);
+        $addon = Addon::create(['tenant_id' => $this->tenant->id, 'name' => 'Gelo extra', 'price' => 2]);
+        ProductAddon::create(['tenant_id' => $this->tenant->id, 'product_id' => $product->id, 'addon_id' => $addon->id]);
+
+        Livewire::test(AttendOrder::class)
+            ->call('addSimpleItem', $product->id)
+            ->call('editLineAddons', 0)
+            ->assertDispatched('order-line-addons-edit-requested', index: 0, type: 'simple', productId: $product->id, flavorIds: [], addons: [])
+            ->call('updateLineAddons', 0, [['addon_id' => $addon->id, 'quantity' => 2, 'target' => null]])
+            ->assertSet('cartItems.0.addons', [['addon_id' => $addon->id, 'quantity' => 2, 'target' => null]])
+            ->call('syncClientData', [
+                'phone' => '11999990000', 'name' => 'Cliente Teste', 'zip_code' => null,
+                'street' => null, 'number' => null, 'complement' => null,
+                'neighborhood' => null, 'city' => null, 'state' => null,
+            ])
+            ->call('syncFulfillmentData', [
+                'delivery_option_id' => null,
+                'payments' => [['payment_option_id' => $this->paymentOption->id, 'amount' => '12,00', 'change_for' => null]],
+            ])
+            ->call('save')
+            ->assertNotified()
+            ->assertRedirect();
+
+        $item = Order::first()->items()->first();
+        $this->assertSame('4.00', $item->addons_total);
+        $this->assertSame('12.00', Order::first()->items_total);
+    }
+
+    public function test_cart_line_exposes_product_image_and_addon_availability(): void
+    {
+        $this->actingAs($this->userWithRole('Atendente'));
+
+        $category = Category::create(['tenant_id' => $this->tenant->id, 'name' => 'Bebidas', 'display_order' => 1]);
+        $withImage = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $category->id, 'name' => 'Suco', 'price' => 6, 'image_path' => 'produtos/suco.jpg']);
+        $withAddon = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $category->id, 'name' => 'Refrigerante', 'price' => 8]);
+        $plain = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $category->id, 'name' => 'Água', 'price' => 4]);
+        $addon = Addon::create(['tenant_id' => $this->tenant->id, 'name' => 'Gelo extra', 'price' => 1]);
+        ProductAddon::create(['tenant_id' => $this->tenant->id, 'product_id' => $withAddon->id, 'addon_id' => $addon->id]);
+
+        $component = Livewire::test(AttendOrder::class)
+            ->call('addSimpleItem', $withImage->id)
+            ->call('addSimpleItem', $withAddon->id)
+            ->call('addSimpleItem', $plain->id);
+
+        $lines = $component->instance()->cartLines;
+
+        $this->assertSame($withImage->image_url, $lines[0]['image_url']);
+        $this->assertFalse($lines[0]['has_addons']);
+        $this->assertNull($lines[1]['image_url']);
+        $this->assertTrue($lines[1]['has_addons']);
+        $this->assertFalse($lines[2]['has_addons']);
     }
 
     public function test_attendant_adds_a_note_to_a_cart_item(): void
@@ -586,7 +674,8 @@ class AttendOrderTest extends TestCase
                 'payments' => [['payment_option_id' => $this->paymentOption->id, 'amount' => '40,00', 'change_for' => null]],
             ])
             ->call('save')
-            ->assertSet('errorMessage', null);
+            ->assertNotified()
+            ->assertRedirect();
 
         $this->assertSame('sem cebola', Order::first()->items()->first()->note);
     }

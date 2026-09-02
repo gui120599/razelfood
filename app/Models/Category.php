@@ -85,4 +85,23 @@ class Category extends TenantScopedModel
     {
         return $this->belongsToMany(ProductionLine::class, 'category_production_line');
     }
+
+    /**
+     * Miniatura pra navegação rápida por categoria (melhor reconhecimento
+     * visual que só texto): 1ª imagem entre os produtos diretos; senão, 1ª
+     * imagem entre os produtos das subcategorias; senão null. Exige as
+     * relações `products` e `children.products` carregadas.
+     */
+    public function navigationThumbnailUrl(): ?string
+    {
+        $direct = $this->products->first(fn (Product $product) => filled($product->image_url));
+
+        if ($direct) {
+            return $direct->image_url;
+        }
+
+        return $this->children
+            ->flatMap(fn (Category $child) => $child->products)
+            ->first(fn (Product $product) => filled($product->image_url))?->image_url;
+    }
 }

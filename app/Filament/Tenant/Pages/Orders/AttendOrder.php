@@ -15,6 +15,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\PaymentOption;
 use App\Models\Product;
+use App\Models\ProductAddon;
 use App\Support\CurrentTenant;
 use App\Support\FeatureKey;
 use BackedEnum;
@@ -69,8 +70,6 @@ class AttendOrder extends Page
 
     public ?string $orderNotes = null;
 
-    public ?string $errorMessage = null;
-
     public static function canAccess(): bool
     {
         return (CurrentTenant::get()?->hasFeature(FeatureKey::CENTRAL_DE_PEDIDOS) ?? false) && static::pageShieldCanAccess();
@@ -84,6 +83,11 @@ class AttendOrder extends Page
     public function getMaxContentWidth(): Width
     {
         return Width::Full;
+    }
+
+    public function getTitle(): string
+    {
+        return $this->getHeading();
     }
 
     public function getHeading(): string
@@ -175,6 +179,42 @@ class AttendOrder extends Page
         unset($this->cartLines);
     }
 
+    /**
+     * Reabre o modal de adicionais (AddonPickerModal) para uma linha já no
+     * carrinho — caso o atendente tenha pulado a etapa ou queira revisar.
+     */
+    public function editLineAddons(int $index): void
+    {
+        $item = $this->cartItems[$index] ?? null;
+
+        if ($item === null) {
+            return;
+        }
+
+        $this->dispatch(
+            'order-line-addons-edit-requested',
+            index: $index,
+            type: $item['type'],
+            productId: $item['product_id'],
+            flavorIds: $item['flavor_ids'],
+            addons: $item['addons'] ?? [],
+        );
+    }
+
+    /**
+     * @param  array<int, array{addon_id:int, quantity:int, target:?int}>  $addons
+     */
+    #[On('order-line-addons-updated')]
+    public function updateLineAddons(int $index, array $addons): void
+    {
+        if (! isset($this->cartItems[$index])) {
+            return;
+        }
+
+        $this->cartItems[$index]['addons'] = $addons;
+        unset($this->cartLines);
+    }
+
     #[On('order-client-data-changed')]
     public function syncClientData(array $data): void
     {
@@ -220,11 +260,22 @@ class AttendOrder extends Page
         $resolve = app(ResolvePriceForCartLine::class);
         $lines = [];
 
+        $productIds = collect($this->cartItems)
+            ->flatMap(fn (array $item) => [$item['product_id'], ...$item['flavor_ids']])
+            ->filter()
+            ->unique()
+            ->values();
+
+        $products = $productIds->isEmpty()
+            ? collect()
+            : Product::with('category:id,name')->whereIn('id', $productIds)->get()->keyBy('id');
+
+        $productIdsWithAddons = $productIds->isEmpty()
+            ? collect()
+            : ProductAddon::whereIn('product_id', $productIds)->pluck('product_id')->unique();
+
         $addonIds = collect($this->cartItems)->flatMap(fn (array $item) => $item['addons'] ?? [])->pluck('addon_id')->unique()->values();
         $addonNames = $addonIds->isEmpty() ? collect() : Addon::whereIn('id', $addonIds)->pluck('name', 'id');
-        $flavorNames = collect($this->cartItems)->flatMap(fn (array $item) => $item['flavor_ids'])->unique()->isEmpty()
-            ? collect()
-            : Product::whereIn('id', collect($this->cartItems)->flatMap(fn (array $item) => $item['flavor_ids'])->unique())->pluck('name', 'id');
 
         foreach ($this->cartItems as $index => $item) {
             try {
@@ -233,16 +284,17 @@ class AttendOrder extends Page
                 continue;
             }
 
+            $relevantIds = $item['type'] === 'combo' ? $item['flavor_ids'] : [$item['product_id']];
+            $mainProductId = $item['type'] === 'combo' ? ($item['flavor_ids'][0] ?? null) : $item['product_id'];
+            $mainProduct = $mainProductId ? $products->get($mainProductId) : null;
+
             $name = $item['type'] === 'combo'
-                ? Product::whereIn('id', $item['flavor_ids'])->pluck('name')->implode(' / ')
-                : (Product::find($item['product_id'])?->name ?? 'Produto removido');
+                ? collect($item['flavor_ids'])->map(fn (int $id) => $products->get($id)?->name)->filter()->implode(' / ')
+                : ($mainProduct?->name ?? 'Produto removido');
 
-            $categoryProductId = $item['type'] === 'combo' ? ($item['flavor_ids'][0] ?? null) : $item['product_id'];
-            $categoryName = $categoryProductId ? Product::find($categoryProductId)?->category?->name : null;
-
-            $addonsDisplay = collect($item['addons'] ?? [])->map(function (array $selection) use ($addonNames, $flavorNames) {
+            $addonsDisplay = collect($item['addons'] ?? [])->map(function (array $selection) use ($addonNames, $products) {
                 $addonName = $addonNames->get($selection['addon_id'], 'Adicional removido');
-                $target = $selection['target'] !== null ? ($flavorNames->get($selection['target']) ?? 'sabor removido') : 'produto inteiro';
+                $target = $selection['target'] !== null ? ($products->get($selection['target'])?->name ?? 'sabor removido') : 'produto inteiro';
 
                 return "{$selection['quantity']}x {$addonName} ({$target})";
             })->all();
@@ -250,7 +302,9 @@ class AttendOrder extends Page
             $lines[] = [
                 'index' => $index,
                 'name' => $name,
-                'category_name' => $categoryName,
+                'category_name' => $mainProduct?->category?->name,
+                'image_url' => $mainProduct?->image_url,
+                'has_addons' => collect($relevantIds)->intersect($productIdsWithAddons)->isNotEmpty(),
                 'quantity' => $item['quantity'],
                 'note' => $item['note'],
                 'unit_price' => $resolved['unit_price'],
@@ -328,19 +382,25 @@ class AttendOrder extends Page
         return $id ? DeliveryOption::find($id) : null;
     }
 
+    private function notifyError(string $message): void
+    {
+        Notification::make()
+            ->title($message)
+            ->danger()
+            ->send();
+    }
+
     public function save(): void
     {
-        $this->errorMessage = null;
-
         if (empty($this->cartItems)) {
-            $this->errorMessage = 'Adicione ao menos um item ao pedido.';
+            $this->notifyError('Adicione ao menos um item ao pedido.');
 
             return;
         }
 
         if (! ($this->clientData['without_client'] ?? false)
             && (blank($this->clientData['phone'] ?? null) || blank($this->clientData['name'] ?? null))) {
-            $this->errorMessage = 'Informe telefone e nome do cliente, ou marque "Pedido sem cliente".';
+            $this->notifyError('Informe telefone e nome do cliente, ou marque "Pedido sem cliente".');
 
             return;
         }
@@ -355,7 +415,7 @@ class AttendOrder extends Page
         }
 
         if (empty($payments) || collect($payments)->contains(fn (array $p) => blank($p['payment_option_id'] ?? null) || blank($p['amount'] ?? null))) {
-            $this->errorMessage = 'Escolha ao menos uma forma de pagamento e informe o valor de cada uma.';
+            $this->notifyError('Escolha ao menos uma forma de pagamento e informe o valor de cada uma.');
 
             return;
         }
@@ -363,7 +423,7 @@ class AttendOrder extends Page
         $paymentsSum = collect($payments)->sum(fn (array $p) => $this->parseBrl($p['amount']));
 
         if (abs($paymentsSum - $this->grandTotalPreview) > 0.01) {
-            $this->errorMessage = 'A soma das formas de pagamento (R$ '.number_format($paymentsSum, 2, ',', '.').') precisa bater com o total do pedido (R$ '.number_format($this->grandTotalPreview, 2, ',', '.').').';
+            $this->notifyError('A soma das formas de pagamento (R$ '.number_format($paymentsSum, 2, ',', '.').') precisa bater com o total do pedido (R$ '.number_format($this->grandTotalPreview, 2, ',', '.').').');
 
             return;
         }
@@ -372,13 +432,13 @@ class AttendOrder extends Page
 
         if ($deliveryOption?->requires_address) {
             if (blank($this->clientData['street'] ?? null) || blank($this->clientData['neighborhood'] ?? null)) {
-                $this->errorMessage = 'Informe rua e bairro para entrega.';
+                $this->notifyError('Informe rua e bairro para entrega.');
 
                 return;
             }
 
             if (blank($this->clientData['number'] ?? null) && blank($this->clientData['complement'] ?? null)) {
-                $this->errorMessage = 'Sem número? Informe um complemento ou ponto de referência.';
+                $this->notifyError('Sem número? Informe um complemento ou ponto de referência.');
 
                 return;
             }
@@ -391,7 +451,7 @@ class AttendOrder extends Page
                 ? app(UpdateOrderFromCart::class)($this->currentOrder, $this->cartItems, $checkoutData)
                 : app(CreateOrderFromCart::class)($this->cartItems, $checkoutData, origin: OrderOrigin::Staff, bypassBusinessHours: true);
         } catch (CheckoutException|InvalidArgumentException $e) {
-            $this->errorMessage = $e->getMessage();
+            $this->notifyError($e->getMessage());
 
             return;
         }
