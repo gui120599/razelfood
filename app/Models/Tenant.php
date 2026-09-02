@@ -43,6 +43,7 @@ class Tenant extends Model
         'uses_in_transit_stage',
         'assigns_delivery_couriers',
         'require_client_cpf',
+        'allow_free_form_address',
     ];
 
     protected function casts(): array
@@ -58,6 +59,7 @@ class Tenant extends Model
             'uses_in_transit_stage' => 'boolean',
             'assigns_delivery_couriers' => 'boolean',
             'require_client_cpf' => 'boolean',
+            'allow_free_form_address' => 'boolean',
         ];
     }
 

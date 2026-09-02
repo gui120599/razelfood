@@ -5,6 +5,12 @@ paths:
 
 # Menu
 
+## Imagem de produto é quadrada no cardápio
+Set/2026. `product-card.blade.php` usa miniatura `h-28 w-28` (quadrada, `object-cover`) e o modal de visualização rápida (`menu.blade.php`) usa `aspect-square w-full`. `ProductForm` (`app/Filament/Tenant/Resources/Products/Schemas/ProductForm.php`) orienta via `->imageEditorAspectRatioOptions(['1:1'])` + helperText (mesma convenção do favicon em `EstablishmentSettings`/`TenantForm`) — não força resize no upload; imagens fora do quadrado são recortadas no centro.
+
+## Barra de categorias sticky × folga do space-y-6
+`menu.blade.php` raiz é `space-y-6`. A barra sticky de categorias tem `mt-0!`; o conteúdo pós-barra (promoções + mais vendidos + categorias) fica num `<div class="mt-0! space-y-6">` pra matar os 24px de folga logo abaixo da barra (onde o `bg-black` + a marca d'água apareciam). `<h2>` sticky de cada categoria = `top-[6.5rem]` (base real da barra), `scroll-mt-28` nas `<section>`.
+
 ## Quantidade de sabores é configurável por tenant, não um teto único
 categories.max_flavors foi removida. A quantidade de sabores que o cliente pode escolher por categoria vem da tabela `flavor_quantity_options` (tenant + category scoped, label + flavor_count), editável pelo Admin via FlavorQuantityOptionsRelationManager em CategoryResource (aba só aparece se allows_flavors=true).
 

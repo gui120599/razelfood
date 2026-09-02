@@ -12,6 +12,7 @@ class DeliveryZoneNeighborhood extends TenantScopedModel
     protected $fillable = [
         'tenant_id',
         'delivery_zone_id',
+        'city_id',
         'neighborhood',
         'city',
     ];
@@ -33,5 +34,15 @@ class DeliveryZoneNeighborhood extends TenantScopedModel
     public function deliveryZone(): BelongsTo
     {
         return $this->belongsTo(DeliveryZone::class);
+    }
+
+    /**
+     * Cidade do catálogo global (App\Models\City). Nomeada `cityRecord` porque
+     * `city` já é o atributo string normalizado. Pode ser null em registros
+     * antigos que o backfill não conseguiu casar.
+     */
+    public function cityRecord(): BelongsTo
+    {
+        return $this->belongsTo(City::class, 'city_id');
     }
 }

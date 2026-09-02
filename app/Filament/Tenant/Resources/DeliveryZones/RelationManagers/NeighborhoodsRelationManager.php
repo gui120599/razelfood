@@ -239,9 +239,11 @@ class NeighborhoodsRelationManager extends RelationManager
                     ->schema($this->createFormSchema())
                     ->using(function (array $data, NeighborhoodsRelationManager $livewire): ?Model {
                         $zone = $livewire->getOwnerRecord();
+                        $cityId = City::query()->where('normalized_name', $data['city'])->value('id');
 
                         $created = collect($data['neighborhoods'])->map(
                             fn (string $neighborhood): Model => $zone->neighborhoods()->create([
+                                'city_id' => $cityId,
                                 'city' => $data['city'],
                                 'neighborhood' => $neighborhood,
                             ]),
@@ -253,7 +255,11 @@ class NeighborhoodsRelationManager extends RelationManager
                     }),
             ])
             ->recordActions([
-                EditAction::make(),
+                EditAction::make()
+                    ->mutateFormDataUsing(fn (array $data): array => [
+                        ...$data,
+                        'city_id' => City::query()->where('normalized_name', $data['city'])->value('id'),
+                    ]),
                 DeleteAction::make(),
             ]);
     }
