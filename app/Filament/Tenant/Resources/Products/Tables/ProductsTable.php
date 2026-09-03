@@ -3,6 +3,7 @@
 namespace App\Filament\Tenant\Resources\Products\Tables;
 
 use App\Actions\Products\AdjustProductsPrice;
+use App\Actions\Products\AttachGiftToProducts;
 use App\Actions\Products\ReplicateProductsToCategory;
 use App\Filament\Support\InputMasks;
 use App\Filament\Tenant\Support\CategoryOptions;
@@ -18,6 +19,7 @@ use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\ReplicateAction;
 use Filament\Actions\RestoreAction;
 use Filament\Actions\RestoreBulkAction;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -87,7 +89,7 @@ class ProductsTable
                         ->label('Replicar para outra categoria')
                         ->icon(Heroicon::OutlinedDocumentDuplicate)
                         ->modalHeading('Replicar produtos para outra categoria')
-                        ->modalDescription('Cria uma cópia de cada produto selecionado na categoria escolhida (os originais continuam onde estão). Os adicionais vinculados vão junto.')
+                        ->modalDescription('Cria uma cópia de cada produto selecionado na categoria escolhida (os originais continuam onde estão). Os adicionais e brindes vinculados vão junto.')
                         ->modalSubmitActionLabel('Replicar')
                         ->authorize(fn (): bool => auth()->user()?->can('create', Product::class) ?? false)
                         ->schema([
@@ -161,6 +163,56 @@ class ProductsTable
                             Notification::make()
                                 ->title('Preços atualizados')
                                 ->body("{$count} produto(s) atualizado(s).")
+                                ->success()
+                                ->send();
+                        })
+                        ->deselectRecordsAfterCompletion(),
+                    BulkAction::make('attachGift')
+                        ->label('Vincular brinde')
+                        ->icon(Heroicon::OutlinedGift)
+                        ->modalHeading('Vincular um brinde aos produtos selecionados')
+                        ->modalDescription('Oferece o mesmo produto como brinde grátis (RN-53) em todos os produtos selecionados. Se o vínculo já existir, os valores abaixo são atualizados.')
+                        ->modalSubmitActionLabel('Vincular')
+                        ->authorizeIndividualRecords('update')
+                        ->schema([
+                            Select::make('gift_product_id')
+                                ->label('Produto brinde')
+                                ->options(fn (): array => Product::orderBy('name')->pluck('name', 'id')->all())
+                                ->searchable()
+                                ->required(),
+                            TextInput::make('quantity')
+                                ->label('Quantidade oferecida')
+                                ->numeric()
+                                ->default(1)
+                                ->minValue(1)
+                                ->required()
+                                ->helperText('Unidades do brinde por unidade do produto principal.'),
+                            Toggle::make('is_active')
+                                ->label('Ativo')
+                                ->default(true),
+                            CheckboxList::make('flavor_counts')
+                                ->label('Habilitar quando o produto for vendido como')
+                                ->options([
+                                    1 => 'Item simples (1 sabor)',
+                                    2 => '2 sabores',
+                                    3 => '3 sabores',
+                                    4 => '4 sabores',
+                                ])
+                                ->columns(2)
+                                ->helperText('Vazio = oferece em qualquer quantidade de sabores. Contagens que a categoria do produto não tem são simplesmente ignoradas.'),
+                        ])
+                        ->action(function (Collection $records, array $data): void {
+                            $count = app(AttachGiftToProducts::class)(
+                                $records,
+                                (int) $data['gift_product_id'],
+                                (int) $data['quantity'],
+                                (bool) ($data['is_active'] ?? false),
+                                $data['flavor_counts'] ?? null,
+                            );
+
+                            Notification::make()
+                                ->title('Brinde vinculado')
+                                ->body("{$count} produto(s) agora oferecem esse brinde.")
                                 ->success()
                                 ->send();
                         })
