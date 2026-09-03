@@ -7,6 +7,7 @@ use App\Filament\Tenant\Resources\Products\Pages\ListProducts;
 use App\Models\Addon;
 use App\Models\Category;
 use App\Models\Product;
+use App\Models\ProductGift;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Support\CurrentTenant;
@@ -98,6 +99,25 @@ class ProductBulkReplicateTest extends TestCase
         $this->assertEqualsCanonicalizing([$bacon->id], $copy->addons->pluck('id')->all());
         $this->assertEquals(5.0, (float) $copy->addons->first()->pivot->price);
         $this->assertSame(2, $copy->addons->first()->pivot->max_quantity);
+    }
+
+    public function test_replicated_product_carries_its_gifts(): void
+    {
+        $product = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $this->pizzas->id, 'name' => 'Calabresa', 'price' => 40]);
+        $soda = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $this->pizzas->id, 'name' => 'Guaraná 1,5L', 'price' => 12]);
+        ProductGift::create(['tenant_id' => $this->tenant->id, 'product_id' => $product->id, 'gift_product_id' => $soda->id, 'quantity' => 2, 'is_active' => true, 'flavor_counts' => [1]]);
+
+        Livewire::test(ListProducts::class)
+            ->selectTableRecords([$product->id])
+            ->callAction(TestAction::make('replicateToCategory')->table()->bulk(), [
+                'category_id' => $this->promocoes->id,
+            ])
+            ->assertHasNoActionErrors();
+
+        $copy = Product::where('category_id', $this->promocoes->id)->where('name', 'Calabresa')->first();
+        $this->assertEqualsCanonicalizing([$soda->id], $copy->gifts->pluck('id')->all());
+        $this->assertSame(2, (int) $copy->gifts->first()->pivot->quantity);
+        $this->assertEqualsCanonicalizing([1], $copy->gifts->first()->pivot->flavor_counts);
     }
 
     public function test_target_category_is_required(): void

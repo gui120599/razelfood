@@ -10,8 +10,9 @@ use Illuminate\Support\Collection;
  * Replica (copia, mantendo os originais) uma lista de produtos para outra
  * categoria/subcategoria. Cada cópia entra no fim da ordem de exibição da
  * categoria de destino, zera `sales_count` e leva junto os adicionais
- * vinculados (pivot `product_addon`) — não copia vínculos de promoção
- * relâmpago (são específicos de cada campanha).
+ * vinculados (pivot `product_addon`) e os brindes vinculados (pivot
+ * `product_gift`, RN-53) — não copia vínculos de promoção relâmpago (são
+ * específicos de cada campanha).
  */
 class ReplicateProductsToCategory
 {
@@ -28,7 +29,7 @@ class ReplicateProductsToCategory
         $created = 0;
 
         foreach ($products as $product) {
-            $product->loadMissing('addons');
+            $product->loadMissing(['addons', 'gifts']);
 
             $copy = $product->replicate(['sales_count']);
             $copy->category_id = $target->id;
@@ -40,6 +41,14 @@ class ReplicateProductsToCategory
                 $copy->addons()->attach($addon->id, [
                     'price' => $addon->pivot->price,
                     'max_quantity' => $addon->pivot->max_quantity,
+                ]);
+            }
+
+            foreach ($product->gifts as $gift) {
+                $copy->gifts()->attach($gift->id, [
+                    'quantity' => $gift->pivot->quantity,
+                    'is_active' => $gift->pivot->is_active,
+                    'flavor_counts' => $gift->pivot->flavor_counts,
                 ]);
             }
 
