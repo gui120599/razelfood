@@ -43,7 +43,7 @@ class ProductForm
                         ->imageEditor()
                         ->imageEditorAspectRatioOptions(['1:1'])
                         ->helperText('Use uma imagem quadrada (mesma largura e altura, ex.: 800×800). Formatos retangulares são recortados no centro ao aparecer no cardápio.')
-                        ->maxSize(2048)
+                        ->maxSize(5120)
                         ->columnSpanFull(),
                 ]),
             Section::make('Preço')
