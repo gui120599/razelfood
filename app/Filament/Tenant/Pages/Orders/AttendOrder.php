@@ -18,6 +18,7 @@ use App\Models\Product;
 use App\Models\ProductAddon;
 use App\Support\CurrentTenant;
 use App\Support\FeatureKey;
+use App\Support\Orders\GiftLineLabel;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Notifications\Notification;
@@ -307,7 +308,7 @@ class AttendOrder extends Page
 
             $giftsDisplay = collect($resolved['gifts'] ?? [])
                 ->filter(fn (array $gift) => $gift['accepted'] === true)
-                ->map(fn (array $gift) => "🎁 {$gift['quantity']}x ".($giftNames->get($gift['gift_product_id']) ?? 'Brinde removido'))
+                ->map(fn (array $gift) => GiftLineLabel::accepted($gift, $item['quantity'], $giftNames->get($gift['gift_product_id']) ?? 'Brinde removido'))
                 ->values()
                 ->all();
 

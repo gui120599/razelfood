@@ -5,6 +5,7 @@ namespace App\Actions\Orders;
 use App\Models\Addon;
 use App\Models\Order;
 use App\Models\Product;
+use App\Support\Orders\GiftLineLabel;
 
 /**
  * RN-27: mensagem estruturada com número do pedido, itens e valores,
@@ -54,7 +55,7 @@ class BuildWhatsAppMessage
                 }
 
                 $giftName = $giftNames->get($gift['gift_product_id'], 'Brinde removido');
-                $lines[] = "   🎁 {$gift['quantity']}x {$giftName} (brinde)";
+                $lines[] = '   '.GiftLineLabel::accepted($gift, $item->quantity, $giftName).' (brinde)';
             }
         }
 

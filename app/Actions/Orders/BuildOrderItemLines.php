@@ -6,6 +6,7 @@ use App\Models\Addon;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
+use App\Support\Orders\GiftLineLabel;
 use Illuminate\Support\Collection;
 
 /**
@@ -52,11 +53,11 @@ class BuildOrderItemLines
                 return "{$selection['quantity']}x {$addonName} ({$target})";
             })->all();
 
-            $giftsDisplay = collect($item->gifts ?? [])->map(function (array $gift) use ($giftNames) {
+            $giftsDisplay = collect($item->gifts ?? [])->map(function (array $gift) use ($giftNames, $item) {
                 $giftName = $giftNames->get($gift['gift_product_id'], 'Brinde removido');
 
                 return ($gift['accepted'] ?? false) === true
-                    ? "🎁 {$gift['quantity']}x {$giftName}"
+                    ? GiftLineLabel::accepted($gift, $item->quantity, $giftName)
                     : "🎁 {$giftName} — recusado pelo cliente";
             })->all();
 

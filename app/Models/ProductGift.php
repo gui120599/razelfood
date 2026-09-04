@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\GiftAwardMode;
 use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\Pivot;
@@ -10,9 +11,10 @@ use Illuminate\Database\Eloquent\Relations\Pivot;
  * Vínculo entre um produto principal e um produto do catálogo oferecido como
  * brinde grátis (RN-53). Espelha ProductAddon: pivot com `id()`, sem timestamps,
  * `tenant_id` preenchido pelo hook de BelongsToTenant. `quantity` = unidades do
- * brinde por unidade do produto principal; `is_active` liga/desliga a oferta sem
- * apagar o cadastro; `flavor_counts` restringe a quais quantidades de sabores o
- * brinde é oferecido (null = todas).
+ * brinde concedidas; `is_active` liga/desliga a oferta sem apagar o cadastro;
+ * `flavor_counts` restringe a quais quantidades de sabores o brinde é oferecido
+ * (null = todas); `award_mode` (GiftAwardMode) decide se `quantity` escala com a
+ * quantidade da linha (per_quantity) ou é fixa por pedido (per_order).
  */
 class ProductGift extends Pivot
 {
@@ -31,6 +33,7 @@ class ProductGift extends Pivot
         'quantity',
         'is_active',
         'flavor_counts',
+        'award_mode',
     ];
 
     protected function casts(): array
@@ -38,6 +41,7 @@ class ProductGift extends Pivot
         return [
             'is_active' => 'boolean',
             'flavor_counts' => 'array',
+            'award_mode' => GiftAwardMode::class,
         ];
     }
 

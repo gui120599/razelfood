@@ -25,6 +25,7 @@ use App\Services\Security\RecaptchaVerifier;
 use App\Support\Cart;
 use App\Support\CurrentTenant;
 use App\Support\NeighborhoodNormalizer;
+use App\Support\Orders\GiftLineLabel;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
@@ -571,7 +572,7 @@ class Checkout extends Component
 
             $giftsDisplay = collect($resolved['gifts'] ?? [])
                 ->filter(fn (array $gift) => $gift['accepted'] === true)
-                ->map(fn (array $gift) => "🎁 {$gift['quantity']}x ".($giftNames->get($gift['gift_product_id']) ?? 'Brinde removido').' — grátis')
+                ->map(fn (array $gift) => GiftLineLabel::accepted($gift, $item['quantity'], $giftNames->get($gift['gift_product_id']) ?? 'Brinde removido').' — grátis')
                 ->values()
                 ->all();
 

@@ -54,6 +54,9 @@
                                                class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-0 dark:border-white/20 dark:bg-transparent">
                                         <span class="text-sm text-gray-800 dark:text-gray-100">
                                             {{ $gift->pivot->quantity }}x {{ $gift->name }} <span class="font-semibold text-emerald-600 dark:text-emerald-400">grátis</span>
+                                            @if (($gift->pivot->award_mode?->value ?? 'per_quantity') === 'per_order')
+                                                <span class="text-xs text-emerald-600/80 dark:text-emerald-400/80">· 1 por pedido</span>
+                                            @endif
                                         </span>
                                     </label>
                                 @endforeach

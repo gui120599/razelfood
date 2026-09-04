@@ -261,6 +261,9 @@
                                                class="h-5 w-5 rounded border-white/20 bg-transparent text-emerald-500 focus:ring-0">
                                         <span class="text-sm text-gray-100">
                                             Quero receber {{ $gift->pivot->quantity }}x {{ $gift->name }} <span class="font-semibold text-emerald-300">grátis</span>
+                                            @if (($gift->pivot->award_mode?->value ?? 'per_quantity') === 'per_order')
+                                                <span class="text-xs text-emerald-400/80">· 1 por pedido</span>
+                                            @endif
                                         </span>
                                     </label>
                                 @endforeach
@@ -311,6 +314,9 @@
                                        class="h-5 w-5 rounded border-white/20 bg-transparent text-emerald-500 focus:ring-0">
                                 <span class="text-sm text-gray-100">
                                     Quero receber {{ $gift->pivot->quantity }}x {{ $gift->name }} <span class="font-semibold text-emerald-300">grátis</span>
+                                    @if (($gift->pivot->award_mode?->value ?? 'per_quantity') === 'per_order')
+                                        <span class="text-xs text-emerald-400/80">· 1 por pedido</span>
+                                    @endif
                                 </span>
                             </label>
                         @endforeach

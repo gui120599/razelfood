@@ -15,6 +15,7 @@ use App\Models\ProductionLine;
 use App\Models\User;
 use App\Support\CurrentTenant;
 use App\Support\FeatureKey;
+use App\Support\Orders\GiftLineLabel;
 use App\Support\Orders\OrderUrgencyResolver;
 use App\Support\Orders\ResolveActiveShiftStart;
 use App\Support\Preferences\PersistsFilterPreferences;
@@ -280,11 +281,11 @@ class Kitchen extends Page
                     return "{$selection['quantity']}x {$name} ({$target})";
                 })->all();
 
-                $item->giftsDisplay = collect($item->gifts ?? [])->map(function (array $gift) use ($giftNames) {
+                $item->giftsDisplay = collect($item->gifts ?? [])->map(function (array $gift) use ($giftNames, $item) {
                     $name = $giftNames->get($gift['gift_product_id'])?->name ?? 'Brinde removido';
 
                     return ($gift['accepted'] ?? false) === true
-                        ? "🎁 {$gift['quantity']}x {$name}"
+                        ? GiftLineLabel::accepted($gift, $item->quantity, $name)
                         : "🎁 {$name} — recusado pelo cliente";
                 })->all();
             }

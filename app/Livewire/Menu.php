@@ -13,6 +13,7 @@ use App\Models\FlashPromotion;
 use App\Models\Product;
 use App\Support\Cart;
 use App\Support\CurrentTenant;
+use App\Support\Orders\GiftLineLabel;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -758,7 +759,7 @@ class Menu extends Component
 
             $giftsDisplay = collect($resolved['gifts'] ?? [])
                 ->filter(fn (array $gift) => $gift['accepted'] === true)
-                ->map(fn (array $gift) => "🎁 {$gift['quantity']}x ".($giftNames->get($gift['gift_product_id']) ?? 'Brinde removido').' — grátis')
+                ->map(fn (array $gift) => GiftLineLabel::accepted($gift, $item['quantity'], $giftNames->get($gift['gift_product_id']) ?? 'Brinde removido').' — grátis')
                 ->values()
                 ->all();
 
