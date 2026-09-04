@@ -29,10 +29,11 @@ class CartStockAndPromotionLedger
      */
     public function buildConsumptionMaps(Collection $resolvedLines): array
     {
-        $promoConsumption = [];    // "{promoId}:{productId}" => qty
-        $stockConsumption = [];    // productId => qty
-        $addonConsumption = [];    // addonId => qty (fração, via target_share)
-        $giftSalesExclusion = []; // productId => qty de brinde (some de sales_count, NÃO de stock_quantity — RN-53 decisão #3)
+        $promoConsumption = [];     // "{promoId}:{productId}" => qty
+        $stockConsumption = [];     // productId => qty
+        $addonConsumption = [];     // addonId => qty (fração, via target_share)
+        $giftSalesExclusion = [];   // productId => qty de brinde (some de sales_count, NÃO de stock_quantity — RN-53 decisão #3)
+        $perOrderGiftUnits = [];    // productId => qty de brinde "por pedido" (RN-53) — somada UMA vez, depois do loop
 
         foreach ($resolvedLines as $line) {
             $quantity = $line['item']['quantity'];
@@ -45,13 +46,23 @@ class CartStockAndPromotionLedger
             // Brinde aceito (RN-53): sai do estoque físico pelo mesmo fluxo dos
             // demais produtos (entra em $stockConsumption → lock + assert +
             // débito de stock_quantity), mas é registrado em $giftSalesExclusion
-            // para NÃO inflar sales_count / "mais vendidos" (RN-15).
+            // para NÃO inflar sales_count / "mais vendidos" (RN-15). O modo
+            // `per_order` sai uma única vez no pedido inteiro (acumulado à parte
+            // e somado depois do loop, pegando a maior quantidade se o mesmo
+            // brinde vier de vínculos diferentes).
             foreach ($line['resolved']['gifts'] ?? [] as $giftLine) {
                 if (($giftLine['accepted'] ?? false) !== true) {
                     continue;
                 }
 
                 $giftProductId = $giftLine['gift_product_id'];
+
+                if (($giftLine['award_mode'] ?? 'per_quantity') === 'per_order') {
+                    $perOrderGiftUnits[$giftProductId] = max($perOrderGiftUnits[$giftProductId] ?? 0, $giftLine['quantity']);
+
+                    continue;
+                }
+
                 $giftUnits = $quantity * $giftLine['quantity'];
                 $stockConsumption[$giftProductId] = ($stockConsumption[$giftProductId] ?? 0) + $giftUnits;
                 $giftSalesExclusion[$giftProductId] = ($giftSalesExclusion[$giftProductId] ?? 0) + $giftUnits;
@@ -86,6 +97,13 @@ class CartStockAndPromotionLedger
                 $key = "{$line['resolved']['flash_promotion_id']}:{$productId}";
                 $promoConsumption[$key] = ($promoConsumption[$key] ?? 0) + $quantity;
             }
+        }
+
+        // Brinde "por pedido" (RN-53): somado uma única vez, independente de
+        // quantas linhas/unidades o dispararam.
+        foreach ($perOrderGiftUnits as $giftProductId => $units) {
+            $stockConsumption[$giftProductId] = ($stockConsumption[$giftProductId] ?? 0) + $units;
+            $giftSalesExclusion[$giftProductId] = ($giftSalesExclusion[$giftProductId] ?? 0) + $units;
         }
 
         return [$promoConsumption, $stockConsumption, $addonConsumption, $giftSalesExclusion];

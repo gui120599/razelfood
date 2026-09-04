@@ -2,6 +2,7 @@
 
 namespace App\Actions\Menu;
 
+use App\Enums\GiftAwardMode;
 use App\Models\Addon;
 use App\Models\Category;
 use App\Models\FlavorQuantityOption;
@@ -26,7 +27,7 @@ class ResolvePriceForCartLine
 
     /**
      * @param  array{type: string, product_id: int, flavor_ids: array<int>, quantity: int, note: ?string, addons?: array<int, array{addon_id:int, quantity:int, target:?int}>, gifts?: array<int, array{gift_product_id:int, accepted:bool}>}  $cartItem
-     * @return array{unit_price: float, original_unit_price: float, flash_promotion_id: ?int, flavor_prices: array<int, ResolvedPrice>, flavor_shares: array<int, float>, addons_total: float, addons: array<int, array{addon_id:int, quantity:int, target:?int, target_share:float, unit_cost:float}>, gifts: array<int, array{gift_product_id:int, quantity:int, accepted:bool}>}
+     * @return array{unit_price: float, original_unit_price: float, flash_promotion_id: ?int, flavor_prices: array<int, ResolvedPrice>, flavor_shares: array<int, float>, addons_total: float, addons: array<int, array{addon_id:int, quantity:int, target:?int, target_share:float, unit_cost:float}>, gifts: array<int, array{gift_product_id:int, quantity:int, accepted:bool, award_mode:string}>}
      */
     public function __invoke(array $cartItem): array
     {
@@ -55,7 +56,7 @@ class ResolvePriceForCartLine
      * @param  array<int>  $flavorIds
      * @param  array<int, array{addon_id:int, quantity:int, target:?int}>  $addonSelections
      * @param  array<int, array{gift_product_id:int, accepted:bool}>  $giftSelections
-     * @return array{unit_price: float, original_unit_price: float, flash_promotion_id: ?int, flavor_prices: array<int, ResolvedPrice>, flavor_shares: array<int, float>, addons_total: float, addons: array<int, array{addon_id:int, quantity:int, target:?int, target_share:float, unit_cost:float}>, gifts: array<int, array{gift_product_id:int, quantity:int, accepted:bool}>}
+     * @return array{unit_price: float, original_unit_price: float, flash_promotion_id: ?int, flavor_prices: array<int, ResolvedPrice>, flavor_shares: array<int, float>, addons_total: float, addons: array<int, array{addon_id:int, quantity:int, target:?int, target_share:float, unit_cost:float}>, gifts: array<int, array{gift_product_id:int, quantity:int, accepted:bool, award_mode:string}>}
      */
     private function resolveCombo(array $flavorIds, array $addonSelections = [], array $giftSelections = []): array
     {
@@ -214,7 +215,7 @@ class ResolvePriceForCartLine
      * @param  array<int, array{gift_product_id:int, accepted:bool}>  $giftSelections
      * @param  array<int>  $anchorProductIds  [product_id] no simples; flavor_ids no combo
      * @param  int  $flavorCount  1 no produto simples; count($flavorIds) no combo
-     * @return array{gifts: array<int, array{gift_product_id:int, quantity:int, accepted:bool}>}
+     * @return array{gifts: array<int, array{gift_product_id:int, quantity:int, accepted:bool, award_mode:string}>}
      */
     private function resolveGifts(array $giftSelections, array $anchorProductIds, int $flavorCount): array
     {
@@ -246,6 +247,11 @@ class ResolvePriceForCartLine
                 'gift_product_id' => (int) $group->first()->id,
                 'quantity' => max(1, (int) $group->max(fn (Product $gift) => $gift->pivot->quantity)),
                 'accepted' => in_array((int) $group->first()->id, $acceptedIds, true),
+                // Conflito entre vínculos do mesmo brinde (2 sabores de um combo):
+                // per_quantity vence — é a contagem física mais segura.
+                'award_mode' => $group->contains(fn (Product $gift) => $gift->pivot->award_mode === GiftAwardMode::PerQuantity)
+                    ? GiftAwardMode::PerQuantity->value
+                    : GiftAwardMode::PerOrder->value,
             ])
             ->values()
             ->all();

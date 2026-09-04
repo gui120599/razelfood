@@ -5,6 +5,7 @@ namespace App\Filament\Tenant\Resources\Orders\RelationManagers;
 use App\Models\Addon;
 use App\Models\OrderItem;
 use App\Models\Product;
+use App\Support\Orders\GiftLineLabel;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
@@ -61,11 +62,11 @@ class ItemsRelationManager extends RelationManager
                 TextColumn::make('gifts_display')
                     ->label('Brindes')
                     ->state(fn (OrderItem $record) => collect($record->gifts ?? [])
-                        ->map(function (array $gift) {
+                        ->map(function (array $gift) use ($record) {
                             $name = Product::withTrashed()->find($gift['gift_product_id'])?->name ?? 'Brinde removido';
 
                             return ($gift['accepted'] ?? false) === true
-                                ? "🎁 {$gift['quantity']}x {$name}"
+                                ? GiftLineLabel::accepted($gift, $record->quantity, $name)
                                 : "🎁 {$name} (recusado)";
                         })
                         ->implode(' / '))

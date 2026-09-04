@@ -66,7 +66,7 @@
                             @php($giftName = \App\Models\Product::withTrashed()->find($gift['gift_product_id'])?->name ?? 'Brinde removido')
                             <p class="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                                 {{ ($gift['accepted'] ?? false) === true
-                                    ? "🎁 {$gift['quantity']}x {$giftName}"
+                                    ? \App\Support\Orders\GiftLineLabel::accepted($gift, $item->quantity, $giftName)
                                     : "🎁 {$giftName} — recusado pelo cliente" }}
                             </p>
                         @endforeach

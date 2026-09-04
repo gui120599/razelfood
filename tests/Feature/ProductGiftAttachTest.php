@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\GiftAwardMode;
 use App\Enums\TenantStatus;
 use App\Filament\Tenant\Resources\Products\Pages\EditProduct;
 use App\Filament\Tenant\Resources\Products\RelationManagers\GiftsRelationManager;
@@ -61,6 +62,7 @@ class ProductGiftAttachTest extends TestCase
             ->callAction(TestAction::make('attach')->table(), [
                 'recordId' => [$gift->id],
                 'quantity' => 2,
+                'award_mode' => 'per_order',
                 'is_active' => true,
             ])
             ->assertHasNoActionErrors();
@@ -74,6 +76,26 @@ class ProductGiftAttachTest extends TestCase
         $this->assertSame($tenant->id, $pivot->tenant_id);
         $this->assertSame(2, (int) $pivot->quantity);
         $this->assertTrue($pivot->is_active);
+        $this->assertSame(GiftAwardMode::PerOrder, $pivot->award_mode);
+    }
+
+    public function test_attaching_a_gift_defaults_award_mode_to_per_quantity(): void
+    {
+        [, $product, $gift] = $this->makeTenantProductAndGift();
+
+        Livewire::test(GiftsRelationManager::class, [
+            'ownerRecord' => $product,
+            'pageClass' => EditProduct::class,
+        ])
+            ->callAction(TestAction::make('attach')->table(), [
+                'recordId' => [$gift->id],
+                'quantity' => 1,
+                'is_active' => true,
+            ])
+            ->assertHasNoActionErrors();
+
+        $pivot = ProductGift::where('product_id', $product->id)->where('gift_product_id', $gift->id)->first();
+        $this->assertSame(GiftAwardMode::PerQuantity, $pivot->award_mode);
     }
 
     public function test_the_product_cannot_be_offered_as_a_gift_of_itself(): void

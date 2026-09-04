@@ -74,7 +74,7 @@ class Product extends TenantScopedModel
     {
         return $this->belongsToMany(Product::class, 'product_gift', 'product_id', 'gift_product_id')
             ->using(ProductGift::class)
-            ->withPivot(['quantity', 'is_active', 'flavor_counts']);
+            ->withPivot(['quantity', 'is_active', 'flavor_counts', 'award_mode']);
     }
 
     /**
@@ -86,7 +86,7 @@ class Product extends TenantScopedModel
     {
         return $this->belongsToMany(Product::class, 'product_gift', 'gift_product_id', 'product_id')
             ->using(ProductGift::class)
-            ->withPivot(['quantity', 'is_active', 'flavor_counts']);
+            ->withPivot(['quantity', 'is_active', 'flavor_counts', 'award_mode']);
     }
 
     protected function imageUrl(): Attribute

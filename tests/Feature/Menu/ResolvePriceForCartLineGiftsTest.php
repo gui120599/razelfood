@@ -47,7 +47,7 @@ class ResolvePriceForCartLineGiftsTest extends TestCase
         ]);
 
         $this->assertSame([
-            ['gift_product_id' => $gift->id, 'quantity' => 2, 'accepted' => true],
+            ['gift_product_id' => $gift->id, 'quantity' => 2, 'accepted' => true, 'award_mode' => 'per_quantity'],
         ], $resolved['gifts']);
         $this->assertSame(45.0, $resolved['unit_price']);
         $this->assertSame(0.0, $resolved['addons_total']);
@@ -63,7 +63,7 @@ class ResolvePriceForCartLineGiftsTest extends TestCase
         ]);
 
         $this->assertSame([
-            ['gift_product_id' => $gift->id, 'quantity' => 1, 'accepted' => false],
+            ['gift_product_id' => $gift->id, 'quantity' => 1, 'accepted' => false, 'award_mode' => 'per_quantity'],
         ], $resolved['gifts']);
     }
 
@@ -151,8 +151,41 @@ class ResolvePriceForCartLineGiftsTest extends TestCase
         ]);
 
         $this->assertSame([
-            ['gift_product_id' => $soda->id, 'quantity' => 2, 'accepted' => true],
+            ['gift_product_id' => $soda->id, 'quantity' => 2, 'accepted' => true, 'award_mode' => 'per_quantity'],
         ], $resolved['gifts']);
+    }
+
+    public function test_award_mode_conflict_between_two_flavors_resolves_to_per_quantity(): void
+    {
+        $category = Category::create(['tenant_id' => $this->tenant->id, 'name' => 'Pizzas', 'display_order' => 1, 'allows_flavors' => true]);
+        FlavorQuantityOption::create(['tenant_id' => $this->tenant->id, 'category_id' => $category->id, 'label' => 'Meio a meio', 'flavor_count' => 2, 'display_order' => 1]);
+
+        $flavorA = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $category->id, 'name' => 'Calabresa', 'price' => 40]);
+        $flavorB = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $category->id, 'name' => 'Marguerita', 'price' => 50]);
+        $soda = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $category->id, 'name' => 'Guaraná 1,5L', 'price' => 12]);
+
+        ProductGift::create(['tenant_id' => $this->tenant->id, 'product_id' => $flavorA->id, 'gift_product_id' => $soda->id, 'quantity' => 1, 'is_active' => true, 'award_mode' => 'per_order']);
+        ProductGift::create(['tenant_id' => $this->tenant->id, 'product_id' => $flavorB->id, 'gift_product_id' => $soda->id, 'quantity' => 1, 'is_active' => true, 'award_mode' => 'per_quantity']);
+
+        $resolved = app(ResolvePriceForCartLine::class)([
+            'type' => 'combo', 'product_id' => $flavorA->id, 'flavor_ids' => [$flavorA->id, $flavorB->id], 'quantity' => 1, 'note' => null,
+            'gifts' => [['gift_product_id' => $soda->id, 'accepted' => true]],
+        ]);
+
+        $this->assertSame('per_quantity', $resolved['gifts'][0]['award_mode']);
+    }
+
+    public function test_per_order_link_resolves_with_award_mode_per_order(): void
+    {
+        [$product, $gift] = $this->makeProductWithGift();
+        ProductGift::where('product_id', $product->id)->update(['award_mode' => 'per_order']);
+
+        $resolved = app(ResolvePriceForCartLine::class)([
+            'type' => 'simple', 'product_id' => $product->id, 'flavor_ids' => [], 'quantity' => 1, 'note' => null,
+            'gifts' => [['gift_product_id' => $gift->id, 'accepted' => true]],
+        ]);
+
+        $this->assertSame('per_order', $resolved['gifts'][0]['award_mode']);
     }
 
     /**

@@ -133,4 +133,28 @@ class BuildOrderItemLinesTest extends TestCase
             '🎁 Suco de Laranja — recusado pelo cliente',
         ], $line['gifts_display']);
     }
+
+    public function test_gift_display_shows_effective_quantity_per_unit_and_marks_per_order(): void
+    {
+        $order = $this->makeOrder();
+        $product = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $this->category->id, 'name' => 'Pizza Calabresa', 'price' => 65]);
+        $soda = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $this->category->id, 'name' => 'Guaraná 1,5L', 'price' => 12]);
+        $water = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $this->category->id, 'name' => 'Água 500ml', 'price' => 5]);
+
+        OrderItem::create([
+            'order_id' => $order->id, 'product_id' => $product->id, 'quantity' => 3,
+            'unit_price' => 65, 'original_unit_price' => 65, 'addons_total' => 0,
+            'gifts' => [
+                ['gift_product_id' => $soda->id, 'quantity' => 1, 'accepted' => true, 'award_mode' => 'per_quantity'],
+                ['gift_product_id' => $water->id, 'quantity' => 1, 'accepted' => true, 'award_mode' => 'per_order'],
+            ],
+        ]);
+
+        $line = app(BuildOrderItemLines::class)($order->fresh('items'))->first();
+
+        $this->assertSame([
+            '🎁 3x Guaraná 1,5L',            // 1 × 3 unidades da linha
+            '🎁 1x Água 500ml · por pedido', // fixo, não multiplica
+        ], $line['gifts_display']);
+    }
 }

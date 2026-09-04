@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\GiftAwardMode;
 use App\Enums\TenantStatus;
 use App\Filament\Tenant\Resources\Products\Pages\ListProducts;
 use App\Models\Category;
@@ -66,6 +67,7 @@ class ProductGiftBulkAttachTest extends TestCase
             ->callAction(TestAction::make('attachGift')->table()->bulk(), [
                 'gift_product_id' => $soda->id,
                 'quantity' => 2,
+                'award_mode' => 'per_order',
                 'is_active' => true,
                 'flavor_counts' => [1, 2],
             ])
@@ -78,6 +80,7 @@ class ProductGiftBulkAttachTest extends TestCase
             $this->assertSame($this->tenant->id, $pivot->tenant_id);
             $this->assertSame(2, (int) $pivot->quantity);
             $this->assertTrue($pivot->is_active);
+            $this->assertSame(GiftAwardMode::PerOrder, $pivot->award_mode);
             $this->assertEqualsCanonicalizing([1, 2], $pivot->flavor_counts);
         }
     }

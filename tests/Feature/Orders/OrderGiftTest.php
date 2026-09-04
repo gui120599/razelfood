@@ -92,7 +92,7 @@ class OrderGiftTest extends TestCase
         $this->assertSame('0.00', (string) $order->discount_total);
 
         $this->assertEquals([
-            ['gift_product_id' => $this->gift->id, 'quantity' => 1, 'accepted' => true],
+            ['gift_product_id' => $this->gift->id, 'quantity' => 1, 'accepted' => true, 'award_mode' => 'per_quantity'],
         ], $order->items->first()->gifts);
     }
 
@@ -109,7 +109,7 @@ class OrderGiftTest extends TestCase
 
         $this->assertSame('10.00', $this->gift->fresh()->stock_quantity);
         $this->assertEquals([
-            ['gift_product_id' => $this->gift->id, 'quantity' => 1, 'accepted' => false],
+            ['gift_product_id' => $this->gift->id, 'quantity' => 1, 'accepted' => false, 'award_mode' => 'per_quantity'],
         ], $order->items->first()->gifts);
     }
 
@@ -144,7 +144,7 @@ class OrderGiftTest extends TestCase
 
         $this->assertSame('10.00', $this->gift->fresh()->stock_quantity);
         $this->assertEquals([
-            ['gift_product_id' => $this->gift->id, 'quantity' => 1, 'accepted' => false],
+            ['gift_product_id' => $this->gift->id, 'quantity' => 1, 'accepted' => false, 'award_mode' => 'per_quantity'],
         ], $order->fresh()->items->first()->gifts);
     }
 
@@ -155,5 +155,44 @@ class OrderGiftTest extends TestCase
         ProductGift::where('product_id', $this->product->id)->update(['quantity' => 5]);
 
         $this->assertSame(1, $order->fresh()->items->first()->gifts[0]['quantity']);
+    }
+
+    public function test_per_order_gift_does_not_scale_with_parent_line_quantity(): void
+    {
+        ProductGift::where('product_id', $this->product->id)->update(['award_mode' => 'per_order']);
+
+        $order = $this->placeOrder([['gift_product_id' => $this->gift->id, 'accepted' => true]], quantity: 3, amount: 195.0);
+
+        // 3 pizzas, mas o brinde é "por pedido" → sai 1 unidade só.
+        $this->assertSame('9.00', $this->gift->fresh()->stock_quantity);
+        $this->assertSame('0.00', $this->gift->fresh()->sales_count);
+        $this->assertSame('per_order', $order->items->first()->gifts[0]['award_mode']);
+    }
+
+    public function test_per_order_gift_from_two_products_of_the_order_is_awarded_once(): void
+    {
+        ProductGift::where('product_id', $this->product->id)->update(['award_mode' => 'per_order']);
+
+        $otherPizza = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $this->product->category_id, 'name' => 'Pizza Mussarela', 'price' => 55]);
+        ProductGift::create(['tenant_id' => $this->tenant->id, 'product_id' => $otherPizza->id, 'gift_product_id' => $this->gift->id, 'quantity' => 1, 'is_active' => true, 'award_mode' => 'per_order']);
+
+        app(CreateOrderFromCart::class)(
+            [
+                ['type' => 'simple', 'product_id' => $this->product->id, 'flavor_ids' => [], 'quantity' => 1, 'note' => null, 'addons' => [], 'gifts' => [['gift_product_id' => $this->gift->id, 'accepted' => true]]],
+                ['type' => 'simple', 'product_id' => $otherPizza->id, 'flavor_ids' => [], 'quantity' => 2, 'note' => null, 'addons' => [], 'gifts' => [['gift_product_id' => $this->gift->id, 'accepted' => true]]],
+            ],
+            [
+                'phone' => '11999990000', 'name' => 'Cliente Teste', 'zip_code' => null,
+                'street' => null, 'number' => null, 'complement' => null,
+                'neighborhood' => null, 'city' => null, 'state' => null,
+                'delivery_option_id' => null,
+                'payments' => [['payment_option_id' => $this->paymentOption->id, 'amount' => 175.0, 'change_for' => null]],
+            ],
+            origin: OrderOrigin::Staff,
+            bypassBusinessHours: true,
+        );
+
+        // Dois produtos do pedido dão o mesmo brinde "por pedido" → 1 unidade só.
+        $this->assertSame('9.00', $this->gift->fresh()->stock_quantity);
     }
 }

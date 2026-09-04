@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\GiftAwardMode;
 use App\Enums\TenantStatus;
 use App\Filament\Tenant\Resources\Products\Pages\ListProducts;
 use App\Models\Addon;
@@ -105,7 +106,7 @@ class ProductBulkReplicateTest extends TestCase
     {
         $product = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $this->pizzas->id, 'name' => 'Calabresa', 'price' => 40]);
         $soda = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $this->pizzas->id, 'name' => 'Guaraná 1,5L', 'price' => 12]);
-        ProductGift::create(['tenant_id' => $this->tenant->id, 'product_id' => $product->id, 'gift_product_id' => $soda->id, 'quantity' => 2, 'is_active' => true, 'flavor_counts' => [1]]);
+        ProductGift::create(['tenant_id' => $this->tenant->id, 'product_id' => $product->id, 'gift_product_id' => $soda->id, 'quantity' => 2, 'is_active' => true, 'flavor_counts' => [1], 'award_mode' => 'per_order']);
 
         Livewire::test(ListProducts::class)
             ->selectTableRecords([$product->id])
@@ -117,6 +118,7 @@ class ProductBulkReplicateTest extends TestCase
         $copy = Product::where('category_id', $this->promocoes->id)->where('name', 'Calabresa')->first();
         $this->assertEqualsCanonicalizing([$soda->id], $copy->gifts->pluck('id')->all());
         $this->assertSame(2, (int) $copy->gifts->first()->pivot->quantity);
+        $this->assertSame(GiftAwardMode::PerOrder, $copy->gifts->first()->pivot->award_mode);
         $this->assertEqualsCanonicalizing([1], $copy->gifts->first()->pivot->flavor_counts);
     }
 

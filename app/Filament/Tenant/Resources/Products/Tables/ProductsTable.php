@@ -5,6 +5,7 @@ namespace App\Filament\Tenant\Resources\Products\Tables;
 use App\Actions\Products\AdjustProductsPrice;
 use App\Actions\Products\AttachGiftToProducts;
 use App\Actions\Products\ReplicateProductsToCategory;
+use App\Enums\GiftAwardMode;
 use App\Filament\Support\InputMasks;
 use App\Filament\Tenant\Support\CategoryOptions;
 use App\Models\Category;
@@ -20,6 +21,7 @@ use Filament\Actions\ReplicateAction;
 use Filament\Actions\RestoreAction;
 use Filament\Actions\RestoreBulkAction;
 use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -185,8 +187,13 @@ class ProductsTable
                                 ->numeric()
                                 ->default(1)
                                 ->minValue(1)
+                                ->required(),
+                            Radio::make('award_mode')
+                                ->label('Concessão do brinde')
+                                ->options(GiftAwardMode::options())
+                                ->default(GiftAwardMode::PerQuantity->value)
                                 ->required()
-                                ->helperText('Unidades do brinde por unidade do produto principal.'),
+                                ->helperText('Por unidade: escala com a quantidade pedida (3 pizzas = 3 brindes). Uma vez por pedido: sai só 1 vez, não importa a quantidade.'),
                             Toggle::make('is_active')
                                 ->label('Ativo')
                                 ->default(true),
@@ -207,6 +214,7 @@ class ProductsTable
                                 (int) $data['gift_product_id'],
                                 (int) $data['quantity'],
                                 (bool) ($data['is_active'] ?? false),
+                                $data['award_mode'] ?? GiftAwardMode::PerQuantity,
                                 $data['flavor_counts'] ?? null,
                             );
 

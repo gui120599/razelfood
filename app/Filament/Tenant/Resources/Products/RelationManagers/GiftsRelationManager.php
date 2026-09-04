@@ -2,12 +2,14 @@
 
 namespace App\Filament\Tenant\Resources\Products\RelationManagers;
 
+use App\Enums\GiftAwardMode;
 use App\Models\Product;
 use Filament\Actions\AttachAction;
 use Filament\Actions\DetachAction;
 use Filament\Actions\DetachBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -20,8 +22,9 @@ use Illuminate\Database\Eloquent\Builder;
 /**
  * Produtos do catálogo oferecidos como brinde grátis quando este produto é
  * comprado (RN-53). Espelha AddonsRelationManager (RelationManager com
- * AttachAction, sem Repeater). `pivot.quantity` = unidades do brinde por
- * unidade do produto principal; `pivot.is_active` liga/desliga a oferta sem
+ * AttachAction, sem Repeater). `pivot.quantity` = unidades concedidas;
+ * `pivot.award_mode` decide se escala com a quantidade da linha (per_quantity)
+ * ou é fixa por pedido (per_order); `pivot.is_active` liga/desliga a oferta sem
  * remover o vínculo; `pivot.flavor_counts` restringe a quais quantidades de
  * sabores o brinde é oferecido (vazio = todas). O brinde entra no pedido
  * sempre a R$ 0,00.
@@ -52,6 +55,11 @@ class GiftsRelationManager extends RelationManager
                     ->label('Produto brinde'),
                 TextColumn::make('pivot.quantity')
                     ->label('Quantidade'),
+                TextColumn::make('pivot.award_mode')
+                    ->label('Concessão')
+                    ->formatStateUsing(fn ($state): string => $state instanceof GiftAwardMode
+                        ? $state->label()
+                        : GiftAwardMode::tryFrom((string) $state)?->label() ?? '—'),
                 IconColumn::make('pivot.is_active')
                     ->label('Ativo')
                     ->boolean(),
@@ -74,8 +82,13 @@ class GiftsRelationManager extends RelationManager
                             ->numeric()
                             ->default(1)
                             ->minValue(1)
+                            ->required(),
+                        Radio::make('award_mode')
+                            ->label('Concessão do brinde')
+                            ->options(GiftAwardMode::options())
+                            ->default(GiftAwardMode::PerQuantity->value)
                             ->required()
-                            ->helperText('Unidades do brinde por unidade do produto principal.'),
+                            ->helperText('Por unidade: escala com a quantidade pedida (3 pizzas = 3 brindes). Uma vez por pedido: sai só 1 vez, não importa a quantidade nem quantos produtos do pedido dão o brinde.'),
                         Toggle::make('is_active')
                             ->label('Ativo')
                             ->default(true),
@@ -94,6 +107,11 @@ class GiftsRelationManager extends RelationManager
                             ->numeric()
                             ->minValue(1)
                             ->required(),
+                        Radio::make('award_mode')
+                            ->label('Concessão do brinde')
+                            ->options(GiftAwardMode::options())
+                            ->required()
+                            ->helperText('Por unidade: escala com a quantidade pedida. Uma vez por pedido: sai só 1 vez no pedido inteiro.'),
                         Toggle::make('is_active')
                             ->label('Ativo'),
                         CheckboxList::make('flavor_counts')

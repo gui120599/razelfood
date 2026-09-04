@@ -2,15 +2,16 @@
 
 namespace App\Actions\Products;
 
+use App\Enums\GiftAwardMode;
 use App\Models\Product;
 use Illuminate\Support\Collection;
 
 /**
  * Vincula um mesmo produto-brinde (RN-53) a vários produtos principais de uma
  * vez, a partir da listagem de produtos. Se o vínculo já existir, atualiza a
- * quantidade / o estado ativo / as quantidades de sabores. Um produto nunca é
- * brinde de si mesmo (silenciosamente pulado). `tenant_id` do pivot é
- * preenchido pelo hook de BelongsToTenant em ProductGift::creating.
+ * quantidade / a concessão / o estado ativo / as quantidades de sabores. Um
+ * produto nunca é brinde de si mesmo (silenciosamente pulado). `tenant_id` do
+ * pivot é preenchido pelo hook de BelongsToTenant em ProductGift::creating.
  */
 class AttachGiftToProducts
 {
@@ -24,15 +25,21 @@ class AttachGiftToProducts
         int $giftProductId,
         int $quantity,
         bool $isActive,
+        GiftAwardMode|string $awardMode = GiftAwardMode::PerQuantity,
         ?array $flavorCounts = null,
     ): int {
         $flavorCounts = empty($flavorCounts)
             ? null
             : collect($flavorCounts)->map(fn ($count): int => (int) $count)->sort()->values()->all();
 
+        $awardMode = $awardMode instanceof GiftAwardMode
+            ? $awardMode
+            : GiftAwardMode::tryFrom($awardMode) ?? GiftAwardMode::PerQuantity;
+
         $pivot = [
             'quantity' => max(1, $quantity),
             'is_active' => $isActive,
+            'award_mode' => $awardMode->value,
             'flavor_counts' => $flavorCounts,
         ];
 

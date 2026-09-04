@@ -48,6 +48,7 @@ class ReplicateProductsToCategory
                 $copy->gifts()->attach($gift->id, [
                     'quantity' => $gift->pivot->quantity,
                     'is_active' => $gift->pivot->is_active,
+                    'award_mode' => $gift->pivot->award_mode,
                     'flavor_counts' => $gift->pivot->flavor_counts,
                 ]);
             }
