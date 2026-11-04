@@ -41,6 +41,10 @@ return [
         'livewire', 'filament', 'sanctum', 'storage', 'up', 'build', 'vendor',
         'assets', 'static', 'css', 'js', 'images', 'img', 'fonts',
         'favicon.ico', 'robots.txt',
+        // prefixos de integrações/painéis das próximas fases (reservados antes
+        // de existirem as rotas — MT-09): webhooks externos (/webhooks/...),
+        // painel do garçom (/garcom/{slug}), KDS da cozinha e mesa (QR).
+        'webhooks', 'garcom', 'cozinha', 'mesa',
         // segmentos das próprias rotas públicas do tenant
         'checkout', 'acompanhar', 'comanda', 'entrega', 'relatorios',
         // genéricos / marketing / reservados históricos

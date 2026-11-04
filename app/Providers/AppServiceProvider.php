@@ -9,7 +9,10 @@ use App\Filament\Tenant\Livewire\Orders\FlavorPickerModal;
 use App\Filament\Tenant\Livewire\Orders\FulfillmentPicker;
 use App\Filament\Tenant\Livewire\Orders\ProductCatalogSelector;
 use App\Models\User;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Livewire\Livewire;
 
@@ -46,5 +49,16 @@ class AppServiceProvider extends ServiceProvider
         Livewire::component('tenant-order-addon-picker', AddonPickerModal::class);
         Livewire::component('tenant-order-client-lookup', ClientLookup::class);
         Livewire::component('tenant-order-fulfillment-picker', FulfillmentPicker::class);
+
+        // Rate limit dos webhooks externos (/webhooks/...): um teto por IP +
+        // token (o provedor legítimo) e outro, maior, só por IP (varredura de
+        // tokens). Roda antes do middleware de token. Usa o store de cache padrão
+        // (CACHE_STORE=database aqui): ver `cache.limiter` no relatório da Fase 0.
+        RateLimiter::for('webhooks', fn (Request $request): array => [
+            Limit::perMinute((int) config('webhooks.rate_limit_per_minute'))
+                ->by('webhooks:'.$request->ip().'|'.$request->route('token')),
+            Limit::perMinute((int) config('webhooks.rate_limit_per_ip_per_minute'))
+                ->by('webhooks-ip:'.$request->ip()),
+        ]);
     }
 }

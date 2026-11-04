@@ -54,6 +54,7 @@ class Tenant extends Model
             'watermark_height' => 'integer',
             'show_logo_on_prints' => 'boolean',
             'recaptcha_enabled' => 'boolean',
+            'recaptcha_secret_key' => 'encrypted',
             'serves_unlisted_neighborhoods' => 'boolean',
             'unlisted_neighborhood_fee' => 'decimal:2',
             'uses_in_transit_stage' => 'boolean',
