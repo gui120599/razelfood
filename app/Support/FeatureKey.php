@@ -32,4 +32,10 @@ final class FeatureKey
     public const NFE_EMISSAO = 'nfe_emissao';
 
     public const NFE_ENTRADA = 'nfe_entrada';
+
+    /**
+     * Cobrança em maquininha via Stone Connect. Reservada (is_available =
+     * false) até a Fase 2 do plano de migração do Pizzaria-App.
+     */
+    public const STONE_CONNECT = 'stone_connect';
 }

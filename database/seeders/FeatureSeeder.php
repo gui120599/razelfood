@@ -22,10 +22,11 @@ class FeatureSeeder extends Seeder
             ['key' => FeatureKey::LINHAS_PRODUCAO, 'name' => 'Linhas de Produção', 'description' => 'Agrupamento de categorias por linha de produção, usado no filtro da Central de Pedidos.', 'is_available' => true, 'display_order' => 6],
             ['key' => FeatureKey::USUARIOS_PERMISSOES, 'name' => 'Usuários e Permissões', 'description' => 'Gestão de papéis e permissões da equipe do tenant (Filament Shield).', 'is_available' => true, 'display_order' => 7],
             ['key' => FeatureKey::RELATORIOS, 'name' => 'Relatórios', 'description' => 'Dashboard de indicadores operacionais por período (pedidos por status/dia/hora/origem, formas de pagamento, motivos de cancelamento, mais vendidos) e exportação CSV.', 'is_available' => true, 'display_order' => 8],
-            ['key' => FeatureKey::PDV, 'name' => 'PDV', 'description' => 'Ponto de venda no balcão. Reservado — sem implementação funcional ainda.', 'is_available' => false, 'display_order' => 9],
+            ['key' => FeatureKey::PDV, 'name' => 'PDV / Venda', 'description' => 'Venda e fechamento de conta (pagamentos reais por venda). Em escopo, desligada até a Fase 1.0 do plano de migração ser entregue.', 'is_available' => false, 'display_order' => 9],
             ['key' => FeatureKey::ESTOQUE, 'name' => 'Controle de Estoque', 'description' => 'Controle de estoque avançado. Reservado — sem implementação funcional ainda.', 'is_available' => false, 'display_order' => 10],
-            ['key' => FeatureKey::NFE_EMISSAO, 'name' => 'Emissão de NF-e', 'description' => 'Emissão de nota fiscal eletrônica. Reservado — sem implementação funcional ainda.', 'is_available' => false, 'display_order' => 11],
+            ['key' => FeatureKey::NFE_EMISSAO, 'name' => 'Emissão de NFC-e', 'description' => 'Emissão de nota fiscal ao consumidor (NFC-e) via NFE.io. Em escopo, desligada até a Fase 1.2 do plano de migração ser entregue.', 'is_available' => false, 'display_order' => 11],
             ['key' => FeatureKey::NFE_ENTRADA, 'name' => 'Entrada de NF-e', 'description' => 'Registro de nota fiscal de entrada. Reservado — sem implementação funcional ainda.', 'is_available' => false, 'display_order' => 12],
+            ['key' => FeatureKey::STONE_CONNECT, 'name' => 'Cobrança em Maquininha (Stone Connect)', 'description' => 'Cobrança de pedidos e contas em maquininha Stone. Em escopo, desligada até a Fase 2 do plano de migração ser entregue.', 'is_available' => false, 'display_order' => 13],
         ];
 
         foreach ($features as $feature) {
