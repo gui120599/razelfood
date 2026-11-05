@@ -52,6 +52,10 @@ class UpdateOrderFromCart
      */
     public function __invoke(Order $order, array $cartItems, array $checkoutData): Order
     {
+        if ($order->sale_id !== null) {
+            throw new CheckoutException("Este pedido já foi cobrado na venda #{$order->sale?->number} e não pode ser alterado. Cancele a venda antes.");
+        }
+
         if (empty($cartItems)) {
             throw new CheckoutException('O pedido não pode ficar sem itens.');
         }
@@ -61,6 +65,16 @@ class UpdateOrderFromCart
         }
 
         return DB::transaction(function () use ($order, $cartItems, $checkoutData) {
+            // Relê e trava o pedido ANTES de qualquer outra tabela (mesma ordem de lock
+            // de FinalizeSale) e reavalia a guarda sobre a linha travada: o model
+            // recebido pode estar defasado e, num retry da transação, uma venda
+            // concorrente já pode ter cobrado o pedido (RN-PED-07).
+            $order = Order::query()->lockForUpdate()->findOrFail($order->getKey());
+
+            if ($order->sale_id !== null) {
+                throw new CheckoutException("Este pedido já foi cobrado na venda #{$order->sale?->number} e não pode ser alterado. Cancele a venda antes.");
+            }
+
             $order->loadMissing('items');
 
             $resolvePriceForCartLine = app(ResolvePriceForCartLine::class);

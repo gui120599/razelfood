@@ -13,3 +13,6 @@ Artisan::command('inspire', function () {
 // modelagem-middleware-multitenant.md §9) — o próprio checkout também
 // reseta como rede de segurança.
 Schedule::command('promotions:reset-recurring')->everyFiveMinutes()->withoutOverlapping();
+
+// Acerta a data de ativação do PDV por tenant (rede de segurança dos observers).
+Schedule::command('sales:sync-pdv-activation')->everyFiveMinutes()->withoutOverlapping();

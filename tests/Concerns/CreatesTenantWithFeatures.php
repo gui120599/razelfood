@@ -36,4 +36,20 @@ trait CreatesTenantWithFeatures
 
         return $plan;
     }
+
+    /**
+     * Plano com todas as features "always on" + `pdv` (venda/fechamento de
+     * conta, Fase 1.0). Separado de planWithAllFeatures() para os testes
+     * antigos continuarem sem PDV (tenant sem a feature: nada novo aparece).
+     */
+    protected function planWithAllFeaturesAndPdv(): Plan
+    {
+        $plan = $this->planWithAllFeatures();
+
+        $pdv = Feature::firstOrCreate(['key' => FeatureKey::PDV], ['name' => 'PDV / Venda', 'is_available' => true]);
+        $pdv->update(['is_available' => true]);
+        $plan->features()->attach($pdv);
+
+        return $plan;
+    }
 }

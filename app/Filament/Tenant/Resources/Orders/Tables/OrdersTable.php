@@ -3,9 +3,12 @@
 namespace App\Filament\Tenant\Resources\Orders\Tables;
 
 use App\Enums\OrderOrigin;
+use App\Enums\OrderPaymentStatus;
 use App\Enums\OrderStatus;
 use App\Filament\Tenant\Pages\Orders\AttendOrder;
 use App\Models\Order;
+use App\Support\CurrentTenant;
+use App\Support\FeatureKey;
 use Filament\Actions\Action;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DatePicker;
@@ -39,6 +42,14 @@ class OrdersTable
                     ->label('Origem')
                     ->badge()
                     ->formatStateUsing(fn (OrderOrigin $state) => $state->label()),
+                TextColumn::make('payment_status')
+                    ->label('Pagamento')
+                    ->badge()
+                    ->state(fn (Order $record): ?OrderPaymentStatus => $record->status === OrderStatus::Cancelled ? null : $record->paymentStatus())
+                    ->formatStateUsing(fn (OrderPaymentStatus $state): string => $state->label())
+                    ->color(fn (OrderPaymentStatus $state): string => $state->color())
+                    ->placeholder('—')
+                    ->visible(fn (): bool => CurrentTenant::get()?->hasFeature(FeatureKey::PDV) ?? false),
                 TextColumn::make('grand_total')
                     ->label('Total')
                     ->money('BRL')
@@ -83,6 +94,7 @@ class OrdersTable
                     ->icon(Heroicon::OutlinedPencilSquare)
                     ->color('gray')
                     ->visible(fn (Order $record) => AttendOrder::canAccess()
+                        && $record->sale_id === null
                         && $record->status->isEditableContentWise()
                         && (! $record->status->requiresAdvancedPermissionToEdit() || (auth()->user()?->can('edit_order_advanced_status') ?? false)))
                     ->url(fn (Order $record) => AttendOrder::getUrl(['order' => $record])),

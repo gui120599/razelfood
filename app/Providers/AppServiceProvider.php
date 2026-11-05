@@ -2,12 +2,15 @@
 
 namespace App\Providers;
 
+use App\Actions\Sales\SyncPdvActivation;
 use App\Enums\CentralRole;
 use App\Filament\Tenant\Livewire\Orders\AddonPickerModal;
 use App\Filament\Tenant\Livewire\Orders\ClientLookup;
 use App\Filament\Tenant\Livewire\Orders\FlavorPickerModal;
 use App\Filament\Tenant\Livewire\Orders\FulfillmentPicker;
 use App\Filament\Tenant\Livewire\Orders\ProductCatalogSelector;
+use App\Models\Tenant;
+use App\Models\TenantFeatureOverride;
 use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -49,6 +52,17 @@ class AppServiceProvider extends ServiceProvider
         Livewire::component('tenant-order-addon-picker', AddonPickerModal::class);
         Livewire::component('tenant-order-client-lookup', ClientLookup::class);
         Livewire::component('tenant-order-fulfillment-picker', FulfillmentPicker::class);
+
+        // Data de corte do PDV (Fase 1.0): acompanha a feature `pdv` do tenant. Troca de
+        // plano e overrides são tratados na hora; o que não passa por aqui (editar as
+        // features de um plano) é pego por `sales:sync-pdv-activation` a cada 5 min.
+        Tenant::saved(function (Tenant $tenant): void {
+            if ($tenant->wasRecentlyCreated || $tenant->wasChanged('plan_id')) {
+                app(SyncPdvActivation::class)($tenant);
+            }
+        });
+        TenantFeatureOverride::saved(fn (TenantFeatureOverride $override) => app(SyncPdvActivation::class)($override->tenant_id));
+        TenantFeatureOverride::deleted(fn (TenantFeatureOverride $override) => app(SyncPdvActivation::class)($override->tenant_id));
 
         // Rate limit dos webhooks externos (/webhooks/...): um teto por IP +
         // token (o provedor legítimo) e outro, maior, só por IP (varredura de

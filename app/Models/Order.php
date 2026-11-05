@@ -5,9 +5,11 @@ namespace App\Models;
 use App\Enums\CancellationReason;
 use App\Enums\OrderFulfillmentType;
 use App\Enums\OrderOrigin;
+use App\Enums\OrderPaymentStatus;
 use App\Enums\OrderStatus;
 use App\Models\Concerns\TenantScopedModel;
 use App\Support\CurrentTenant;
+use App\Support\Sales\PdvCutoff;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
@@ -88,6 +90,42 @@ class Order extends TenantScopedModel
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
+    }
+
+    public function sale(): BelongsTo
+    {
+        return $this->belongsTo(Sale::class);
+    }
+
+    /**
+     * Situação de pagamento derivada (RN-PED-03): pago = o pedido está em uma
+     * venda finalizada. `CancelSale` desvincula o pedido, então ele volta a
+     * "a receber". Não altera nem depende de `OrderStatus`.
+     */
+    public function paymentStatus(): OrderPaymentStatus
+    {
+        return $this->sale_id !== null ? OrderPaymentStatus::Paid : OrderPaymentStatus::Pending;
+    }
+
+    /**
+     * Pedidos elegíveis a "Contas a fechar": sem venda, já aceitos (nem
+     * "Iniciado" nem cancelado) e criados a partir da ativação do PDV do
+     * tenant (data de corte). Sem data de corte (feature desligada) não há
+     * nenhum elegível.
+     */
+    public function scopeAwaitingSale(Builder $query): Builder
+    {
+        $tenant = CurrentTenant::get();
+        $cutoff = $tenant ? PdvCutoff::for($tenant) : null;
+
+        return $query
+            ->whereNull('orders.sale_id')
+            ->whereNotIn('orders.status', [OrderStatus::Started->value, OrderStatus::Cancelled->value])
+            ->when(
+                $cutoff === null,
+                fn (Builder $q): Builder => $q->whereRaw('1 = 0'),
+                fn (Builder $q): Builder => $q->where('orders.created_at', '>=', $cutoff),
+            );
     }
 
     public function deliveryOption(): BelongsTo

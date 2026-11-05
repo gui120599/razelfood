@@ -22,7 +22,25 @@ class CancelOrder
             throw new OrderTransitionException("Pedido #{$order->id} não pode mais ser cancelado (está \"{$order->status->label()}\").");
         }
 
+        if ($order->sale_id !== null) {
+            throw new OrderTransitionException("Pedido #{$order->id} já foi cobrado na venda #{$order->sale?->number}. Cancele a venda antes de cancelar o pedido.");
+        }
+
         return DB::transaction(function () use ($order, $reason, $cancelledBy): Order {
+            // Relê e trava o pedido (mesma ordem de lock de FinalizeSale: pedido primeiro)
+            // e reavalia sobre a linha travada — o model recebido pode estar defasado
+            // (RN-PED-01) e uma venda concorrente pode ter cobrado o pedido entre a
+            // checagem acima e este ponto.
+            $order = Order::query()->lockForUpdate()->findOrFail($order->getKey());
+
+            if ($order->sale_id !== null) {
+                throw new OrderTransitionException("Pedido #{$order->id} já foi cobrado na venda #{$order->sale?->number}. Cancele a venda antes de cancelar o pedido.");
+            }
+
+            if (! $order->status->canBeCancelled()) {
+                throw new OrderTransitionException("Pedido #{$order->id} não pode mais ser cancelado (está \"{$order->status->label()}\").");
+            }
+
             $previous = $order->status;
 
             $order->status = OrderStatus::Cancelled;

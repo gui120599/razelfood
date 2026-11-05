@@ -9,6 +9,7 @@ use App\Filament\Tenant\Pages\OrderSettings;
 use App\Filament\Tenant\Pages\Reports;
 use App\Filament\Tenant\Resources\Orders\OrderResource;
 use App\Filament\Tenant\Resources\ProductionLines\ProductionLineResource;
+use App\Filament\Tenant\Resources\Sales\SaleResource;
 use App\Models\Tenant;
 use BezhanSalleh\FilamentShield\Facades\FilamentShield;
 use Filament\Facades\Filament;
@@ -59,11 +60,20 @@ class SeedDefaultTenantRoles
         $manageOrderStatus = Permission::findOrCreate('manage_order_status');
         $markOrderDelivered = Permission::findOrCreate('mark_order_delivered');
         $editOrderAdvancedStatus = Permission::findOrCreate('edit_order_advanced_status');
+        $manageSales = Permission::findOrCreate('manage_sales');
 
         $orderResourcePermissions = FilamentShield::getResources()[OrderResource::class]['permissions'] ?? [];
         $viewOrders = collect([
             $orderResourcePermissions['viewAny']['key'] ?? null,
             $orderResourcePermissions['view']['key'] ?? null,
+        ])
+            ->filter()
+            ->map(fn (string $name) => Permission::findOrCreate($name));
+
+        $salePermissions = FilamentShield::getResources()[SaleResource::class]['permissions'] ?? [];
+        $viewSales = collect([
+            $salePermissions['viewAny']['key'] ?? null,
+            $salePermissions['view']['key'] ?? null,
         ])
             ->filter()
             ->map(fn (string $name) => Permission::findOrCreate($name));
@@ -105,7 +115,15 @@ class SeedDefaultTenantRoles
             collect([$manageOrderStatus, $markOrderDelivered, $kitchenAccess, $orderSettingsAccess, $attendOrderAccess, $editOrderAdvancedStatus, $reportsAccess, $deliveriesAccess])
                 ->merge($viewOrders)
                 ->merge($manageProductionLines)
+                ->push($manageSales)
+                ->merge($viewSales)
                 ->filter()
+        );
+
+        // Caixa: fecha contas e consulta vendas/pedidos (feature `pdv`); não
+        // avança pedido nem mexe na cozinha.
+        Role::findOrCreate('Caixa')->givePermissionTo(
+            collect([$manageSales])->merge($viewSales)->merge($viewOrders)->filter()
         );
 
         Role::findOrCreate('Atendente')->givePermissionTo(

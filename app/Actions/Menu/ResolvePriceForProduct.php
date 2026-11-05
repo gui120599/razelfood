@@ -40,6 +40,18 @@ class ResolvePriceForProduct
         );
     }
 
+    /**
+     * Mesma precedência de __invoke SEM a promoção relâmpago (passos 2 e 3 de
+     * RN-14): usado quando o preço não pode consumir saldo de pool — ex.: item
+     * avulso de uma venda. Nunca devolve `matchedFlashPromotion*`.
+     */
+    public function withoutFlashPromotion(Product $product): ResolvedPrice
+    {
+        $price = $this->hasValidProductPromo($product) ? (float) $product->promotional_price : (float) $product->price;
+
+        return new ResolvedPrice(finalPrice: $price, originalPrice: (float) $product->price);
+    }
+
     private function findActiveFlashPromotionPivot(Product $product): ?FlashPromotionProduct
     {
         return FlashPromotionProduct::query()

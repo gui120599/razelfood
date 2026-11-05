@@ -14,9 +14,10 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
- * Fase 0 (D-02): PDV/venda, NFC-e e Stone Connect estão em escopo como
- * features de plano, mas DESLIGADAS por padrão (is_available = false) — o
- * catálogo só as reserva; nenhum tenant as recebe antes da fase respectiva.
+ * D-02: PDV/venda, NFC-e e Stone Connect estão em escopo como features de
+ * plano, DESLIGADAS por padrão. `pdv` virou liberável ao fim da Fase 1.0 (só o
+ * plano Completo ou um override a ligam); NFC-e e Stone Connect seguem
+ * reservadas (is_available = false) até as fases 1.2 e 2.
  */
 class FeatureCatalogSeederTest extends TestCase
 {
@@ -28,7 +29,6 @@ class FeatureCatalogSeederTest extends TestCase
     public static function plannedFeatureKeys(): array
     {
         return [
-            'pdv' => [FeatureKey::PDV],
             'nfe_emissao' => [FeatureKey::NFE_EMISSAO],
             'stone_connect' => [FeatureKey::STONE_CONNECT],
         ];
@@ -86,5 +86,28 @@ class FeatureCatalogSeederTest extends TestCase
         $this->assertFalse($keys->contains(FeatureKey::PDV));
         $this->assertFalse($keys->contains(FeatureKey::NFE_EMISSAO));
         $this->assertFalse($keys->contains(FeatureKey::STONE_CONNECT));
+    }
+
+    public function test_pdv_is_available_but_only_the_full_plan_or_an_override_turn_it_on(): void
+    {
+        $this->seed([FeatureSeeder::class, PlanSeeder::class]);
+
+        $pdv = Feature::where('key', FeatureKey::PDV)->first();
+        $this->assertTrue($pdv->is_available);
+
+        $makeTenant = fn (string $slug, string $plan): Tenant => Tenant::create([
+            'name' => $slug, 'slug' => $slug, 'status' => TenantStatus::Active,
+            'whatsapp_number' => '5511999999999', 'plan_id' => Plan::where('slug', $plan)->value('id'),
+        ]);
+
+        $essencial = $makeTenant('essencial-teste', 'essencial');
+        $completo = $makeTenant('completo-teste', 'completo');
+
+        $this->assertFalse($essencial->hasFeature(FeatureKey::PDV));
+        $this->assertTrue($completo->hasFeature(FeatureKey::PDV));
+
+        $essencial->featureOverrides()->create(['feature_id' => $pdv->id, 'enabled' => true]);
+
+        $this->assertTrue($essencial->fresh()->hasFeature(FeatureKey::PDV));
     }
 }

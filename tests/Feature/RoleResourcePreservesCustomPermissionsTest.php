@@ -23,7 +23,7 @@ use Tests\TestCase;
 /**
  * Regressão: editar e salvar a role Admin em Filament > Roles não pode
  * apagar permissões que não mapeiam pra Resource/Page/Widget do Shield
- * (manage_order_status, mark_order_delivered, edit_order_advanced_status).
+ * (manage_order_status, mark_order_delivered, edit_order_advanced_status, manage_sales).
  * Ver .ai/rules/config.md.
  */
 class RoleResourcePreservesCustomPermissionsTest extends TestCase
@@ -72,6 +72,7 @@ class RoleResourcePreservesCustomPermissionsTest extends TestCase
         $this->assertTrue($adminRole->hasPermissionTo('manage_order_status'));
         $this->assertTrue($adminRole->hasPermissionTo('mark_order_delivered'));
         $this->assertTrue($adminRole->hasPermissionTo('edit_order_advanced_status'));
+        $this->assertTrue($adminRole->hasPermissionTo('manage_sales'));
 
         Livewire::test(EditRole::class, ['record' => $adminRole->getRouteKey()])
             ->call('save')
@@ -82,5 +83,6 @@ class RoleResourcePreservesCustomPermissionsTest extends TestCase
         $this->assertTrue($adminRole->hasPermissionTo('manage_order_status'));
         $this->assertTrue($adminRole->hasPermissionTo('mark_order_delivered'));
         $this->assertTrue($adminRole->hasPermissionTo('edit_order_advanced_status'));
+        $this->assertTrue($adminRole->hasPermissionTo('manage_sales'));
     }
 }
