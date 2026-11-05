@@ -297,6 +297,17 @@ class FinalizeSale
                 throw new SaleException("O valor informado para \"{$option->name}\" é grande demais.");
             }
 
+            $cardBrand = $this->cleanText($payment['card_brand'] ?? null, self::MAX_CARD_BRAND_LENGTH);
+            $authorizationCode = $this->cleanText($payment['authorization_code'] ?? null, self::MAX_AUTHORIZATION_LENGTH);
+
+            if ($option->requires_card_brand && $cardBrand === null) {
+                throw new SaleException("Informe a bandeira do cartão para \"{$option->name}\".");
+            }
+
+            if ($option->requires_authorization_code && $authorizationCode === null) {
+                throw new SaleException("Informe o código de autorização para \"{$option->name}\".");
+            }
+
             $receivedCents += $amountCents;
             $cashCents += $option->is_cash ? $amountCents : 0;
 
@@ -306,8 +317,8 @@ class FinalizeSale
                 'is_cash' => (bool) $option->is_cash,
                 'amount_cents' => $amountCents,
                 'change_cents' => 0,
-                'card_brand' => $this->cleanText($payment['card_brand'] ?? null, self::MAX_CARD_BRAND_LENGTH),
-                'authorization_code' => $this->cleanText($payment['authorization_code'] ?? null, self::MAX_AUTHORIZATION_LENGTH),
+                'card_brand' => $cardBrand,
+                'authorization_code' => $authorizationCode,
             ];
         }
 

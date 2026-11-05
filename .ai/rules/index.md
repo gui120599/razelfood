@@ -6,6 +6,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 | --- | --- |
 | app/Filament/Resources/LocationSyncs/**,app/Services/Address/LocationCatalogTransfer.php | .ai/rules/address.md |
 | app/Livewire/{Menu.php,Checkout.php,OrderStatusTimeline.php,Concerns/EstablishesTenantContext.php} | .ai/rules/app-livewire.md |
+| {app/Models/Client.php,app/Filament/Tenant/Resources/Clients/**} | .ai/rules/clients.md |
 | app/Console/Commands/** | .ai/rules/commands.md |
 | app/{Support/Tenancy/**,Jobs/**,Console/Concerns/**,Console/Commands/**} | .ai/rules/concerns-commands.md |
 | config/filament-shield.php, config/*.php | .ai/rules/config.md |
@@ -15,6 +16,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 | app/Filament/Resources/** | .ai/rules/filament-resources.md |
 | app/Filament/Support/EstablishmentDocumentFields.php, app/Filament/Support/InputMasks.php | .ai/rules/filament-support.md |
 | resources/css/filament/**/*.css | .ai/rules/filament.md |
+| {app/Support/Fiscal/**,app/Models/TenantFiscalSettings.php} | .ai/rules/fiscal-models.md |
 | ** | .ai/rules/general.md |
 | app/Filament/Tenant/Resources/Categories/**,app/Livewire/Menu.php,app/Actions/Menu/ResolvePriceForCartLine.php,app/Filament/Tenant/Livewire/Orders/FlavorPickerModal.php | .ai/rules/livewire-orders.md |
 | app/Actions/Menu/{ResolvePriceForProduct.php,ResolvePriceForCartLine.php,ResolvedPrice.php},app/Livewire/Menu.php | .ai/rules/livewire.md |
@@ -36,5 +38,6 @@ Before planning or editing, find the row whose globs match the file's path and r
 | app/{Actions/Menu/ResolvePriceForCartLine.php,Actions/Orders/Support/CartStockAndPromotionLedger.php,Models/ProductGift.php,Support/Orders/GiftLineLabel.php} | .ai/rules/support-orders.md |
 | app/Actions/Orders/Support/CartStockAndPromotionLedger.php | .ai/rules/support.md |
 | app/{Actions/Orders/AdvanceOrderStatus.php,Filament/Tenant/Support/OrderStatusActions.php,Filament/Tenant/Pages/Kitchen.php,Models/Order.php} | .ai/rules/tenant-pages.md |
+| {app/Filament/Support/FiscalSettingsFields.php,app/Filament/Tenant/Pages/FiscalSettings.php,app/Filament/Resources/Tenants/**} | .ai/rules/tenants.md |
 | app/Filament/Tenant/Resources/Users/** | .ai/rules/users.md |
 | {routes/webhooks.php,config/webhooks.php,app/Http/Middleware/ResolveTenantFromWebhookToken.php,app/Http/Controllers/Webhooks/**,app/Support/Webhooks/**} | .ai/rules/webhooks.md |

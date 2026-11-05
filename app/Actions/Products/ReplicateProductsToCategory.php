@@ -31,7 +31,7 @@ class ReplicateProductsToCategory
         foreach ($products as $product) {
             $product->loadMissing(['addons', 'gifts']);
 
-            $copy = $product->replicate(['sales_count']);
+            $copy = $product->replicate(['sales_count', 'gtin']);
             $copy->category_id = $target->id;
             $copy->display_order = ++$displayOrder;
             $copy->sales_count = 0;

@@ -52,4 +52,20 @@ trait CreatesTenantWithFeatures
 
         return $plan;
     }
+
+    /**
+     * Plano com todas as features "always on" + `nfe_emissao` (cadastro fiscal e
+     * NFC-e, Fase 1.1). A feature segue indisponível no seeder até a Fase 1.2;
+     * aqui ela é criada disponível só para exercitar a UI fiscal.
+     */
+    protected function planWithAllFeaturesAndNfe(): Plan
+    {
+        $plan = $this->planWithAllFeatures();
+
+        $nfe = Feature::firstOrCreate(['key' => FeatureKey::NFE_EMISSAO], ['name' => 'Emissão de NFC-e', 'is_available' => true]);
+        $nfe->update(['is_available' => true]);
+        $plan->features()->attach($nfe);
+
+        return $plan;
+    }
 }

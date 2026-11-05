@@ -6,6 +6,7 @@ use App\Enums\TenantStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Tenant extends Model
@@ -64,6 +65,11 @@ class Tenant extends Model
             'require_client_cpf' => 'boolean',
             'allow_free_form_address' => 'boolean',
         ];
+    }
+
+    public function fiscalSettings(): HasOne
+    {
+        return $this->hasOne(TenantFiscalSettings::class);
     }
 
     public function users(): HasMany

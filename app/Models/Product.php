@@ -30,6 +30,16 @@ class Product extends TenantScopedModel
         'bestseller_eligible',
         'sales_count',
         'display_order',
+        'ncm',
+        'cfop',
+        'csosn',
+        'origin_code',
+        'commercial_unit',
+        'cest',
+        'gtin',
+        'icms_rate',
+        'pis_rate',
+        'cofins_rate',
     ];
 
     protected function casts(): array
@@ -45,6 +55,9 @@ class Product extends TenantScopedModel
             'show_when_out_of_stock' => 'boolean',
             'bestseller_eligible' => 'boolean',
             'sales_count' => 'decimal:2',
+            'icms_rate' => 'decimal:2',
+            'pis_rate' => 'decimal:2',
+            'cofins_rate' => 'decimal:2',
         ];
     }
 

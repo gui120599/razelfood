@@ -5,8 +5,10 @@ namespace App\Filament\Tenant\Resources\Products\Tables;
 use App\Actions\Products\AdjustProductsPrice;
 use App\Actions\Products\AttachGiftToProducts;
 use App\Actions\Products\ReplicateProductsToCategory;
+use App\Actions\Products\SetProductsFiscalData;
 use App\Enums\GiftAwardMode;
 use App\Filament\Support\InputMasks;
+use App\Filament\Support\ProductFiscalFields;
 use App\Filament\Tenant\Support\CategoryOptions;
 use App\Models\Category;
 use App\Models\Product;
@@ -166,6 +168,25 @@ class ProductsTable
                                 ->title('Preços atualizados')
                                 ->body("{$count} produto(s) atualizado(s).")
                                 ->success()
+                                ->send();
+                        })
+                        ->deselectRecordsAfterCompletion(),
+                    BulkAction::make('setFiscalData')
+                        ->label('Definir dados fiscais')
+                        ->icon(Heroicon::OutlinedDocumentText)
+                        ->visible(fn (): bool => ProductFiscalFields::tenantUsesFiscal())
+                        ->modalHeading('Definir dados fiscais dos produtos selecionados')
+                        ->modalDescription('Só os campos preenchidos são aplicados; os vazios mantêm o que cada produto já tem. O GTIN (código de barras) é por produto e não entra aqui.')
+                        ->modalSubmitActionLabel('Aplicar')
+                        ->authorizeIndividualRecords('update')
+                        ->schema(ProductFiscalFields::fields(withGtin: false))
+                        ->action(function (Collection $records, array $data): void {
+                            $count = app(SetProductsFiscalData::class)($records, $data);
+
+                            Notification::make()
+                                ->title($count > 0 ? 'Dados fiscais atualizados' : 'Nada para aplicar')
+                                ->body($count > 0 ? "{$count} produto(s) atualizado(s)." : 'Preencha ao menos um campo fiscal.')
+                                ->{$count > 0 ? 'success' : 'warning'}()
                                 ->send();
                         })
                         ->deselectRecordsAfterCompletion(),

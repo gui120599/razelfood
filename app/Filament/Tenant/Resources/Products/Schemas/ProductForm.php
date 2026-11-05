@@ -3,6 +3,7 @@
 namespace App\Filament\Tenant\Resources\Products\Schemas;
 
 use App\Filament\Support\InputMasks;
+use App\Filament\Support\ProductFiscalFields;
 use App\Filament\Tenant\Support\CategoryOptions;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
@@ -86,6 +87,7 @@ class ProductForm
                         ->label('Exibir mesmo sem estoque')
                         ->visible(fn (Get $get): bool => (bool) $get('controls_stock')),
                 ]),
+            ProductFiscalFields::section(isCategoryDefault: false),
         ]);
     }
 }

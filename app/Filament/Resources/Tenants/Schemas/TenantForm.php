@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Tenants\Schemas;
 
 use App\Enums\TenantStatus;
 use App\Filament\Support\EstablishmentDocumentFields;
+use App\Filament\Support\FiscalSettingsFields;
 use App\Filament\Support\InputMasks;
 use App\Models\Plan;
 use App\Rules\ValidTenantSlug;
@@ -102,6 +103,7 @@ class TenantForm
                         ->revealable()
                         ->visible(fn (Get $get): bool => (bool) $get('recaptcha_enabled')),
                 ]),
+            ...FiscalSettingsFields::sections(viaRelationship: true),
             Section::make('Primeiro usuário (Admin)')
                 ->description('Criado junto com o tenant, já com o papel Admin atribuído.')
                 ->columns(2)

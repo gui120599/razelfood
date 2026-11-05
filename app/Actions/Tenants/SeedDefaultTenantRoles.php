@@ -3,6 +3,7 @@
 namespace App\Actions\Tenants;
 
 use App\Filament\Tenant\Pages\Deliveries;
+use App\Filament\Tenant\Pages\FiscalSettings;
 use App\Filament\Tenant\Pages\Kitchen;
 use App\Filament\Tenant\Pages\Orders\AttendOrder;
 use App\Filament\Tenant\Pages\OrderSettings;
@@ -102,6 +103,14 @@ class SeedDefaultTenantRoles
         $deliveriesAccess = ($deliveriesPageKey = array_key_first($deliveriesPagePermissions))
             ? Permission::findOrCreate($deliveriesPageKey)
             : null;
+
+        // Dados fiscais (credenciais da NFE.io): só o Admin — recebe via Permission::all()
+        // abaixo; a permissão precisa existir antes do syncPermissions.
+        $fiscalSettingsPagePermissions = FilamentShield::getPages()[FiscalSettings::class]['permissions'] ?? [];
+
+        if (($fiscalSettingsPageKey = array_key_first($fiscalSettingsPagePermissions)) !== null) {
+            Permission::findOrCreate($fiscalSettingsPageKey);
+        }
 
         $productionLinePermissions = FilamentShield::getResources()[ProductionLineResource::class]['permissions'] ?? [];
         $manageProductionLines = collect($productionLinePermissions)

@@ -57,6 +57,9 @@ class CloseAccount extends Page
     /** @var array<string, mixed>|null */
     public ?array $data = [];
 
+    /** @var Collection<int, PaymentOption>|null */
+    private ?Collection $paymentOptionFlagsCache = null;
+
     public static function canAccess(): bool
     {
         return (CurrentTenant::get()?->hasFeature(FeatureKey::PDV) ?? false)
@@ -162,11 +165,13 @@ class CloseAccount extends Page
                                 TextInput::make('card_brand')
                                     ->label('Bandeira')
                                     ->maxLength(60)
-                                    ->visible(fn (Get $get): bool => $this->isNonCashOption($get('payment_option_id'))),
+                                    ->required(fn (Get $get): bool => $this->optionRequires($get('payment_option_id'), 'requires_card_brand'))
+                                    ->visible(fn (Get $get): bool => $this->isNonCashOption($get('payment_option_id')) || $this->optionRequires($get('payment_option_id'), 'requires_card_brand')),
                                 TextInput::make('authorization_code')
                                     ->label('Autorização')
                                     ->maxLength(100)
-                                    ->visible(fn (Get $get): bool => $this->isNonCashOption($get('payment_option_id'))),
+                                    ->required(fn (Get $get): bool => $this->optionRequires($get('payment_option_id'), 'requires_authorization_code'))
+                                    ->visible(fn (Get $get): bool => $this->isNonCashOption($get('payment_option_id')) || $this->optionRequires($get('payment_option_id'), 'requires_authorization_code')),
                             ])
                             ->columns(2)
                             ->defaultItems(0)
@@ -292,10 +297,34 @@ class CloseAccount extends Page
             ->all();
     }
 
+    /**
+     * A forma de pagamento escolhida exige este dado (bandeira/autorização)?
+     * Coluna booleana de `payment_options` (`requires_card_brand` ou
+     * `requires_authorization_code`).
+     */
+    private function optionRequires(mixed $paymentOptionId, string $column): bool
+    {
+        return filled($paymentOptionId) && (bool) ($this->paymentOptionFlags()->get((int) $paymentOptionId)?->{$column});
+    }
+
     private function isNonCashOption(mixed $paymentOptionId): bool
     {
-        return filled($paymentOptionId)
-            && ! (bool) PaymentOption::query()->whereKey($paymentOptionId)->value('is_cash');
+        $option = filled($paymentOptionId) ? $this->paymentOptionFlags()->get((int) $paymentOptionId) : null;
+
+        return $option !== null && ! $option->is_cash;
+    }
+
+    /**
+     * Flags das formas de pagamento do tenant, lidos UMA vez por requisição (as
+     * closures de `required`/`visible` rodam várias vezes por linha do repeater).
+     *
+     * @return Collection<int, PaymentOption>
+     */
+    private function paymentOptionFlags(): Collection
+    {
+        return $this->paymentOptionFlagsCache ??= PaymentOption::query()
+            ->get(['id', 'is_cash', 'requires_card_brand', 'requires_authorization_code'])
+            ->keyBy('id');
     }
 
     /**
