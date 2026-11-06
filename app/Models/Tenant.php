@@ -6,6 +6,7 @@ use App\Enums\TenantStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Tenant extends Model
@@ -26,6 +27,7 @@ class Tenant extends Model
         'status',
         'plan_id',
         'orders_sequence',
+        'sales_sequence',
         'whatsapp_number',
         'logo_path',
         'favicon_path',
@@ -51,6 +53,7 @@ class Tenant extends Model
         return [
             'status' => TenantStatus::class,
             'orders_sequence' => 'integer',
+            'sales_sequence' => 'integer',
             'watermark_height' => 'integer',
             'show_logo_on_prints' => 'boolean',
             'recaptcha_enabled' => 'boolean',
@@ -62,6 +65,16 @@ class Tenant extends Model
             'require_client_cpf' => 'boolean',
             'allow_free_form_address' => 'boolean',
         ];
+    }
+
+    public function fiscalSettings(): HasOne
+    {
+        return $this->hasOne(TenantFiscalSettings::class);
+    }
+
+    public function fiscalDocuments(): HasMany
+    {
+        return $this->hasMany(FiscalDocument::class);
     }
 
     public function users(): HasMany

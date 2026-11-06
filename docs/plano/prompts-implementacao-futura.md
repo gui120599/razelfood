@@ -10,8 +10,9 @@ Bloco comum — **cole no início de qualquer prompt abaixo**:
 Contexto obrigatório:
 - Leia CLAUDE.md, .ai/rules/index.md e TODAS as regras cujos globs cobrem os arquivos que você vai tocar (inclusive .ai/rules/general.md). Rode grep -rin nas regras pelas palavras-chave do módulo.
 - Leia o documento principal docs/plano/migracao-funcionalidades-pizzaria-app-para-razelfood.md — OBRIGATORIAMENTE a §2.4 "Convenções obrigatórias do RazelFood" e as seções 10, 14, 16, 17 — e o documento específico indicado abaixo.
-- O Pizzaria-App (/home/gui120599/Pizzaria-App) é referência SOMENTE LEITURA: leia os arquivos citados para entender a regra; NÃO copie código, nomes nem estrutura (nomenclatura em português com prefixo de coluna, Services em vez de Actions, Laravel 10 structure e spatie v6 sem teams são diferentes); NÃO altere nada lá.
-- Siga a §2.4 à risca: nomes em inglês (tabelas plural sem prefixo, enums TitleCase com valor snake_case e label() em pt-BR), Actions invocáveis em app/Actions/{Domínio}, clientes externos em app/Services/{Área}, exceções em app/Exceptions, models de domínio estendem TenantScopedModel, estrutura Resource/{Pages,Schemas,Tables}, PHPUnit (não Pest) sem factories de domínio, alvo PHP 8.4, Sail para todo comando, Pint no final. Os nomes de classes/tabelas dos documentos do plano são propostas: confirme-os contra os arquivos irmãos antes de criar.
+- O Pizzaria-App (/home/gui120599/Pizzaria-App) é SOMENTE LEITURA: NÃO altere nada lá. Back-end: leia para entender a regra e NÃO copie código PHP, nomes nem pastas (nomenclatura em português com prefixo de coluna, Services em vez de Actions, Laravel 10 structure e spatie v6 sem teams são diferentes). Front-end: COPIE os arquivos para o RazelFood conforme a §2.4.9.
+- Siga a §2.4 à risca no código PHP e no banco: nomes em inglês (tabelas plural sem prefixo, enums TitleCase com valor snake_case e label() em pt-BR), Actions invocáveis em app/Actions/{Domínio}, clientes externos em app/Services/{Área}, exceções em app/Exceptions, models de domínio estendem TenantScopedModel, estrutura Resource/{Pages,Schemas,Tables}, PHPUnit (não Pest) sem factories de domínio, alvo PHP 8.4, Sail para todo comando, Pint no final. Os nomes de classes/tabelas dos documentos do plano são propostas: confirme-os contra os arquivos irmãos antes de criar.
+- Telas: RazelFood e Pizzaria-App são o mesmo sistema. Toda tela do mapa de cópia da §2.4.9 nasce da cópia dos arquivos de front da origem (Blade, partials, componentes, Alpine, classes Tailwind, JS e tema). Não redesenhe nem recrie "parecido". Traduza só os vínculos com o back-end e aplique só as exceções da §2.4.9. Entregue o diff contra a origem e capturas lado a lado.
 - Multi-tenant: toda tabela nova de domínio com tenant_id; credenciais com cast 'encrypted'; nenhum HTTP externo dentro de DB::transaction; job/command/webhook sempre com contexto de tenant explícito.
 - Permissões novas: em config/filament-shield.php (custom_permissions) e em SeedDefaultTenantRoles, com teste de que sobrevivem à edição do papel pela UI.
 - Banco: NUNCA migrate:fresh / --env=testing (não existe .env.testing). Testes via `sail artisan test` (RefreshDatabase no banco testing).
@@ -104,6 +105,58 @@ Critérios de aceite: os 10 itens da §10 do documento específico, mais: nenhum
 
 ---
 
+## Prompt 1.R — Cópia da tela de venda do Pizzaria-App
+
+```text
+[bloco comum]
+
+Módulo: Fase 1.R — Nova Venda. Documento: docs/plano/migracao-funcionalidades-pizzaria-app-para-razelfood.md §2.4.9, §14 (linha 1.R) e decisão D-08.
+
+Copie para o RazelFood (a origem é somente leitura):
+- resources/views/filament/pages/operar-venda.blade.php
+- resources/views/filament/pages/operar-venda/item-pedido.blade.php
+- resources/views/livewire/venda-produto-selector.blade.php
+
+Analise também: Pizzaria-App app/Filament/Pages/OperarVenda.php e app/Livewire/VendaProdutoSelector.php; RazelFood app/Filament/Tenant/Pages/Sales/{CloseAccount,PendingAccounts}.php, app/Actions/Sales/*, app/Support/Sales/*, app/Filament/Tenant/Support/{SaleActions,FiscalDocumentActions}.php, tests/Feature/Sales/*.
+
+Requisitos:
+1. Copie as views primeiro. Depois crie a página Nova Venda e o seletor em inglês, expondo o que as views precisam e chamando FinalizeSale, CancelSale e o ciclo fiscal.
+2. Traduza só os vínculos com o back-end. Layout, classes, textos, abas, modais e atalhos ficam iguais.
+3. Remova da cópia apenas o que ainda não existe: Mesas, Pendentes/fiado, cortesia, divisão de item, Stone e influenciador.
+4. D-08 aprovada: a venda fica salva desde o 1º item, em um novo SaleStatus aberto (a Fase 2.3 reaproveita esse estado). Os demais fluxos de venda não mudam.
+   - Item ou pedido lançado em venda aberta fica reservado a ela: outro operador não consegue lançá-lo em outra venda (lock, como hoje em FinalizeSale).
+   - Número da venda, baixa de estoque, efeitos financeiros e emissão fiscal só acontecem ao finalizar.
+   - Relatórios, telas, SaleCancellationGuard e CancelUnpaidSalesJob precisam tratar corretamente o novo estado; venda aberta não conta como venda realizada.
+   - Rascunho vazio é descartado ao sair da tela (sendBeacon) e por comando agendado tenant-aware, como VendaCancelarVaziaController e vendas:cancelar-iniciadas-vazias no Pizzaria-App.
+5. Tire CloseAccount/PendingAccounts da navegação e mantenha redirecionamento das URLs antigas. Apague os arquivos só depois da minha aprovação.
+
+Critérios de aceite:
+- diff de cada view contra a origem contendo só vínculos traduzidos e exceções da §2.4.9.
+- Capturas lado a lado em 1920 px, 1366 px e celular.
+- Testes de tests/Feature/Sales adaptados sem perder cobertura, incluindo isolamento entre tenants.
+- Fechar conta com pedidos, com produtos avulsos e com pagamento misto, com Http::fake para a NFe.io nos testes.
+```
+
+---
+
+## Prompt 1.S — Cópia das telas de pedido e conferência da Fase 1
+
+```text
+[bloco comum]
+
+Módulo: Fase 1.S. Documento: §2.4.9 (linhas Atender Pedido, Painel de Pedidos, Vendas e fiscal, Menu) e decisão D-09. Pré-requisito: Fase 1.R aprovada.
+
+Requisitos:
+1. Atender Pedido: copie atender-pedido.blade.php e as views livewire pedido-produto-selector, cliente-picker e entrega-pagamento-picker, mais resources/js/pizza-svg*.js, ligando em AttendOrder, ProductCatalogSelector, ClientLookup, FulfillmentPicker e nos modais de sabores e adicionais, sem perder brindes.
+2. Painel de Pedidos: copie painel-pedidos.blade.php e painel-pedidos/{card,coluna,cancelado-card,detalhes-modal,link-entrega-modal}.blade.php, ligando em Kitchen e OrderStatusActions, sem perder as configurações por tenant.
+3. Vendas e fiscal: compare SaleResource, FiscalReport e documentos fiscais com as telas do Pizzaria-App e ajuste campos, colunas, filtros e rótulos.
+4. Menu: D-09 aprovada. Use rótulos, grupos e ordem iguais aos do AdminPanelProvider, ocultando itens de funções que o RazelFood ainda não tem.
+
+Critérios de aceite: diff contra a origem, capturas lado a lado e suíte de pedidos sem regressão.
+```
+
+---
+
 ## Prompt 2 — Connect Stone (Prioridade 2, Fases 2.1–2.4)
 
 ```text
@@ -121,7 +174,7 @@ Fatie:
 2.1 payment_terminals (CRUD no painel do tenant; provider, serial, connect_enabled) e uso opcional do terminal no pagamento manual do fechamento de conta.
 2.2 tenant_payment_integrations (encrypted, webhook_token), StoneConnectClient, payment_terminal_charges com os 7 estados, ResolveAmountDue, CheckTerminalChargeEligibility, StartTerminalCharge (Direto e Listado, lote com vagas), Recheck/Cancel — HTTP sempre fora da transação, registro pendente antes do POST, Idempotency-Key estável, code próprio (avaliar prefixo por ambiente, R-ST-02).
 2.3 Webhook /webhooks/stone/{token} (Basic Auth do tenant, grava antes de processar, responde 200 mesmo com erro de processamento), HandleChargePaid/HandleChargeRefunded (dedupe por charge, criação de venda a partir de pedido, finalização, NFC-e automática, estorno), comando de conciliação com os 6 cenários, tenant a tenant.
-2.4 UI: "Cobrar na maquininha" × "Lançar manual" no fechamento de conta; envio do pedido (Listado); acompanhamento com polling; TerminalChargeResource e PaymentWebhookResource.
+2.4 UI: "Cobrar na Stone" × "Lançar manual" dentro do modal de pagamento da Nova Venda, como em operar-venda.blade.php; envio do pedido (Listado); acompanhamento com polling; TerminalChargeResource e PaymentWebhookResource.
 
 Critérios de aceite: os 11 itens da §10 do documento específico. Testes de timeout/5xx/4xx/webhook duplicado/webhook cruzado entre tenants obrigatórios.
 ```
@@ -133,7 +186,7 @@ Critérios de aceite: os 11 itens da §10 do documento específico. Testes de ti
 ```text
 [bloco comum]
 
-Módulo: painel do garçom. Documento específico: docs/plano/painel-garcom-razelfood.md (requisitos RF-G01 a G15, arquitetura §4, UX §5, integrações §6, critérios §7). Pré-requisitos: Fase 0 e 1.0; P2 opcional (cobrança da mesa só aparece se ativa).
+Módulo: painel do garçom. Documento específico: docs/plano/painel-garcom-razelfood.md (requisitos RF-G01 a G15, arquitetura §4, cópia do front §5, integrações §6, critérios §7). Pré-requisitos: Fases 0, 1.0, 1.R e 1.S; P2 opcional (cobrança da mesa só aparece se ativa).
 
 Decisões a confirmar com o usuário antes de começar: D-06 (painel separado /garcom/{slug}), status de "entregue na mesa" para dine_in (§4.4 — Ready→Delivered e Finished só com conta paga?), D-05 (taxa de serviço padrão).
 
@@ -143,11 +196,11 @@ Analise antes:
 
 Fatie:
 3.1 dining_tables, table_sessions, table_session_people, orders.table_session_id/waiter_user_id, settings do salão por tenant, CRUD de mesas no painel do tenant, Actions OpenTableSession/TransferTableSession/CloseTableSession/BuildTableBill.
-3.2 WaiterPanelProvider (tenancy nativa + ApplyTenantScopes persistente, papel Garçom, databaseNotifications), Mapa de mesas, Atender mesa (abas Pedir/Rodadas/Conta), rascunho persistido e envio idempotente reutilizando os componentes de catálogo da AttendOrder e as Actions de pedido, marcar entregue, retirada, selo "Mesa X" e aviso de pronto no Kitchen.
+3.2 WaiterPanelProvider (tenancy nativa + ApplyTenantScopes persistente, papel Garçom, databaseNotifications), Mapa de mesas e Atender mesa copiados de resources/views/filament/garcom/pages/{mapa-mesas,atender-mesa}.blade.php e dos partials listados na §5, tema e configuração visual copiados de GarcomPanelProvider, rascunho persistido e envio idempotente pelo seletor copiado na Fase 1.S e pelas Actions de pedido, marcar entregue, retirada, selo "Mesa X" e aviso de pronto no Kitchen.
 3.3 PIN de usuário (hash + rate limit), manager_authorizations, AuthorizeManagerAction, cancelar item / remover taxa / transferir mesa com autorização.
-3.4 Conta por pessoa, pré-conta 72 mm (reutilizar layout da comanda), "Contas a fechar" integrando com a Venda, botão de cobrança Stone da mesa (se P2 ativa).
+3.4 Conta por pessoa, pré-conta com o layout copiado do Pizzaria-App, "Contas a fechar" integrando com a Venda, botão de cobrança Stone da mesa (se P2 ativa).
 
-Requisito de UX: mobile-first (360 px), alvos ≥ 48 px, botão primário fixo, confirmação em ações destrutivas, banner sem conexão, polling com checagem de versão (sem WebSocket — HostGator). Validar em navegador real no celular emulado (ver memória "Chromium sem sudo").
+Requisito de front: copiar os arquivos da §5 de docs/plano/painel-garcom-razelfood.md, sem redesenhar, com polling (sem WebSocket — HostGator). Entregar diff contra a origem e capturas lado a lado em desktop e celular emulado (ver memória "Chromium sem sudo").
 
 Critérios de aceite: os 9 itens da §7 do documento específico.
 ```
@@ -168,10 +221,10 @@ Analise antes:
 Requisitos:
 4.2 Evoluir ProductionLine para setor (cor, ordem, tempo alerta/alvo) e products.skips_production.
 4.3 production_items + production_events (tenant_id, snapshot, status por item, sem etapas múltiplas), gerados após o commit quando o pedido entra em Open, idempotente; sincronização com edição/cancelamento do pedido (cancela não iniciados; iniciados exigem "Ciente").
-4.4 Página Estação (tema escuro, tablet, Fila → Em preparo → Prontos, filtro por setor, ações Iniciar/Pronto/Devolver/Desfazer com lock + versão), polling com contador de versão por tenant/setor.
+4.4 Página Estação copiada de resources/views/filament/cozinha/pages/estacao.blade.php, pages/estacao/card.blade.php e partials/operador.blade.php, com tema e configuração visual de CozinhaPanelProvider (tema escuro forçado, Fila → Em preparo → Prontos, filtro por setor, ações Iniciar/Pronto/Devolver/Desfazer com lock + versão), polling com contador de versão por tenant/setor.
 4.5 Produção → pedido (1º iniciado → Preparing; todos prontos → Ready), nunca retrocedendo, com prevenção de laço.
-4.6 Expedição + refazer com motivo.
+4.6 Expedição copiada de resources/views/filament/cozinha/pages/expedicao.blade.php e producao-pedido-modal.blade.php + refazer com motivo.
 Feature nova kds (reservada até a entrega) — tenant sem a feature mantém só o Kitchen atual.
 
-Critérios de aceite: os 5 itens da §6 do documento específico + suíte atual do Kitchen sem regressão.
+Critérios de aceite: os 6 itens da §6 do documento específico (incluindo diff contra a origem e capturas lado a lado em tablet) + suíte atual do Kitchen sem regressão.
 ```

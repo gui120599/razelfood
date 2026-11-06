@@ -256,6 +256,9 @@ return [
         'manage_order_status' => 'Gerenciar status do pedido',
         'mark_order_delivered' => 'Confirmar entrega do pedido',
         'edit_order_advanced_status' => 'Editar pedido em etapa avançada',
+        'manage_sales' => 'Gerenciar vendas e fechar contas',
+        'emit_fiscal_document' => 'Emitir e reenviar NFC-e',
+        'cancel_fiscal_document' => 'Cancelar NFC-e',
     ],
 
     /*

@@ -23,6 +23,15 @@ class Category extends TenantScopedModel
         'show_description_in_menu',
         'allows_flavors',
         'inherit_flavor_options',
+        'ncm',
+        'cfop',
+        'csosn',
+        'origin_code',
+        'commercial_unit',
+        'cest',
+        'icms_rate',
+        'pis_rate',
+        'cofins_rate',
     ];
 
     protected function casts(): array
@@ -32,6 +41,9 @@ class Category extends TenantScopedModel
             'show_description_in_menu' => 'boolean',
             'allows_flavors' => 'boolean',
             'inherit_flavor_options' => 'boolean',
+            'icms_rate' => 'decimal:2',
+            'pis_rate' => 'decimal:2',
+            'cofins_rate' => 'decimal:2',
         ];
     }
 

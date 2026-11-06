@@ -2,7 +2,7 @@
 
 > **Tipo:** auditoria comparativa + levantamento de requisitos + plano de implementação.
 > **Data:** 2026-11-04.
-> **Status:** aguardando aprovação. **Nada foi implementado.**
+> **Status:** em execução. Fases 0, 1.0, 1.1, 1.2, 1.3, 1.4 e 1.5 entregues (ver o quadro de fases). Demais fases aguardando.
 > **Legenda:** **[FATO]** comprovado no código local · **[INFERÊNCIA]** dedução a partir do código, sem prova direta · **[HIPÓTESE]** precisa ser confirmado (fornecedor, operação ou decisão) · **[DECISÃO]** depende de aprovação.
 
 Documentos complementares (aprofundam cada módulo):
@@ -95,7 +95,7 @@ Fonte usada: **somente o código local**. O GitHub não foi consultado. A docume
 
 | Tema | Pizzaria-App | RazelFood | Impacto |
 |---|---|---|---|
-| Nomenclatura | Português com prefixo de tabela (`pedido_status`, `item_pedido_valor`) | Inglês sem prefixo (`status`, `unit_price`) | Nenhum código é copiável literalmente; só regras. |
+| Nomenclatura | Português com prefixo de tabela (`pedido_status`, `item_pedido_valor`) | Inglês sem prefixo (`status`, `unit_price`) | No back-end, só as regras são aproveitadas. O front-end é copiado, com tradução dos vínculos (§2.4.9). |
 | Pedido × Venda | Separados | Só `orders` | Criar `sales` (D-01). |
 | Pagamento | `pagamentos_pedidos` (combinado/declarado) **e** `pagamentos_vendas` (recebido) | Só `order_payments` (declarado, snapshot de nome) | Pagamento confirmado nasce no módulo Venda. |
 | Forma de pagamento | Rica: `opcaopag_desc_nfe`, `envio_automatico_nfe`, `stone_integrada`, `requer_bandeira`, `requer_autorizacao`, taxa, troco | `name`, `is_cash`, `show_in_menu` | Estender `payment_options`. |
@@ -106,7 +106,7 @@ Fonte usada: **somente o código local**. O GitHub não foi consultado. A docume
 
 ### 2.4 Convenções obrigatórias do RazelFood
 
-> **Regra-mãe:** o Pizzaria-App é fonte de **regras de negócio**, nunca de código, nomes ou estrutura. Toda implementação derivada deste plano segue os padrões abaixo, extraídos do `CLAUDE.md`, das `.ai/rules/**` e do código atual do RazelFood (conferidos em 2026-11-04). Os nomes de classes e tabelas citados nos documentos de `docs/plano/` são **propostas** que já obedecem a esta seção. Se houver conflito entre um documento do plano e esta seção, ou entre esta seção e uma regra mais nova em `.ai/rules/`, **vale a regra do projeto**.
+> **Regra-mãe (revisada em 2026-11-06):** o RazelFood e o Pizzaria-App são **o mesmo sistema**: um é SaaS multi-tenant e o outro é a instalação de origem. O Pizzaria-App é fonte das **regras de negócio** e do **front-end, que é copiado para o RazelFood** (§2.4.9). No back-end, ele **não** é fonte de código, nomes internos nem organização de pastas. Toda implementação derivada deste plano segue os padrões abaixo, extraídos do `CLAUDE.md`, das `.ai/rules/**` e do código atual do RazelFood (conferidos em 2026-11-04). Os nomes de classes e tabelas citados nos documentos de `docs/plano/` são **propostas** que já obedecem a esta seção. Se houver conflito entre um documento do plano e esta seção, ou entre esta seção e uma regra mais nova em `.ai/rules/`, **vale a regra do projeto**.
 
 #### 2.4.1 Fontes que o agente deve ler antes de codificar
 
@@ -125,7 +125,7 @@ Fonte usada: **somente o código local**. O GitHub não foi consultado. A docume
 | Pivots | Singular, ordem alfabética | `category_production_line`, `product_gift`, `plan_feature` | `sale_order` (se necessário) |
 | Colunas | Inglês snake_case; FK `{model}_id`; timestamps de evento `*_at`; boolean `is_*`/`requires_*`/`uses_*`/verbo | `cancelled_by_user_id`, `accepted_at`, `is_cash`, `requires_address`, `uses_in_transit_stage` | `issuer_cnpj`, `authorized_at`, `connect_enabled`, `auto_issue_fiscal_document` |
 | Snapshot histórico | Nome copiado + FK opcional, para preservar histórico | `orders.payment_option_name`, `order_payments.payment_option_name` | `sale_payments.payment_option_name` |
-| Enums | `string`-backed, **cases TitleCase**, **valores snake_case minúsculos**, métodos `label()` (pt-BR) e `color()` próprios (não `HasLabel` do Filament), regras de transição no próprio enum | `OrderStatus::InTransit = 'in_transit'`, `next()`, `canBeCancelled()` | `TerminalChargeStatus::PartiallyPaid = 'partially_paid'`, `FiscalDocumentStatus::Authorized` |
+| Enums | `string`-backed, **cases TitleCase**, **valores snake_case minúsculos**, métodos `label()` (pt-BR) e `color()` próprios (não `HasLabel` do Filament), regras de transição no próprio enum | `OrderStatus::InTransit = 'in_transit'`, `next()`, `canBeCancelled()` | `TerminalChargeStatus::PartiallyPaid = 'partially_paid'`, `FiscalDocumentStatus::Issued` |
 | Textos de interface, mensagens de exceção, docblocks e comentários | **Português** | `OrderTransitionException` ("mensagem segura para mostrar a quem opera") | idem |
 | Segmentos de URL voltados ao usuário | Português | `/acompanhar`, `/comanda`, `/entrega`, `/painel`, página `Kitchen` com slug `cozinha` | painel `/garcom/{slug}`; `/webhooks/...` (não voltado ao usuário) |
 | Nomes de rota | Inglês com ponto | `order.tracking`, `reports.orders.print` | `webhooks.nfeio`, `webhooks.stone` |
@@ -145,7 +145,7 @@ Fonte usada: **somente o código local**. O GitHub não foi consultado. A docume
 | Models | `app/Models/` | Domínio estende `App\Models\Concerns\TenantScopedModel`; `$fillable` explícito; casts no método `casts()`; enums e `decimal:2` castados; relação inversa obrigatória para `BelongsToMany` usada em RelationManager (`.ai/rules/models.md`) |
 | Resources do tenant | `app/Filament/Tenant/Resources/{Plural}/{Singular}Resource.php` + `Pages/`, `Schemas/{Singular}Form.php`, `Tables/{Plural}Table.php`, `RelationManagers/` | Igual a `Orders/OrderResource`, `Products/ProductResource` |
 | Pages do tenant | `app/Filament/Tenant/Pages/` (subpasta por área se houver várias, ex.: `Orders/AttendOrder`) | `HasPageShield` |
-| Componentes Livewire do painel | `app/Filament/Tenant/Livewire/{Área}/` | Ex.: `Orders/ProductCatalogSelector` — **reusar** no painel do garçom |
+| Componentes Livewire do painel | `app/Filament/Tenant/Livewire/{Área}/` | Ex.: `Orders/ProductCatalogSelector`. A view do seletor passa a ser a cópia de `pedido-produto-selector.blade.php` (Fase 1.S) |
 | Suporte Filament compartilhado | `app/Filament/Tenant/Support/`, `app/Filament/Support/` | Ex.: `OrderStatusActions`, `InputMasks`, `EstablishmentDocumentFields` (CNPJ/endereço: reusar, não duplicar) |
 | Gating por feature | `App\Filament\Tenant\Concerns\GatedByFeature` + `requiredFeature()` | Resources: trait combinada com `parent::canAccess()`. **Pages com `HasPageShield`: usar alias de trait, nunca a `GatedByFeature` genérica** (`.ai/rules/pages.md`) |
 | Resources do painel central | `app/Filament/Resources/` | **Nunca** `shield:generate --panel=central`; autorização por `CentralPanelPolicy` + `central_role` |
@@ -198,6 +198,51 @@ Fonte usada: **somente o código local**. O GitHub não foi consultado. A docume
 #### 2.4.8 Fluxo de trabalho por fase
 
 Modo plano → apresentar arquivos, migrations e decisões (via `AskUserQuestion`) → aprovação → implementação incremental com testes → validação HTTP/navegador real quando houver UI → limpeza dos dados de teste → query de sanidade dos tenants reais (`emporiodapizza`, `lazzopizza`, `admin@razeltec.com.br`) → revisão com o subagente `laravel-reviewer` → relatório em português. Sem commit sem autorização. Registrar armadilhas novas em `.ai/rules/` com `record-rule`.
+
+#### 2.4.9 Cópia do front-end do Pizzaria-App
+
+> **Decisão do usuário (2026-11-06):** o front-end do Pizzaria-App deve ser **copiado** para o RazelFood, porque os dois são o mesmo sistema. Esta regra substitui as propostas anteriores deste plano de criar telas próprias ou apenas replicar a estrutura. Ela vale para **Nova Venda, Atendimento de pedidos, Painel de Pedidos, Garçom, Cozinha e Stone**.
+
+**Regra.** Tela com equivalente no Pizzaria-App nasce da cópia dos arquivos de front da tela de origem. Não se redesenha nem se recria "parecido". O arquivo de origem nunca é alterado.
+
+| O que é copiado | O que é traduzido na cópia | O que não é copiado |
+|---|---|---|
+| Views Blade (páginas, partials, componentes `x-*`, views de Livewire) com markup, classes Tailwind, Alpine, textos, ordem, abas, modais e atalhos | Vínculos com o back-end: `wire:*`, `$this->…`, propriedades, relações, colunas e `route()`, para os nomes em inglês do RazelFood (§2.4.2) | Classes PHP de negócio: Services, Observers e Models. As regras entram pelas Actions do RazelFood |
+| JS de tela (ex.: `pizza-svg-painel.js`, `pizza-svg.js`) e regras do tema (`resources/css/filament/{garcom,cozinha}/theme.css`, `resources/css/marca/`) | `@source` e caminhos do tema | Telas e blocos excluídos ou de funções ainda inexistentes, removidos da cópia (influenciador, carteira, e outros até a fase deles) |
+| Configuração visual do painel: `spa()`, `topNavigation()`, `maxContentWidth()`, tema escuro forçado na cozinha, grupos e ordem do menu | Tenancy e rotas para `/{painel}/{slug}` | `Empresa::first()` e configurações globais, que viram dados do tenant |
+| Em Resources Filament: mesmos campos, rótulos, colunas, filtros, ações e ordem | Código PHP reescrito com os nomes do RazelFood | — |
+
+**Desvios aprovados da §2.4.9 (Fase 1.4, 2026-11-06):** (a) `FiscalDocumentResource` ("Documentos fiscais", grupo Vendas), sem equivalente no Pizzaria-App; (b) bloco recolhível "Números reservados e não usados" no Relatório fiscal; (c) as telas das Fases 1.1–1.4 usam componentes Filament próprios e **precisam de conferência lado a lado na Fase 1.S**. No payload da NFC-e, o único desvio do formato validado no Pizzaria-App é o `id` (id do documento fiscal, não o da venda; aprovado em 2026-11-06).
+
+**Exceções permitidas (somente estas):**
+
+1. Isolamento, permissões e gating por feature.
+2. Marca do tenant (logo e cor) aplicada sobre a tela copiada.
+3. Login do garçom: a lista de usuários com PIN (`login-pin`) só entra com dispositivo pareado (MT-10).
+4. Blocos de funções que ainda não existem ficam fora até a fase correspondente, voltando sem alteração quando ela chegar.
+5. Dependência de front nova segue a aprovação da §2.4.6 (ex.: `boxicons`, importado pelo tema do garçom).
+
+**Como aplicar:**
+
+1. Copiar os arquivos do mapa abaixo **antes** de escrever a página PHP.
+2. Criar a página ou o componente Livewire do RazelFood expondo o que a view copiada precisa, com nomes em inglês e chamando as Actions.
+3. Comparar com `diff`: a diferença para a origem pode conter só vínculos traduzidos e exceções. O resultado do `diff` entra no relatório da fase.
+4. Comparar lado a lado em navegador real, em desktop e celular, com capturas das duas telas.
+5. Melhoria visual é aprovada antes e aplicada nos dois sistemas.
+
+**Mapa de cópia (caminhos de origem no Pizzaria-App):**
+
+| Tela | Copiar de | Destino no RazelFood | Situação hoje | Fase |
+|---|---|---|---|---|
+| Nova Venda | `resources/views/filament/pages/operar-venda.blade.php`, `filament/pages/operar-venda/item-pedido.blade.php`, `livewire/venda-produto-selector.blade.php` | Substitui `Sales/CloseAccount` e `Sales/PendingAccounts` | Diferente | 1.R |
+| Atender Pedido | `filament/pages/atender-pedido.blade.php`, `livewire/{pedido-produto-selector,cliente-picker,entrega-pagamento-picker}.blade.php`, `resources/js/pizza-svg*.js` | `Orders/AttendOrder` e componentes de `Filament/Tenant/Livewire/Orders` | Grid parecido; conteúdo a conferir | 1.S |
+| Painel de Pedidos | `filament/pages/painel-pedidos.blade.php`, `painel-pedidos/{card,coluna,cancelado-card,detalhes-modal,link-entrega-modal}.blade.php` | `Kitchen` ("Central de Pedidos") | Kanban parecido; conteúdo a conferir | 1.S |
+| Vendas e fiscal | `app/Filament/Resources/Vendas`, `RelatorioFiscalNotas` e `NfeWebhooks` (campos e colunas) | `SaleResource`, `FiscalReport`, documentos fiscais | Entregue na Fase 1; a conferir | 1.S |
+| Menu | Grupos de `AdminPanelProvider` (Indicadores, Comercial, Salão, Operação, Cozinha, Cardápio…) | `TenantPanelProvider` | Diferente | 1.S (D-09) |
+| Maquininhas, Stone | `app/Filament/Resources/{Maquininhas,StonePedidos,StoneWebhooks}`, modais Stone de `operar-venda.blade.php`, `livewire/mesa-stone-cobranca.blade.php` | Resources e modais da Fase 2 | A criar | 2 |
+| Mesas e sessões | `app/Filament/Resources/{Mesas,SessoesMesa}` | Resources da Fase 3 | A criar | 3 |
+| Garçom | `filament/garcom/pages/{mapa-mesas,atender-mesa,atender-retirada}.blade.php`, `filament/garcom/partials/{sem-conexao,alerta-pronto,pessoas-mesa,carrinho-lateral,mesa-rodadas,mesa-conta}.blade.php`, `components/pedido/*`, `resources/css/filament/garcom/theme.css`, configuração de `GarcomPanelProvider` | Mesmos caminhos em `filament/garcom/` + `WaiterPanelProvider` | A criar | 3 |
+| Cozinha | `filament/cozinha/pages/{estacao,expedicao}.blade.php`, `filament/cozinha/pages/estacao/card.blade.php`, `filament/cozinha/partials/operador.blade.php`, `filament/cozinha/producao-pedido-modal.blade.php`, `components/cozinha/*`, `resources/css/filament/cozinha/theme.css`, configuração de `CozinhaPanelProvider` | Mesmos caminhos em `filament/cozinha/` | A criar | 4 |
 
 ---
 
@@ -371,7 +416,7 @@ Ver [migracao-connect-stone-razelfood.md](migracao-connect-stone-razelfood.md). 
 
 ## 8. Painel do garçom — resumo
 
-Ver [painel-garcom-razelfood.md](painel-garcom-razelfood.md). Novo painel Filament `garcom` com tenancy por path (`/garcom/{slug}`), mobile-first, reaproveitando `ProductCatalogSelector`/`AddonPickerModal`/`FlavorPickerModal` da `AttendOrder` e as Actions de pedido. Cada rodada = um `Order` (`origin = table`, `fulfillment = dine_in`) ligado a `table_sessions`. Pagamento **não** acontece no painel do garçom na v1: ele fecha a mesa e a conta vai para o fechamento (Venda), com cobrança Stone opcional pela mesa.
+Ver [painel-garcom-razelfood.md](painel-garcom-razelfood.md). Novo painel Filament `garcom` com tenancy por path (`/garcom/{slug}`), com a mesma estrutura das telas do Pizzaria-App (§2.4.9), com as views copiadas dele (§2.4.9) ligadas às Actions de pedido do RazelFood. Cada rodada = um `Order` (`origin = table`, `fulfillment = dine_in`) ligado a `table_sessions`. Pagamento **não** acontece no painel do garçom na v1: ele fecha a mesa e a conta vai para o fechamento (Venda), com cobrança Stone opcional pela mesa.
 
 ## 9. Painel da cozinha — resumo
 
@@ -462,6 +507,8 @@ flowchart LR
 | R-08 | XML não guardado (obrigação de guarda de 5 anos é do emitente) | Média | Alto | [HIPÓTESE] confirmar se a NFE.io oferece download do XML; se sim, baixar e guardar no `storage` privado por tenant |
 | R-09 | Relatórios que tratam `Finished` como "vendido" | Média | Médio | Não alterar `Finished`; novos relatórios financeiros usam `sales` |
 | R-10 | Credenciais/contrato Stone por parceiro × por lojista indefinidos | Alta | Alto | [HIPÓTESE] confirmar com a Stone antes da Fase 2 (ver doc Stone §8) |
+| R-11 | Telas dos dois sistemas divergirem novamente | Alta | Alto | §2.4.9: cópia dos arquivos, `diff` contra a origem e comparação lado a lado em toda fase com UI |
+| R-12 | Cópia trazer dependência do back-end do Pizzaria-App (`Empresa::first()`, models em português, influenciador) | Média | Médio | Traduzir todos os vínculos e buscar referências de origem antes de concluir a fase |
 
 ## 14. Prioridades e plano de implementação
 
@@ -475,6 +522,9 @@ A ordem do usuário (NFE.io → Stone → Garçom → Cozinha) é mantida. Ajust
 | **1.2** | Emissão NFC-e | `NfeIoClient` (credenciais por parâmetro), `fiscal_number_sequences`, `fiscal_documents`, montagem de payload com todas as RN-FIS, emissão manual e automática pós-finalização, consulta, DANFE (URI) | Inutilização, contingência offline | G |
 | **1.3** | Ciclo de vida fiscal | Webhook NFE.io por tenant (HMAC), `fiscal_webhooks` (auditoria), comando `fiscal:sync-status` tenant-aware, cancelamento, reenvio, bloqueio de cancelamento de venda com nota viva | — | M |
 | **1.4** | Painel fiscal | Lista de documentos por tenant com filtros por situação, relatório fiscal simples, contador de notas por tenant na central | — | S |
+| **1.5** | Alinhamento do payload e da fila | Saída da NFC-e igual à validada em produção no Pizzaria-App (`buyer` sempre presente, documentos como texto, `codeGTIN`/`cest` nulos, `card` com 4 chaves para cartão e Pix, `totalIndicator`, descrição com categoria, frações e adicionais); NFC-e automática com `dispatchAfterResponse`; `queue:work` agendado por minuto | Validar contra a NFE.io real (depende de empresa em homologação) | S |
+| **1.R** | Cópia da tela de venda | Substituir `CloseAccount`/`PendingAccounts` por **Nova Venda**, copiando as views de `OperarVenda` (§2.4.9): abas à esquerda (Pedidos, Produtos; Mesas na Fase 3), itens, cliente, totais e pagamentos à direita, pagamento e cliente em modal, Finalizar/Cancelar, atalhos Alt+C/P/E/O. Reusar `FinalizeSale`, `CancelSale` e o ciclo fiscal | Mudar regras de venda; abas e blocos de funcionalidades que ainda não existem (Mesas, Pendentes/fiado, cortesia, divisão de item) | G |
+| **1.S** | Cópia das telas de pedido | Copiar Atender Pedido (com o seletor de produtos, usado também pelo garçom) e Painel de Pedidos; conferir Vendas e telas fiscais da Fase 1; alinhar o menu (D-09) | Mudar regras de pedido | G |
 | **2.1** | Maquininhas | `payment_terminals` (operadora, nº de série, `connect_enabled`, ativo) | Taxas/prazos de recebimento | S |
 | **2.2** | Stone — cobrança | `tenant_payment_integrations`, `StoneConnectClient`, `payment_terminal_charges`, elegibilidade/valor devido, Direto e Listado, idempotência | Recebimento na entrega (entregador) | G |
 | **2.3** | Stone — webhook e conciliação | Webhook por tenant (Basic Auth), `charge.paid`/`charge.refunded`, criação de venda a partir do pedido, NFC-e automática, `stone:reconcile` tenant-aware | — | G |
@@ -504,7 +554,7 @@ Estimativa em "dias de agente + revisão" (ordem de grandeza, não compromisso):
 
 ## 16. Critérios de aceite (globais)
 
-0. Código novo segue integralmente a §2.4 (nomenclatura, estrutura, testes, PHP 8.4); divergência só com aprovação registrada.
+0. Código novo segue integralmente a §2.4 (nomenclatura, estrutura, testes, PHP 8.4); divergência só com aprovação registrada. Tela com equivalente no Pizzaria-App nasce da cópia dos arquivos de front e é aprovada por `diff` contra a origem + comparação lado a lado (§2.4.9).
 1. Nenhuma query de domínio nova sem `tenant_id` (model `TenantScopedModel` ou filtro explícito justificado).
 2. Teste de isolamento em toda fase: dois tenants, dados e credenciais diferentes; webhook/job de um não lê nem grava no outro.
 3. Credenciais nunca em texto puro no banco, em log, em payload de auditoria ou no cache de resolução de tenant.
@@ -529,3 +579,5 @@ Estimativa em "dias de agente + revisão" (ordem de grandeza, não compromisso):
 | D-05 | Taxa de serviço padrão de um tenant novo | Desligada, 10% sugerido ao ligar |
 | D-06 | Painel do garçom como painel Filament separado (`/garcom/{slug}`) ou páginas dentro do painel do tenant | Painel separado (doc do garçom §4) |
 | D-07 | Regime tributário suportado na v1 | Só Simples Nacional |
+| D-08 | Nova Venda com rascunho salvo (venda aberta desde o 1º item, como `venda_status = INICIADA`) ou mantida só na tela até finalizar? | **Rascunho salvo**: sobrevive a F5 e queda de rede, e a cobrança Stone Direta exige venda existente antes de finalizar. Custo: adaptar `FinalizeSale`, que hoje cria a venda já finalizada, e limpar rascunhos vazios. **Aprovada em 2026-11-06: rascunho salvo** |
+| D-09 | Alinhar grupos e rótulos do menu do tenant ao Pizzaria-App (Comercial: Nova Venda, Vendas, Painel de Pedidos, Pedidos, Atender Pedido…)? | **Sim**, em entrega separada, ajustando os testes que dependem dos rótulos. **Aprovada em 2026-11-06** |

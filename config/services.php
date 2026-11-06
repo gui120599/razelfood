@@ -35,6 +35,11 @@ return [
         ],
     ],
 
+    'nfeio' => [
+        'base_url' => env('NFEIO_BASE_URL', 'https://api.nfse.io/v2'),
+        'timeout' => (int) env('NFEIO_TIMEOUT', 30),
+    ],
+
     'ibge' => [
         'base_url' => env('IBGE_BASE_URL', 'https://servicodados.ibge.gov.br/api/v1/localidades'),
     ],

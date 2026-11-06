@@ -2,6 +2,8 @@
 
 namespace App\Actions\Tenants;
 
+use App\Enums\CardBrand as CardBrandEnum;
+use App\Models\CardBrand;
 use App\Models\DeliveryOption;
 use App\Models\PaymentOption;
 use App\Models\Tenant;
@@ -52,6 +54,12 @@ class SeedDefaultTenantOptions
             PaymentOption::withoutGlobalScopes()->firstOrCreate(
                 ['tenant_id' => $tenant->id, 'name' => $option['name']],
                 ['is_cash' => $option['is_cash']],
+            );
+        }
+
+        foreach (CardBrandEnum::cases() as $brand) {
+            CardBrand::withoutGlobalScopes()->firstOrCreate(
+                ['tenant_id' => $tenant->id, 'brand' => $brand->value, 'name' => $brand->label()],
             );
         }
     }

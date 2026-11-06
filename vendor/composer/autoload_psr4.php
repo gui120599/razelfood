@@ -71,7 +71,7 @@ return array(
     'Livewire\\' => array($vendorDir . '/livewire/livewire/src'),
     'Leandrocfe\\FilamentPtbrFormFields\\Database\\Factories\\' => array($vendorDir . '/leandrocfe/filament-ptbr-form-fields/database/factories'),
     'Leandrocfe\\FilamentPtbrFormFields\\' => array($vendorDir . '/leandrocfe/filament-ptbr-form-fields/src'),
-    'League\\Uri\\' => array($vendorDir . '/league/uri', $vendorDir . '/league/uri-interfaces', $vendorDir . '/league/uri-components'),
+    'League\\Uri\\' => array($vendorDir . '/league/uri-interfaces', $vendorDir . '/league/uri', $vendorDir . '/league/uri-components'),
     'League\\MimeTypeDetection\\' => array($vendorDir . '/league/mime-type-detection/src'),
     'League\\Flysystem\\Local\\' => array($vendorDir . '/league/flysystem-local'),
     'League\\Flysystem\\' => array($vendorDir . '/league/flysystem/src'),

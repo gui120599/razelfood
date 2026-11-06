@@ -17,6 +17,13 @@ class EditTenant extends EditRecord
 {
     protected static string $resource = TenantResource::class;
 
+    protected function afterSave(): void
+    {
+        // Os segredos digitados não podem ficar no estado do componente depois de gravados.
+        $this->data['fiscalSettings']['nfeio_api_key'] = null;
+        $this->data['fiscalSettings']['nfeio_webhook_secret'] = null;
+    }
+
     protected function getHeaderActions(): array
     {
         return [

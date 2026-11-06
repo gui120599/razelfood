@@ -2,6 +2,7 @@
 
 namespace App\Filament\Tenant\Resources\Categories\Schemas;
 
+use App\Filament\Support\ProductFiscalFields;
 use App\Filament\Tenant\Resources\Categories\RelationManagers\SubcategoriesRelationManager;
 use App\Models\Category;
 use Filament\Forms\Components\Textarea;
@@ -47,6 +48,7 @@ class CategoryForm
                         ->live()
                         ->visible(fn (Get $get, ?Category $record, Component $livewire): bool => self::showInheritToggle($get, $record, $livewire)),
                 ]),
+            ProductFiscalFields::section(isCategoryDefault: true),
         ]);
     }
 

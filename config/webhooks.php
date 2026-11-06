@@ -1,5 +1,7 @@
 <?php
 
+use App\Support\Webhooks\NfeIoWebhookTenantResolver;
+
 return [
 
     /*
@@ -18,10 +20,10 @@ return [
      * Registro de resolvers de tenant por provedor: nome usado no middleware
      * `webhook.tenant:{provedor}` => classe que implementa
      * App\Support\Webhooks\WebhookTenantResolver (token opaco → Tenant).
-     * Vazio na Fase 0; a Fase 1.3 registra 'nfeio' e a 2.3 registra 'stone'.
+     * A Fase 1.3 registra 'nfeio'; a 2.3 registrará 'stone'.
      */
     'providers' => [
-        // 'nfeio' => App\Support\Webhooks\NfeIoWebhookTenantResolver::class,
+        'nfeio' => NfeIoWebhookTenantResolver::class,
     ],
 
 ];

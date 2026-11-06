@@ -59,12 +59,25 @@ Conclusão: **o KDS completo não bloqueia o garçom**.
 | 4.1 | Aviso de pronto ao garçom + selo de mesa no kanban | P3 (entra na Fase 3.2) |
 | 4.2 | Evoluir `ProductionLine` → setor (cor, ordem, tempo alvo/alerta, dispensa produção no produto) | — |
 | 4.3 | `production_items` + `production_events` (snapshot, status por item, sem etapas múltiplas) gerados após o commit da transição para `Open` | 4.2 |
-| 4.4 | Página **Estação** (tablet, tema escuro, Fila → Em preparo → Prontos), filtro por setor, polling com versão | 4.3 |
+| 4.4 | Página **Estação**, copiada de `cozinha/pages/estacao.blade.php` (§4.1): Fila → Em preparo → Prontos, filtro por setor, polling com versão | 4.3 |
 | 4.5 | Sincronização produção → pedido (preparando/pronto) sem retroceder | 4.3 |
-| 4.6 | Expedição + refazer com motivo | 4.5 |
+| 4.6 | **Expedição**, copiada de `cozinha/pages/expedicao.blade.php` (§4.1), + refazer com motivo | 4.5 |
 | 4.7 | Tablet pareado por QR (token por tenant) + operador | 4.4 |
 | 4.8 | Etapas múltiplas, disparo por tempo, all-day count, relatório de produção | 4.6 |
 | Futuro | Ficha técnica viva (depende de insumos/estoque avançado) | Estoque |
+
+## 4.1 Cópia do front do Pizzaria-App
+
+Revisado em 2026-11-06: as telas da cozinha são copiadas conforme a §2.4.9 do documento principal, traduzindo apenas os vínculos com o back-end.
+
+| Tela | Arquivos copiados (origem em `resources/views/`) | Etapa |
+|---|---|---|
+| Estação | `filament/cozinha/pages/estacao.blade.php`, `pages/estacao/card.blade.php`, `partials/operador.blade.php`, `components/cozinha/*` | 4.4 |
+| Expedição | `filament/cozinha/pages/expedicao.blade.php`, `filament/cozinha/producao-pedido-modal.blade.php` | 4.6 |
+| Pareamento e operador | `filament/cozinha/pareamento-qr.blade.php`, `filament/cozinha/partials/operador.blade.php` | 4.7 |
+| Setores, rotas e dispositivos | Campos, colunas e ordem de `app/Filament/Resources/{SetoresProducao,DispositivosCozinha}` | 4.2 e 4.7 |
+
+Também são copiados o tema (`resources/css/filament/cozinha/theme.css`) e a configuração de `CozinhaPanelProvider`: `darkMode(true, isForced: true)`, `spa()`, `topNavigation()` e largura total. Blocos de ficha técnica e checklist ficam fora da cópia até essas funções existirem. **Aceite visual:** `diff` contra a origem e capturas lado a lado no tamanho de tablet.
 
 ## 5. Multi-tenant
 
@@ -80,3 +93,4 @@ Conclusão: **o KDS completo não bloqueia o garçom**.
 3. Pedido nunca retrocede de status por ação da cozinha.
 4. Alteração após início exige "Ciente".
 5. Tenant sem a feature continua só com o kanban atual, sem regressão.
+6. Estação e Expedição passam no aceite visual da §4.1.

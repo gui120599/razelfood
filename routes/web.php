@@ -5,6 +5,8 @@ use App\Http\Controllers\LandingController;
 use App\Http\Controllers\OrderTicketController;
 use App\Http\Controllers\OrderTrackingController;
 use App\Http\Controllers\Reports\DeliveriesReportPrintController;
+use App\Http\Controllers\Reports\FiscalReportCsvController;
+use App\Http\Controllers\Reports\FiscalReportPrintController;
 use App\Http\Controllers\Reports\OrdersReportPrintController;
 use App\Http\Middleware\ResolveTenantFromPath;
 use App\Livewire\Checkout;
@@ -37,6 +39,9 @@ Route::prefix('{tenant}')
         // período vem da query string, auth + permissão validadas no controller.
         Route::get('/relatorios/pedidos/imprimir', [OrdersReportPrintController::class, 'show'])->name('reports.orders.print');
         Route::get('/relatorios/entregas/imprimir', [DeliveriesReportPrintController::class, 'show'])->name('reports.deliveries.print');
+        // Relatório fiscal (NFC-e): CSV e versão imprimível; feature + permissão validadas no controller.
+        Route::get('/relatorios/fiscal/csv', FiscalReportCsvController::class)->name('reports.fiscal.csv');
+        Route::get('/relatorios/fiscal/imprimir', FiscalReportPrintController::class)->name('reports.fiscal.print');
         // GET+POST na mesma rota assinada (RF-28): o form de confirmação reenvia a
         // própria URL assinada, então o middleware "signed" valida os dois métodos.
         Route::match(['GET', 'POST'], '/entrega/{order}', DeliveryConfirmationController::class)
