@@ -6,6 +6,7 @@ use App\Enums\SaleStatus;
 use App\Models\Concerns\TenantScopedModel;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * Venda / fechamento de conta (Fase 1.0). Agrega pedidos inteiros
@@ -80,6 +81,27 @@ class Sale extends TenantScopedModel
     public function cancelledBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'cancelled_by_user_id');
+    }
+
+    public function fiscalDocuments(): HasMany
+    {
+        return $this->hasMany(FiscalDocument::class);
+    }
+
+    /**
+     * Documento fiscal mais recente da venda (qualquer estado).
+     */
+    public function currentFiscalDocument(): HasOne
+    {
+        return $this->hasOne(FiscalDocument::class)->latestOfMany();
+    }
+
+    /**
+     * Tem NFC-e viva (emitida, em processamento ou em cancelamento)? Bloqueia o cancelamento da venda.
+     */
+    public function hasLiveFiscalDocument(): bool
+    {
+        return $this->fiscalDocuments()->live()->exists();
     }
 
     public function displayNumber(): string

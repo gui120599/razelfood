@@ -2,11 +2,14 @@
 
 namespace App\Actions\Sales;
 
+use App\Actions\Fiscal\ShouldAutoIssue;
 use App\Actions\Orders\Support\CartStockAndPromotionLedger;
 use App\Enums\OrderStatus;
 use App\Enums\SaleStatus;
 use App\Exceptions\CheckoutException;
 use App\Exceptions\SaleException;
+use App\Jobs\IssueFiscalDocumentJob;
+use App\Models\CardBrand;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\PaymentOption;
@@ -24,6 +27,7 @@ use App\Support\Sales\StandaloneItemPrice;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 /**
  * Fecha a conta: cria uma venda FINALIZADA que cobra 1+ pedidos inteiros e/ou
@@ -53,12 +57,13 @@ class FinalizeSale
         private readonly CartStockAndPromotionLedger $ledger,
         private readonly AllocateSaleNumber $allocateSaleNumber,
         private readonly StandaloneItemPrice $standaloneItemPrice,
+        private readonly ShouldAutoIssue $shouldAutoIssue,
     ) {}
 
     /**
      * @param  array<int, int>  $orderIds
      * @param  array<int, array{product_id: int, quantity: int}>  $standaloneItems
-     * @param  array<int, array{payment_option_id: int, amount: float|int|string, card_brand?: ?string, authorization_code?: ?string}>  $payments
+     * @param  array<int, array{payment_option_id: int, amount: float|int|string, card_brand?: ?string, card_brand_id?: int|string|null, authorization_code?: ?string}>  $payments
      *
      * @throws SaleException
      */
@@ -80,7 +85,7 @@ class FinalizeSale
             throw new SaleException('Selecione ao menos um pedido ou um item para fechar a conta.');
         }
 
-        return DB::transaction(function () use ($tenantId, $cutoff, $orderIds, $standaloneItems, $payments, $finalizedBy): Sale {
+        $sale = DB::transaction(function () use ($tenantId, $cutoff, $orderIds, $standaloneItems, $payments, $finalizedBy): Sale {
             ['orders' => $orders, 'itemIds' => $orderItemIds] = $this->lockEligibleOrders($orderIds, $cutoff);
             $standalone = $this->prepareStandaloneItems($standaloneItems);
 
@@ -147,6 +152,20 @@ class FinalizeSale
 
             return $sale->load(['payments', 'items', 'saleOrders']);
         }, attempts: 3);
+
+        // Emissão automática da NFC-e (RN-FIS-12): só depois do commit da venda e sempre em
+        // job (HTTP nunca roda aqui). O job revalida tudo ao executar.
+        // A venda já foi efetivada: uma falha ao decidir/enfileirar a nota não pode virar erro
+        // de fechamento (um novo clique falharia com "pedidos já cobrados"). A nota sai pelo botão.
+        try {
+            if (($this->shouldAutoIssue)($tenant, $sale)) {
+                IssueFiscalDocumentJob::dispatch($tenantId, $sale->id)->afterCommit();
+            }
+        } catch (Throwable $exception) {
+            report($exception);
+        }
+
+        return $sale;
     }
 
     /**
@@ -258,7 +277,7 @@ class FinalizeSale
     /**
      * Valida os pagamentos recebidos e calcula o troco no servidor.
      *
-     * @param  array<int, array{payment_option_id: int, amount: float|int|string, card_brand?: ?string, authorization_code?: ?string}>  $payments
+     * @param  array<int, array{payment_option_id: int, amount: float|int|string, card_brand?: ?string, card_brand_id?: int|string|null, authorization_code?: ?string}>  $payments
      * @return array<int, array<string, mixed>> Linhas prontas para SalePayment (sem tenant_id/sale_id).
      */
     private function buildPaymentLines(array $payments, int $totalCents): array
@@ -298,6 +317,14 @@ class FinalizeSale
             }
 
             $cardBrand = $this->cleanText($payment['card_brand'] ?? null, self::MAX_CARD_BRAND_LENGTH);
+            $registeredBrand = null;
+
+            if (filled($payment['card_brand_id'] ?? null)) {
+                // CardBrand é tenant-scoped: bandeira de outro estabelecimento nunca é encontrada.
+                $registeredBrand = CardBrand::query()->find((int) $payment['card_brand_id'])
+                    ?? throw new SaleException("Bandeira de cartão inválida para \"{$option->name}\".");
+                $cardBrand = mb_substr($registeredBrand->name, 0, self::MAX_CARD_BRAND_LENGTH);
+            }
             $authorizationCode = $this->cleanText($payment['authorization_code'] ?? null, self::MAX_AUTHORIZATION_LENGTH);
 
             if ($option->requires_card_brand && $cardBrand === null) {
@@ -318,6 +345,7 @@ class FinalizeSale
                 'amount_cents' => $amountCents,
                 'change_cents' => 0,
                 'card_brand' => $cardBrand,
+                'card_brand_id' => $registeredBrand?->id,
                 'authorization_code' => $authorizationCode,
             ];
         }

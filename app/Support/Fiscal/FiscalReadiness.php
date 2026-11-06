@@ -3,8 +3,12 @@
 namespace App\Support\Fiscal;
 
 use App\Enums\TaxRegime;
+use App\Models\OrderItem;
 use App\Models\PaymentOption;
 use App\Models\Product;
+use App\Models\Sale;
+use App\Models\SaleItem;
+use App\Models\SalePayment;
 use App\Models\Scopes\TenantScope;
 use App\Models\Tenant;
 use App\Models\TenantFiscalSettings;
@@ -29,6 +33,31 @@ class FiscalReadiness
             ...$this->tenantIssues($tenant),
             ...$this->productIssues($tenant),
             ...$this->paymentIssues($tenant),
+        ]);
+    }
+
+    /**
+     * Prontidão para emitir a NFC-e de UMA venda: dados do tenant + só os produtos e as
+     * formas de pagamento dessa venda (consulta barata, sem varrer o catálogo).
+     */
+    public function forSale(Sale $sale): FiscalReadinessReport
+    {
+        $tenant = Tenant::query()->findOrFail($sale->tenant_id);
+
+        $orderItems = OrderItem::query()->where('sale_id', $sale->id)->get(['product_id', 'flavors']);
+        $productIds = $orderItems
+            ->flatMap(fn (OrderItem $item): array => [$item->flavors[0] ?? $item->product_id])
+            ->merge(SaleItem::query()->withoutGlobalScope(TenantScope::class)->where('tenant_id', $tenant->id)->where('sale_id', $sale->id)->pluck('product_id'))
+            ->filter()->unique()->map(fn ($id): int => (int) $id)->values()->all();
+
+        $optionIds = SalePayment::query()->withoutGlobalScope(TenantScope::class)
+            ->where('tenant_id', $tenant->id)->where('sale_id', $sale->id)
+            ->pluck('payment_option_id')->filter()->unique()->values()->all();
+
+        return new FiscalReadinessReport([
+            ...$this->tenantIssues($tenant),
+            ...$this->productIssues($tenant, $productIds),
+            ...$this->paymentIssues($tenant, $optionIds),
         ]);
     }
 
@@ -112,15 +141,18 @@ class FiscalReadiness
     }
 
     /**
+     * @param  list<int>|null  $onlyIds  Restringe aos produtos da venda (null = catálogo inteiro).
      * @return list<FiscalIssue>
      */
-    private function productIssues(Tenant $tenant): array
+    private function productIssues(Tenant $tenant, ?array $onlyIds = null): array
     {
         $incomplete = [];
 
         Product::query()
+            ->withTrashed($onlyIds !== null)
             ->withoutGlobalScope(TenantScope::class)
             ->where('tenant_id', $tenant->id)
+            ->when($onlyIds !== null, fn ($query) => $query->whereIn('id', $onlyIds))
             ->select(['id', 'name', 'category_id', 'ncm', 'cfop', 'csosn', 'origin_code', 'commercial_unit'])
             ->with(['category' => fn ($query) => $query->withoutGlobalScope(TenantScope::class), 'category.parent' => fn ($query) => $query->withoutGlobalScope(TenantScope::class)])
             ->chunkById(200, function ($products) use (&$incomplete): void {
@@ -146,13 +178,16 @@ class FiscalReadiness
     }
 
     /**
+     * @param  list<int>|null  $onlyIds  Restringe às formas da venda (null = todas do tenant).
      * @return list<FiscalIssue>
      */
-    private function paymentIssues(Tenant $tenant): array
+    private function paymentIssues(Tenant $tenant, ?array $onlyIds = null): array
     {
         $names = PaymentOption::query()
+            ->withTrashed($onlyIds !== null)
             ->withoutGlobalScope(TenantScope::class)
             ->where('tenant_id', $tenant->id)
+            ->when($onlyIds !== null, fn ($query) => $query->whereIn('id', $onlyIds))
             ->whereNull('fiscal_payment_code')
             ->orderBy('name')
             ->pluck('name')

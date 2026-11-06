@@ -17,6 +17,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 | app/Filament/Support/EstablishmentDocumentFields.php, app/Filament/Support/InputMasks.php | .ai/rules/filament-support.md |
 | resources/css/filament/**/*.css | .ai/rules/filament.md |
 | {app/Support/Fiscal/**,app/Models/TenantFiscalSettings.php} | .ai/rules/fiscal-models.md |
+| app/{Actions/Fiscal/**,Services/Fiscal/**,Models/FiscalDocument.php,Models/FiscalNumberSequence.php} | .ai/rules/fiscal.md |
 | ** | .ai/rules/general.md |
 | app/Filament/Tenant/Resources/Categories/**,app/Livewire/Menu.php,app/Actions/Menu/ResolvePriceForCartLine.php,app/Filament/Tenant/Livewire/Orders/FlavorPickerModal.php | .ai/rules/livewire-orders.md |
 | app/Actions/Menu/{ResolvePriceForProduct.php,ResolvePriceForCartLine.php,ResolvedPrice.php},app/Livewire/Menu.php | .ai/rules/livewire.md |

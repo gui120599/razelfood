@@ -2,7 +2,9 @@
 
 namespace App\Filament\Tenant\Resources\Sales\Tables;
 
+use App\Enums\FiscalDocumentStatus;
 use App\Enums\SaleStatus;
+use App\Filament\Tenant\Support\FiscalDocumentActions;
 use App\Filament\Tenant\Support\SaleActions;
 use App\Models\Sale;
 use Filament\Actions\ViewAction;
@@ -18,7 +20,7 @@ class SalesTable
     public static function configure(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['payments', 'finalizedBy']))
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['payments', 'finalizedBy', 'currentFiscalDocument']))
             ->defaultSort('id', 'desc')
             ->columns([
                 TextColumn::make('number')
@@ -34,6 +36,13 @@ class SalesTable
                     ->label('Total')
                     ->money('BRL')
                     ->sortable(),
+                TextColumn::make('currentFiscalDocument.status')
+                    ->label('NFC-e')
+                    ->badge()
+                    ->placeholder('—')
+                    ->visible(fn (): bool => FiscalDocumentActions::tenantUsesFiscal())
+                    ->formatStateUsing(fn (FiscalDocumentStatus $state): string => $state->label())
+                    ->color(fn (FiscalDocumentStatus $state): string => $state->color()),
                 TextColumn::make('payments_summary')
                     ->label('Pagamento')
                     ->state(fn (Sale $record): string => $record->payments->pluck('payment_option_name')->unique()->implode(', '))

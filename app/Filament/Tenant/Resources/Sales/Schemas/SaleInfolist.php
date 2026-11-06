@@ -2,9 +2,11 @@
 
 namespace App\Filament\Tenant\Resources\Sales\Schemas;
 
+use App\Enums\FiscalDocumentStatus;
 use App\Enums\OrderStatus;
 use App\Enums\SaleStatus;
 use App\Filament\Tenant\Resources\Orders\OrderResource;
+use App\Filament\Tenant\Support\FiscalDocumentActions;
 use App\Models\Sale;
 use App\Models\SaleOrder;
 use Filament\Infolists\Components\RepeatableEntry;
@@ -35,6 +37,42 @@ class SaleInfolist
                         TextEntry::make('finalizedBy.name')
                             ->label('Fechada por')
                             ->placeholder('—'),
+                    ]),
+                ]),
+            Section::make('Documento fiscal (NFC-e)')
+                ->visible(fn (): bool => FiscalDocumentActions::tenantUsesFiscal())
+                ->extraAttributes(fn (Sale $record): array => $record->currentFiscalDocument?->shouldPoll()
+                    ? ['wire:poll.5s' => 'pollFiscalDocument']
+                    : [])
+                ->schema([
+                    Grid::make(4)->schema([
+                        TextEntry::make('currentFiscalDocument.status')
+                            ->label('Situação')
+                            ->badge()
+                            ->placeholder('Ainda não emitida')
+                            ->formatStateUsing(fn (FiscalDocumentStatus $state): string => $state->label())
+                            ->color(fn (FiscalDocumentStatus $state): string => $state->color()),
+                        TextEntry::make('currentFiscalDocument.number')
+                            ->label('Número / série')
+                            ->formatStateUsing(fn (Sale $record): string => $record->currentFiscalDocument->number.' / '.$record->currentFiscalDocument->series)
+                            ->placeholder('—'),
+                        TextEntry::make('currentFiscalDocument.environment')
+                            ->label('Ambiente')
+                            ->formatStateUsing(fn ($state): string => $state->label())
+                            ->placeholder('—'),
+                        TextEntry::make('currentFiscalDocument.authorized_at')
+                            ->label('Autorizada em')
+                            ->dateTime('d/m/Y H:i')
+                            ->placeholder('—'),
+                        TextEntry::make('currentFiscalDocument.error_message')
+                            ->label('Problema')
+                            ->color('danger')
+                            ->columnSpanFull()
+                            ->visible(fn (Sale $record): bool => filled($record->currentFiscalDocument?->error_message)),
+                        TextEntry::make('currentFiscalDocument.buyer_omission_reason')
+                            ->label('Consumidor')
+                            ->columnSpanFull()
+                            ->visible(fn (Sale $record): bool => filled($record->currentFiscalDocument?->buyer_omission_reason)),
                     ]),
                 ]),
             Section::make('Cancelamento')

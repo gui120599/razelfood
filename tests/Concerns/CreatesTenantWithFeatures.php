@@ -68,4 +68,18 @@ trait CreatesTenantWithFeatures
 
         return $plan;
     }
+
+    /**
+     * Plano com PDV (venda) + `nfe_emissao`: o necessário para fechar uma conta e emitir a NFC-e (Fase 1.2).
+     */
+    protected function planWithPdvAndNfe(): Plan
+    {
+        $plan = $this->planWithAllFeaturesAndPdv();
+
+        $nfe = Feature::firstOrCreate(['key' => FeatureKey::NFE_EMISSAO], ['name' => 'Emissão de NFC-e', 'is_available' => true]);
+        $nfe->update(['is_available' => true]);
+        $plan->features()->attach($nfe);
+
+        return $plan;
+    }
 }

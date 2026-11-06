@@ -6,9 +6,9 @@ use App\Models\Sale;
 
 /**
  * Gancho que decide se uma venda pode ser cancelada além das regras da própria
- * venda. Na Fase 1.0 nunca bloqueia; a Fase 1.2 (NFC-e) passa a devolver o
- * motivo quando houver documento fiscal vivo (RN-VEN-06: cancelar a nota antes
- * de cancelar a venda). Resolvido pelo container em CancelSale.
+ * venda. Com NFC-e VIVA (emitida, em processamento ou em cancelamento) a venda
+ * não pode ser cancelada (RN-VEN-06: cancelar a nota antes de cancelar a venda;
+ * o cancelamento da nota chega na Fase 1.3). Resolvido pelo container em CancelSale.
  */
 class SaleCancellationGuard
 {
@@ -17,6 +17,10 @@ class SaleCancellationGuard
      */
     public function blockedReason(Sale $sale): ?string
     {
+        if ($sale->hasLiveFiscalDocument()) {
+            return 'Esta venda tem uma NFC-e emitida ou em processamento e não pode ser cancelada. Cancele a nota fiscal antes.';
+        }
+
         return null;
     }
 }

@@ -20,6 +20,7 @@ class SalePayment extends TenantScopedModel
         'amount',
         'change_amount',
         'card_brand',
+        'card_brand_id',
         'authorization_code',
         'payment_terminal_id',
     ];
@@ -41,6 +42,11 @@ class SalePayment extends TenantScopedModel
     public function paymentOption(): BelongsTo
     {
         return $this->belongsTo(PaymentOption::class);
+    }
+
+    public function cardBrand(): BelongsTo
+    {
+        return $this->belongsTo(CardBrand::class);
     }
 
     public function netAmount(): string

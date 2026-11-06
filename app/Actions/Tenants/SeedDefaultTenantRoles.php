@@ -62,6 +62,7 @@ class SeedDefaultTenantRoles
         $markOrderDelivered = Permission::findOrCreate('mark_order_delivered');
         $editOrderAdvancedStatus = Permission::findOrCreate('edit_order_advanced_status');
         $manageSales = Permission::findOrCreate('manage_sales');
+        $emitFiscalDocument = Permission::findOrCreate('emit_fiscal_document');
 
         $orderResourcePermissions = FilamentShield::getResources()[OrderResource::class]['permissions'] ?? [];
         $viewOrders = collect([
@@ -125,6 +126,7 @@ class SeedDefaultTenantRoles
                 ->merge($viewOrders)
                 ->merge($manageProductionLines)
                 ->push($manageSales)
+                ->push($emitFiscalDocument)
                 ->merge($viewSales)
                 ->filter()
         );
@@ -132,7 +134,7 @@ class SeedDefaultTenantRoles
         // Caixa: fecha contas e consulta vendas/pedidos (feature `pdv`); não
         // avança pedido nem mexe na cozinha.
         Role::findOrCreate('Caixa')->givePermissionTo(
-            collect([$manageSales])->merge($viewSales)->merge($viewOrders)->filter()
+            collect([$manageSales, $emitFiscalDocument])->merge($viewSales)->merge($viewOrders)->filter()
         );
 
         Role::findOrCreate('Atendente')->givePermissionTo(

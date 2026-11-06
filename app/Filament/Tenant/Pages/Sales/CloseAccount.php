@@ -6,6 +6,7 @@ use App\Actions\Sales\FinalizeSale;
 use App\Exceptions\SaleException;
 use App\Filament\Support\InputMasks;
 use App\Filament\Tenant\Resources\Sales\SaleResource;
+use App\Models\CardBrand;
 use App\Models\Order;
 use App\Models\PaymentOption;
 use App\Models\Product;
@@ -59,6 +60,11 @@ class CloseAccount extends Page
 
     /** @var Collection<int, PaymentOption>|null */
     private ?Collection $paymentOptionFlagsCache = null;
+
+    private ?bool $usesRegisteredCardBrandsCache = null;
+
+    /** @var array<int, string>|null */
+    private ?array $cardBrandOptionsCache = null;
 
     public static function canAccess(): bool
     {
@@ -162,11 +168,18 @@ class CloseAccount extends Page
                                         ->prefix('R$')
                                         ->required()
                                 ),
+                                Select::make('card_brand_id')
+                                    ->label('Bandeira')
+                                    ->options(fn (): array => $this->cardBrandOptions())
+                                    ->required(fn (Get $get): bool => $this->optionRequires($get('payment_option_id'), 'requires_card_brand'))
+                                    ->visible(fn (Get $get): bool => $this->usesRegisteredCardBrands()
+                                        && ($this->isNonCashOption($get('payment_option_id')) || $this->optionRequires($get('payment_option_id'), 'requires_card_brand'))),
                                 TextInput::make('card_brand')
                                     ->label('Bandeira')
                                     ->maxLength(60)
                                     ->required(fn (Get $get): bool => $this->optionRequires($get('payment_option_id'), 'requires_card_brand'))
-                                    ->visible(fn (Get $get): bool => $this->isNonCashOption($get('payment_option_id')) || $this->optionRequires($get('payment_option_id'), 'requires_card_brand')),
+                                    ->visible(fn (Get $get): bool => ! $this->usesRegisteredCardBrands()
+                                        && ($this->isNonCashOption($get('payment_option_id')) || $this->optionRequires($get('payment_option_id'), 'requires_card_brand'))),
                                 TextInput::make('authorization_code')
                                     ->label('Autorização')
                                     ->maxLength(100)
@@ -197,6 +210,7 @@ class CloseAccount extends Page
             'payment_option_id' => (int) $payment['payment_option_id'],
             'amount' => InputMasks::normalizeMoneyState($payment['amount']),
             'card_brand' => $payment['card_brand'] ?? null,
+            'card_brand_id' => $payment['card_brand_id'] ?? null,
             'authorization_code' => $payment['authorization_code'] ?? null,
         ])->all();
 
@@ -305,6 +319,22 @@ class CloseAccount extends Page
     private function optionRequires(mixed $paymentOptionId, string $column): bool
     {
         return filled($paymentOptionId) && (bool) ($this->paymentOptionFlags()->get((int) $paymentOptionId)?->{$column});
+    }
+
+    /**
+     * Com a feature `nfe_emissao` a bandeira vem do cadastro (CardBrand); sem ela, texto livre como antes.
+     */
+    private function usesRegisteredCardBrands(): bool
+    {
+        return $this->usesRegisteredCardBrandsCache ??= CurrentTenant::get()?->hasFeature(FeatureKey::NFE_EMISSAO) ?? false;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function cardBrandOptions(): array
+    {
+        return $this->cardBrandOptionsCache ??= CardBrand::query()->orderBy('name')->pluck('name', 'id')->all();
     }
 
     private function isNonCashOption(mixed $paymentOptionId): bool
