@@ -44,6 +44,11 @@ class IssueFiscalDocumentJob implements ShouldQueue
                 'tenant_id' => $this->tenantId,
                 'sale_id' => $this->saleId,
             ]);
+        } catch (Throwable $exception) {
+            // Despachado com `dispatchAfterResponse` (driver sync, dentro do `terminate()` do app): uma
+            // exceção relançada abortaria os demais callbacks de terminação. Sem retentativa (tries = 1),
+            // então só reporta; a nota sai por "Reenviar" / "Atualizar status".
+            report($exception);
         }
     }
 

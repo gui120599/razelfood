@@ -92,7 +92,7 @@ class FiscalReportQueryTest extends TestCase
         $this->assertSame(['Pizzas', 'Bebidas'], $category['rows']->pluck('label')->all());
         $this->assertSame(3, $category['rows'][0]['quantity']);
 
-        $this->assertSame(['CALABRESA', 'REFRIGERANTE'], $report->group('product')['rows']->pluck('label')->all());
+        $this->assertSame(['Calabresa', 'Refrigerante'], $report->group('product')['rows']->pluck('label')->all());
         $this->assertEqualsCanonicalizing(['CFOP 5102 / CSOSN 102', 'CFOP 5405 / CSOSN 500'], $report->group('cfop_csosn')['rows']->pluck('label')->all());
         $this->assertSame([now()->format('d/m/Y')], $report->group('day')['rows']->pluck('label')->all());
         $this->assertSame('TOTAL', $report->group('ncm')['total']['label']);
@@ -159,7 +159,7 @@ class FiscalReportQueryTest extends TestCase
         $this->issueNfce($otherSale);
 
         $this->assertSame(['notes' => 1, 'items' => 1, 'items_cents' => 4000, 'others_cents' => 0, 'total_cents' => 4000], $this->report()->summary());
-        $this->assertSame(['ESFIHA'], $this->report(tenant: $other)->group('product')['rows']->pluck('label')->all());
+        $this->assertSame(['Esfiha'], $this->report(tenant: $other)->group('product')['rows']->pluck('label')->all());
         $this->assertSame(['Pix' => 4000], $this->report()->group('payment')['rows']->pluck('total_cents', 'label')->all());
     }
 
@@ -171,7 +171,7 @@ class FiscalReportQueryTest extends TestCase
         Product::query()->whereKey($product->id)->update(['ncm' => '11111111', 'name' => 'Renomeada']);
 
         $this->assertSame(['19059090'], $this->report()->group('ncm')['rows']->pluck('label')->all());
-        $this->assertSame(['PIZZA'], $this->report()->group('product')['rows']->pluck('label')->all());
+        $this->assertSame(['Pizza'], $this->report()->group('product')['rows']->pluck('label')->all());
     }
 
     public function test_notes_list_shows_the_client_and_the_sale_total(): void

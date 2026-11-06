@@ -295,7 +295,7 @@ class FiscalReportQuery
     {
         $label = match ($dimension) {
             'ncm' => "COALESCE(NULLIF(i.ncm, ''), 'Sem NCM')",
-            'product' => 'i.description',
+            'product' => "COALESCE(NULLIF(i.product_name, ''), i.description)",
             'cfop_csosn' => "CONCAT('CFOP ', COALESCE(NULLIF(i.cfop, ''), '—'), ' / CSOSN ', COALESCE(NULLIF(i.csosn, ''), '—'))",
             'day' => "DATE_FORMAT(d.authorized_at, '%Y-%m-%d')",
             default => "COALESCE(NULLIF(i.category_name, ''), 'Sem categoria')",

@@ -58,7 +58,7 @@ class FiscalItemSnapshotTest extends TestCase
     private function snapshot(FiscalDocument $document): array
     {
         return FiscalDocumentItem::query()->where('fiscal_document_id', $document->id)->orderBy('position')->get()
-            ->map(fn (FiscalDocumentItem $item): array => $item->only(['position', 'description', 'category_name', 'ncm', 'cfop', 'csosn', 'origin_code', 'unit', 'quantity', 'unit_amount', 'total_amount', 'others_amount']))
+            ->map(fn (FiscalDocumentItem $item): array => $item->only(['position', 'product_name', 'description', 'category_name', 'ncm', 'cfop', 'csosn', 'origin_code', 'unit', 'quantity', 'unit_amount', 'total_amount', 'others_amount']))
             ->all();
     }
 
@@ -78,7 +78,7 @@ class FiscalItemSnapshotTest extends TestCase
         $items = $this->snapshot($document);
 
         $this->assertCount(2, $items);
-        $this->assertSame('CALABRESA', $items[0]['description']);
+        $this->assertSame('SALGADAS CALABRESA', $items[0]['description']);
         $this->assertSame('Pizzas › Salgadas', $items[0]['category_name']);
         $this->assertSame(['19059090', '5102', '102', '0', 'UN', 2], [$items[0]['ncm'], $items[0]['cfop'], $items[0]['csosn'], $items[0]['origin_code'], $items[0]['unit'], $items[0]['quantity']]);
         $this->assertEquals([40, 80], [$items[0]['unit_amount'], $items[0]['total_amount']]);
@@ -105,7 +105,7 @@ class FiscalItemSnapshotTest extends TestCase
 
         $items = $this->snapshot($document);
 
-        $this->assertSame(['PIZZAS DOCES CHOCOLATE / MORANGO', 'REFRIGERANTE'], array_column($items, 'description'));
+        $this->assertSame(['PIZZAS DOCES 1/2 CHOCOLATE / 1/2 MORANGO', 'PIZZAS REFRIGERANTE'], array_column($items, 'description'));
         $this->assertSame('Pizzas Doces', $items[0]['category_name']);
         $this->assertSame(2, $items[1]['quantity']);
     }
@@ -146,7 +146,7 @@ class FiscalItemSnapshotTest extends TestCase
 
         Product::query()->whereKey($product->id)->update(['name' => 'Outro nome', 'ncm' => '99999999']);
 
-        $this->assertSame(['CALABRESA', '19059090'], [$this->snapshot($document)[0]['description'], $this->snapshot($document)[0]['ncm']]);
+        $this->assertSame(['PIZZAS CALABRESA', '19059090'], [$this->snapshot($document)[0]['description'], $this->snapshot($document)[0]['ncm']]);
     }
 
     public function test_snapshots_are_isolated_between_tenants(): void

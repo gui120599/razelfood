@@ -2,7 +2,7 @@
 
 > **Tipo:** auditoria comparativa + levantamento de requisitos + plano de implementação.
 > **Data:** 2026-11-04.
-> **Status:** aguardando aprovação. **Nada foi implementado.**
+> **Status:** em execução. Fases 0, 1.0, 1.1, 1.2, 1.3, 1.4 e 1.5 entregues (ver o quadro de fases). Demais fases aguardando.
 > **Legenda:** **[FATO]** comprovado no código local · **[INFERÊNCIA]** dedução a partir do código, sem prova direta · **[HIPÓTESE]** precisa ser confirmado (fornecedor, operação ou decisão) · **[DECISÃO]** depende de aprovação.
 
 Documentos complementares (aprofundam cada módulo):
@@ -125,7 +125,7 @@ Fonte usada: **somente o código local**. O GitHub não foi consultado. A docume
 | Pivots | Singular, ordem alfabética | `category_production_line`, `product_gift`, `plan_feature` | `sale_order` (se necessário) |
 | Colunas | Inglês snake_case; FK `{model}_id`; timestamps de evento `*_at`; boolean `is_*`/`requires_*`/`uses_*`/verbo | `cancelled_by_user_id`, `accepted_at`, `is_cash`, `requires_address`, `uses_in_transit_stage` | `issuer_cnpj`, `authorized_at`, `connect_enabled`, `auto_issue_fiscal_document` |
 | Snapshot histórico | Nome copiado + FK opcional, para preservar histórico | `orders.payment_option_name`, `order_payments.payment_option_name` | `sale_payments.payment_option_name` |
-| Enums | `string`-backed, **cases TitleCase**, **valores snake_case minúsculos**, métodos `label()` (pt-BR) e `color()` próprios (não `HasLabel` do Filament), regras de transição no próprio enum | `OrderStatus::InTransit = 'in_transit'`, `next()`, `canBeCancelled()` | `TerminalChargeStatus::PartiallyPaid = 'partially_paid'`, `FiscalDocumentStatus::Authorized` |
+| Enums | `string`-backed, **cases TitleCase**, **valores snake_case minúsculos**, métodos `label()` (pt-BR) e `color()` próprios (não `HasLabel` do Filament), regras de transição no próprio enum | `OrderStatus::InTransit = 'in_transit'`, `next()`, `canBeCancelled()` | `TerminalChargeStatus::PartiallyPaid = 'partially_paid'`, `FiscalDocumentStatus::Issued` |
 | Textos de interface, mensagens de exceção, docblocks e comentários | **Português** | `OrderTransitionException` ("mensagem segura para mostrar a quem opera") | idem |
 | Segmentos de URL voltados ao usuário | Português | `/acompanhar`, `/comanda`, `/entrega`, `/painel`, página `Kitchen` com slug `cozinha` | painel `/garcom/{slug}`; `/webhooks/...` (não voltado ao usuário) |
 | Nomes de rota | Inglês com ponto | `order.tracking`, `reports.orders.print` | `webhooks.nfeio`, `webhooks.stone` |
@@ -211,6 +211,8 @@ Modo plano → apresentar arquivos, migrations e decisões (via `AskUserQuestion
 | JS de tela (ex.: `pizza-svg-painel.js`, `pizza-svg.js`) e regras do tema (`resources/css/filament/{garcom,cozinha}/theme.css`, `resources/css/marca/`) | `@source` e caminhos do tema | Telas e blocos excluídos ou de funções ainda inexistentes, removidos da cópia (influenciador, carteira, e outros até a fase deles) |
 | Configuração visual do painel: `spa()`, `topNavigation()`, `maxContentWidth()`, tema escuro forçado na cozinha, grupos e ordem do menu | Tenancy e rotas para `/{painel}/{slug}` | `Empresa::first()` e configurações globais, que viram dados do tenant |
 | Em Resources Filament: mesmos campos, rótulos, colunas, filtros, ações e ordem | Código PHP reescrito com os nomes do RazelFood | — |
+
+**Desvios aprovados da §2.4.9 (Fase 1.4, 2026-11-06):** (a) `FiscalDocumentResource` ("Documentos fiscais", grupo Vendas), sem equivalente no Pizzaria-App; (b) bloco recolhível "Números reservados e não usados" no Relatório fiscal; (c) as telas das Fases 1.1–1.4 usam componentes Filament próprios e **precisam de conferência lado a lado na Fase 1.S**. No payload da NFC-e, o único desvio do formato validado no Pizzaria-App é o `id` (id do documento fiscal, não o da venda; aprovado em 2026-11-06).
 
 **Exceções permitidas (somente estas):**
 
@@ -520,6 +522,7 @@ A ordem do usuário (NFE.io → Stone → Garçom → Cozinha) é mantida. Ajust
 | **1.2** | Emissão NFC-e | `NfeIoClient` (credenciais por parâmetro), `fiscal_number_sequences`, `fiscal_documents`, montagem de payload com todas as RN-FIS, emissão manual e automática pós-finalização, consulta, DANFE (URI) | Inutilização, contingência offline | G |
 | **1.3** | Ciclo de vida fiscal | Webhook NFE.io por tenant (HMAC), `fiscal_webhooks` (auditoria), comando `fiscal:sync-status` tenant-aware, cancelamento, reenvio, bloqueio de cancelamento de venda com nota viva | — | M |
 | **1.4** | Painel fiscal | Lista de documentos por tenant com filtros por situação, relatório fiscal simples, contador de notas por tenant na central | — | S |
+| **1.5** | Alinhamento do payload e da fila | Saída da NFC-e igual à validada em produção no Pizzaria-App (`buyer` sempre presente, documentos como texto, `codeGTIN`/`cest` nulos, `card` com 4 chaves para cartão e Pix, `totalIndicator`, descrição com categoria, frações e adicionais); NFC-e automática com `dispatchAfterResponse`; `queue:work` agendado por minuto | Validar contra a NFE.io real (depende de empresa em homologação) | S |
 | **1.R** | Cópia da tela de venda | Substituir `CloseAccount`/`PendingAccounts` por **Nova Venda**, copiando as views de `OperarVenda` (§2.4.9): abas à esquerda (Pedidos, Produtos; Mesas na Fase 3), itens, cliente, totais e pagamentos à direita, pagamento e cliente em modal, Finalizar/Cancelar, atalhos Alt+C/P/E/O. Reusar `FinalizeSale`, `CancelSale` e o ciclo fiscal | Mudar regras de venda; abas e blocos de funcionalidades que ainda não existem (Mesas, Pendentes/fiado, cortesia, divisão de item) | G |
 | **1.S** | Cópia das telas de pedido | Copiar Atender Pedido (com o seletor de produtos, usado também pelo garçom) e Painel de Pedidos; conferir Vendas e telas fiscais da Fase 1; alinhar o menu (D-09) | Mudar regras de pedido | G |
 | **2.1** | Maquininhas | `payment_terminals` (operadora, nº de série, `connect_enabled`, ativo) | Taxas/prazos de recebimento | S |

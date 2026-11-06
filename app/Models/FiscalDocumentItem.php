@@ -16,6 +16,7 @@ class FiscalDocumentItem extends TenantScopedModel
         'fiscal_document_id',
         'position',
         'product_id',
+        'product_name',
         'description',
         'category_name',
         'ncm',

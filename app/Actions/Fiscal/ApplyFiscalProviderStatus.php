@@ -147,6 +147,8 @@ class ApplyFiscalProviderStatus
         }
 
         if ($new === FiscalDocumentStatus::Cancelled) {
+            // Na fila (tem tries/backoff e precisa sobreviver a falha transitória); o `queue:work`
+            // agendado a cada minuto a consome. `dispatchAfterResponse` perderia as retentativas.
             CompleteSaleCancellationJob::dispatch($tenantId, $sale->id)->afterCommit();
 
             return;

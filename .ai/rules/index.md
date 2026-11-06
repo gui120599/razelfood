@@ -4,6 +4,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 
 | Applies to | Rule file |
 | --- | --- |
+| {app/Actions/Sales/FinalizeSale.php,app/Actions/Fiscal/ApplyFiscalProviderStatus.php,routes/console.php} | .ai/rules/actions-fiscal.md |
 | app/Filament/Resources/LocationSyncs/**,app/Services/Address/LocationCatalogTransfer.php | .ai/rules/address.md |
 | app/Livewire/{Menu.php,Checkout.php,OrderStatusTimeline.php,Concerns/EstablishesTenantContext.php} | .ai/rules/app-livewire.md |
 | {app/Models/Client.php,app/Filament/Tenant/Resources/Clients/**} | .ai/rules/clients.md |
@@ -17,6 +18,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 | app/Filament/Resources/** | .ai/rules/filament-resources.md |
 | app/Filament/Support/EstablishmentDocumentFields.php, app/Filament/Support/InputMasks.php | .ai/rules/filament-support.md |
 | resources/css/filament/**/*.css | .ai/rules/filament.md |
+| app/{Actions/Fiscal/BuildNfcePayload.php,Support/Fiscal/BuyerResolver.php,Support/Fiscal/FlavorFraction.php} | .ai/rules/fiscal-fiscal.md |
 | {app/Support/Fiscal/**,app/Models/TenantFiscalSettings.php} | .ai/rules/fiscal-models.md |
 | app/{Actions/Fiscal/**,Services/Fiscal/**,Models/FiscalDocument.php,Models/FiscalNumberSequence.php} | .ai/rules/fiscal.md |
 | ** | .ai/rules/general.md |

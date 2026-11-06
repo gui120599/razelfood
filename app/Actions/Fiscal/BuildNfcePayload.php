@@ -4,8 +4,10 @@ namespace App\Actions\Fiscal;
 
 use App\Enums\FiscalPaymentMethod;
 use App\Exceptions\FiscalDocumentException;
+use App\Models\Addon;
 use App\Models\CardBrand;
 use App\Models\FiscalDocument;
+use App\Models\FlavorQuantityOption;
 use App\Models\OrderItem;
 use App\Models\PaymentOption;
 use App\Models\Product;
@@ -16,6 +18,7 @@ use App\Models\Scopes\TenantScope;
 use App\Models\TenantFiscalSettings;
 use App\Support\Fiscal\BuyerResolver;
 use App\Support\Fiscal\CentAllocator;
+use App\Support\Fiscal\FlavorFraction;
 use App\Support\Fiscal\NfcePayload;
 use App\Support\Fiscal\ProductFiscalData;
 use App\Support\Fiscal\ResolveProductFiscalData;
@@ -82,10 +85,8 @@ class BuildNfcePayload
             'presenceType' => 'Presence',
         ];
 
-        if ($buyer !== null) {
-            $body['buyer'] = $buyer;
-        }
-
+        // Chave sempre presente, `null` sem comprador (como o Pizzaria-App em produção).
+        $body['buyer'] = $buyer;
         $body['payment'] = [$payment];
         $body['items'] = $lines->map(fn (array $line): array => $this->toItem($line, $settings))->values()->all();
 
@@ -113,6 +114,7 @@ class BuildNfcePayload
             ->get()
             ->keyBy('id');
 
+        $addonNames = $this->addonNames($sale, $orderItems);
         $lines = collect();
 
         foreach ($orderItems as $item) {
@@ -120,15 +122,15 @@ class BuildNfcePayload
             $fiscalProduct = $flavors->first() ?? $products->get($item->product_id)
                 ?? throw new FiscalDocumentException('Um item da venda aponta para um produto que não existe mais.');
 
-            $description = $flavors->isNotEmpty()
-                ? trim(($fiscalProduct->category?->name ?? '').' '.$flavors->pluck('name')->implode(' / '))
+            $name = $flavors->count() > 1
+                ? $this->flavorsWithFractions($sale, $fiscalProduct, $flavors)
                 : $fiscalProduct->name;
 
             $quantity = (int) $item->quantity;
 
             $lines->push($this->line(
                 $fiscalProduct,
-                $description,
+                $this->describe($fiscalProduct, $name, collect($item->addons ?? [])->map(fn (array $selection): ?string => $addonNames->get((int) ($selection['addon_id'] ?? 0)))->filter()->all()),
                 $quantity,
                 Money::toCents($item->unit_price),
                 Money::toCents($item->addons_total) * $quantity,
@@ -146,10 +148,63 @@ class BuildNfcePayload
                 throw new FiscalDocumentException("O total do item avulso \"{$item->product_name}\" não fecha com preço × quantidade.");
             }
 
-            $lines->push($this->line($product, $item->product_name, $quantity, $unitCents, 0));
+            $lines->push($this->line($product, $this->describe($product, $item->product_name, []), $quantity, $unitCents, 0));
         }
 
         return $lines;
+    }
+
+    /**
+     * Descrição como no Pizzaria-App: categoria + produto (ou sabores com fração) + " Adic. nome"
+     * por adicional. A limpeza ASCII e o teto de 120 caracteres vêm depois, em line().
+     *
+     * @param  list<string>  $addonNames
+     */
+    private function describe(Product $product, string $name, array $addonNames): string
+    {
+        return trim(($product->category?->name ?? '').' '.$name.collect($addonNames)->map(fn (string $addon): string => ' Adic. '.$addon)->implode(''));
+    }
+
+    /**
+     * "1/2 CALABRESA / 1/2 MUSSARELA": a fração vem do rateio configurado na categoria
+     * (ou na categoria pai, quando herda); sem opção cadastrada, divisão igual.
+     *
+     * @param  Collection<int, Product>  $flavors
+     */
+    private function flavorsWithFractions(Sale $sale, Product $fiscalProduct, Collection $flavors): string
+    {
+        $category = $fiscalProduct->category;
+        $categoryId = $category?->inheritsFlavorOptions() ? $category->parent_id : $category?->id;
+
+        $shares = $categoryId === null ? null : FlavorQuantityOption::query()->withTrashed()->withoutGlobalScope(TenantScope::class)
+            ->where('tenant_id', $sale->tenant_id)
+            ->where('category_id', $categoryId)
+            ->where('flavor_count', $flavors->count())
+            ->orderByRaw('deleted_at IS NULL DESC')
+            ->orderBy('display_order')
+            ->value('flavor_shares');
+
+        $shares = is_array($shares) && count($shares) === $flavors->count() ? array_values($shares) : FlavorQuantityOption::equalShares($flavors->count());
+
+        return $flavors->values()->map(fn (Product $flavor, int $index): string => FlavorFraction::label((float) $shares[$index]).' '.$flavor->name)->implode(' / ');
+    }
+
+    /**
+     * @param  Collection<int, OrderItem>  $orderItems
+     * @return Collection<int, string> id do adicional => nome
+     */
+    private function addonNames(Sale $sale, Collection $orderItems): Collection
+    {
+        $ids = $orderItems->flatMap(fn (OrderItem $item): array => array_column($item->addons ?? [], 'addon_id'))->filter()->unique()->values();
+
+        if ($ids->isEmpty()) {
+            return collect();
+        }
+
+        return Addon::query()->withTrashed()->withoutGlobalScope(TenantScope::class)
+            ->where('tenant_id', $sale->tenant_id)
+            ->whereIn('id', $ids)
+            ->pluck('name', 'id');
     }
 
     /**
@@ -234,12 +289,8 @@ class BuildNfcePayload
 
             $detail = ['method' => $method->apiValue(), 'amount' => $this->amount(Money::toCents($payment->amount))];
 
-            if (in_array($method, [FiscalPaymentMethod::CreditCard, FiscalPaymentMethod::DebitCard], true)) {
-                $card = $this->cardBlock($payment, $brands->get($payment->card_brand_id));
-
-                if ($card !== []) {
-                    $detail['card'] = $card;
-                }
+            if (in_array($method, [FiscalPaymentMethod::CreditCard, FiscalPaymentMethod::DebitCard, FiscalPaymentMethod::InstantPayment], true)) {
+                $detail['card'] = $this->cardBlock($payment, $brands->get($payment->card_brand_id));
             }
 
             $details[] = $detail;
@@ -255,27 +306,22 @@ class BuildNfcePayload
     }
 
     /**
-     * Bloco `card`: só o que existe (bandeira, CNPJ da credenciadora, autorização).
+     * Bloco `card` (cartão e Pix), sempre com as quatro chaves, `null` quando não há o dado —
+     * mesmo formato validado em produção no Pizzaria-App. O CNPJ da credenciadora vai como
+     * texto (zero à esquerda). Sem integração com maquininha, o tipo é `notIntegrated`.
      *
-     * @return array<string, mixed>
+     * @return array{federalTaxNumber: ?string, flag: ?string, authorization: ?string, integrationPaymentType: string}
      */
     private function cardBlock(SalePayment $payment, ?CardBrand $brand): array
     {
-        $card = [];
+        $cnpj = preg_replace('/\D/', '', (string) $brand?->acquirer_cnpj);
 
-        if ($brand?->acquirer_cnpj !== null && $brand->acquirer_cnpj !== '') {
-            $card['federalTaxNumber'] = (int) $brand->acquirer_cnpj;
-        }
-
-        if ($brand !== null) {
-            $card['flag'] = $brand->brand->apiValue();
-        }
-
-        if (filled($payment->authorization_code)) {
-            $card['authorization'] = $payment->authorization_code;
-        }
-
-        return $card;
+        return [
+            'federalTaxNumber' => $cnpj === '' ? null : $cnpj,
+            'flag' => $brand?->brand->apiValue(),
+            'authorization' => filled($payment->authorization_code) ? $payment->authorization_code : null,
+            'integrationPaymentType' => 'notIntegrated',
+        ];
     }
 
     /**
@@ -290,7 +336,7 @@ class BuildNfcePayload
 
         $item = [
             'code' => (string) $line['product']->id,
-            'codeGTIN' => $fiscal->gtin ?? 'SEM GTIN',
+            'codeGTIN' => filled($fiscal->gtin) ? $fiscal->gtin : null,
             'description' => $line['description'],
             'ncm' => $fiscal->ncm,
             'cfop' => (int) $fiscal->cfop,
@@ -303,12 +349,9 @@ class BuildNfcePayload
             'taxUnitAmount' => $unitAmount,
             'discountAmount' => 0,
             'othersAmount' => $this->amount($line['others_cents']),
-            'totalIndicator' => true,
+            'totalIndicator' => $line['total_cents'] + $line['others_cents'] > 0,
+            'cest' => filled($fiscal->cest) ? $fiscal->cest : null,
         ];
-
-        if (filled($fiscal->cest)) {
-            $item['cest'] = $fiscal->cest;
-        }
 
         $item['tax'] = $this->taxBlock($fiscal, $line['total_cents'] + $line['others_cents'], $settings);
 
@@ -360,6 +403,7 @@ class BuildNfcePayload
         return [
             'position' => $position,
             'product_id' => $line['product']->id,
+            'product_name' => Str::limit($line['product']->name, 250, ''),
             'description' => $line['description'],
             'category_name' => $line['category_name'] === null ? null : Str::limit($line['category_name'], 250, ''),
             'ncm' => $fiscal->ncm,
@@ -395,7 +439,7 @@ class BuildNfcePayload
 
     private function sanitizeDescription(string $description): string
     {
-        $clean = Str::of($description)->ascii()->upper()->replaceMatches('/[^A-Z0-9 \/.,\-]/', ' ')->squish()->limit(self::DESCRIPTION_MAX_LENGTH, '')->trim()->toString();
+        $clean = Str::of($description)->ascii()->upper()->replaceMatches('/[^A-Z0-9 \/.,%\-]/', ' ')->squish()->limit(self::DESCRIPTION_MAX_LENGTH, '')->trim()->toString();
 
         return $clean === '' ? 'ITEM' : $clean;
     }

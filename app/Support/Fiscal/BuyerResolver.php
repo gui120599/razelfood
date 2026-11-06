@@ -52,33 +52,60 @@ class BuyerResolver
         }
 
         $isCompany = $client->person_type === PersonType::Company;
-        $document = preg_replace('/\D/', '', (string) ($isCompany ? $client->cnpj : $client->cpf));
+        $preferred = preg_replace('/\D/', '', (string) ($isCompany ? $client->cnpj : $client->cpf));
+        $found = $this->validDocument($client, $isCompany);
 
-        if ($document === '') {
-            return $this->omit('Cliente sem '.($isCompany ? 'CNPJ' : 'CPF').' cadastrado: consumidor não identificado.');
+        if ($found === null) {
+            return $this->omit($preferred === ''
+                ? 'Cliente sem '.($isCompany ? 'CNPJ' : 'CPF').' cadastrado: consumidor não identificado.'
+                : 'Cliente com '.($isCompany ? 'CNPJ' : 'CPF').' inválido: consumidor não identificado.');
         }
 
-        $rule = $isCompany ? new ValidCnpj : new ValidCpf;
-
-        if (Validator::make(['document' => $document], ['document' => [$rule]])->fails()) {
-            return $this->omit('Cliente com '.($isCompany ? 'CNPJ' : 'CPF').' inválido: consumidor não identificado.');
-        }
+        [$isCnpj, $document] = $found;
 
         $buyer = [
             'stateTaxNumberIndicator' => 'NonTaxPayer',
             'tradeName' => $client->name,
             'taxRegime' => 'isento',
+            'stateTaxNumber' => filled($client->state_registration) ? $client->state_registration : null,
             'id' => (string) $client->id,
             'name' => $client->name,
-            'federalTaxNumber' => (int) $document,
-            'type' => $isCompany ? 4 : 2,
+            // Texto, não número: CPF com zero à esquerda perderia o zero como inteiro no JSON.
+            'federalTaxNumber' => $document,
+            'email' => filter_var($client->email, FILTER_VALIDATE_EMAIL) ? $client->email : null,
+            'type' => $isCnpj ? 4 : 2,
         ];
 
-        if (filled($client->email)) {
-            $buyer['email'] = $client->email;
+        return ['buyer' => array_filter($buyer, fn (mixed $value): bool => $value !== null), 'reason' => null];
+    }
+
+    /**
+     * Documento válido a enviar: o do tipo do cliente; se ele não tiver, o outro, quando válido
+     * (mesmo comportamento do Pizzaria-App em produção).
+     *
+     * @return array{0: bool, 1: string}|null [é CNPJ, só dígitos]
+     */
+    private function validDocument(Client $client, bool $isCompany): ?array
+    {
+        $candidates = $isCompany
+            ? [[true, $client->cnpj], [false, $client->cpf]]
+            : [[false, $client->cpf], [true, $client->cnpj]];
+
+        foreach ($candidates as [$isCnpj, $value]) {
+            $digits = preg_replace('/\D/', '', (string) $value);
+
+            if ($digits === '') {
+                continue;
+            }
+
+            $rule = $isCnpj ? new ValidCnpj : new ValidCpf;
+
+            if (! Validator::make(['document' => $digits], ['document' => [$rule]])->fails()) {
+                return [$isCnpj, $digits];
+            }
         }
 
-        return ['buyer' => $buyer, 'reason' => null];
+        return null;
     }
 
     /**

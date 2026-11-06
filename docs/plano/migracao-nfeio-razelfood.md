@@ -1,7 +1,7 @@
 # Prioridade 1 — NFC-e via NFE.io no RazelFood
 
 > Parte do plano [migracao-funcionalidades-pizzaria-app-para-razelfood.md](migracao-funcionalidades-pizzaria-app-para-razelfood.md).
-> **Data:** 2026-11-04 · **Status:** planejamento, nada implementado.
+> **Data:** 2026-11-04 · **Status:** implementado nas Fases 1.1–1.5 (cadastro fiscal, emissão, ciclo de vida, painel fiscal e alinhamento do payload), **testado só com `Http::fake`**: nada foi validado contra a NFE.io real. As perguntas da §11 seguem abertas. O texto abaixo é o planejamento original.
 > **Legenda:** **[FATO]** comprovado no código local do Pizzaria-App · **[INFERÊNCIA]** dedução a partir do código · **[HIPÓTESE]** confirmar com a NFE.io/contador · **[DECISÃO]** depende de aprovação.
 > **Documentação oficial da NFE.io não foi consultada nesta etapa.** Endpoints, campos e status abaixo são os que o código do Pizzaria-App usa em produção. Qualquer campo novo precisa ser confirmado na documentação antes de entrar no payload.
 

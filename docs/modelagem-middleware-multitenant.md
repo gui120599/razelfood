@@ -1055,9 +1055,12 @@ risco: não há mais wildcard DNS nem wildcard SSL (era o maior risco técnico d
 - **Sessão:** `SESSION_DRIVER=file`, `SESSION_DOMAIN=null` (cookie host-only no apex),
   `SESSION_SECURE_COOKIE=true`. Central e tenants compartilham o cookie — o isolamento é
   `canAccessPanel`/`canAccessTenant` (seção 4.7).
-- **Sem worker de fila persistente:** queue driver `database`; dois cron jobs no cPanel
-  (a cada minuto): `php artisan schedule:run` e `php artisan queue:work --stop-when-empty --max-time=50`.
-  Jobs (reset de promoção recorrente, sync de localidades) assumem execução a cada 1 min.
+- **Sem worker de fila persistente:** queue driver `database`; **um** cron job no cPanel
+  (a cada minuto): `php artisan schedule:run`. O próprio agendador (`routes/console.php`) roda
+  `queue:work --stop-when-empty --max-time=55` a cada minuto, como no Pizzaria-App. Se ainda
+  existir no cPanel uma linha separada de `queue:work`, remova-a (duas convivem, mas é desperdício).
+  Jobs (reset de promoção recorrente, sync de localidades, conclusão de cancelamento de venda)
+  assumem execução a cada 1 min. A NFC-e automática usa `dispatchAfterResponse` (não passa pela fila).
 - **Cache:** `CACHE_STORE=database` (sem Redis/Memcached) — a entrada `tenant:slug:{slug}`
   do `ResolveTenantFromPath` sobrevive a restart; `optimize:clear` / `cache:clear` limpam.
 - **Deploy:** `php artisan optimize:clear` em **todo** deploy após `git pull`; cachear só

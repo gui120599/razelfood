@@ -134,6 +134,7 @@ trait CreatesNfceFixtures
                 'unit_price' => $price,
                 'original_unit_price' => $price,
                 'addons_total' => $item['addons_total'] ?? 0,
+                'addons' => $item['addons'] ?? null,
                 'flavors' => $item['flavors'] ?? null,
                 'gifts' => $item['gifts'] ?? null,
             ]);
@@ -232,6 +233,18 @@ trait CreatesNfceFixtures
 
     /** @var list<mixed> */
     private array $nfeQueue = [];
+
+    /**
+     * Executa os jobs despachados com `dispatchAfterResponse` (NFC-e automática, conclusão do
+     * cancelamento da venda): num teste não há resposta HTTP, então o `terminate()` do app faz
+     * o papel dela. Limpa os callbacks depois, para uma segunda chamada não repetir os jobs.
+     */
+    protected function runAfterResponseJobs(): void
+    {
+        $this->app->terminate();
+
+        (new \ReflectionProperty($this->app, 'terminatingCallbacks'))->setValue($this->app, []);
+    }
 
     /**
      * Simula a NFE.io respondendo a cada envio com um id novo e o status informado (nunca chamada real).

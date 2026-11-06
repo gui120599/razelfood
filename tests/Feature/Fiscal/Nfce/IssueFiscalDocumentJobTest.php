@@ -12,9 +12,10 @@ use App\Models\Sale;
 use App\Models\Tenant;
 use App\Support\CurrentTenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Queue;
 use Tests\Concerns\CreatesFiscalFixtures;
 use Tests\Concerns\CreatesNfceFixtures;
 use Tests\Concerns\CreatesSaleFixtures;
@@ -23,7 +24,7 @@ use Tests\TestCase;
 
 /**
  * Emissão automática (RN-FIS-12): o fechamento da venda despacha o job só quando deve,
- * depois do commit, e o job roda no contexto do tenant certo, sem tentar de novo.
+ * depois da resposta, e o job roda no contexto do tenant certo, sem tentar de novo.
  */
 class IssueFiscalDocumentJobTest extends TestCase
 {
@@ -62,46 +63,63 @@ class IssueFiscalDocumentJobTest extends TestCase
         return $this->finalizeNfceSale([$this->makeNfceOrder($this->tenant, [['product' => $this->makeFiscalProduct($this->tenant, 'Pizza '.uniqid(), 40)]])], $option);
     }
 
-    public function test_closing_a_sale_with_an_automatic_payment_dispatches_the_job_after_commit(): void
+    public function test_closing_a_sale_with_an_automatic_payment_dispatches_the_job_after_the_response(): void
     {
-        Queue::fake();
+        Bus::fake();
 
         $sale = $this->closeSale($this->auto);
 
-        Queue::assertPushed(IssueFiscalDocumentJob::class, fn (IssueFiscalDocumentJob $job): bool => $job->tenantId === $this->tenant->id
-            && $job->saleId === $sale->id
-            && $job->afterCommit === true);
-        Queue::assertPushedTimes(IssueFiscalDocumentJob::class, 1);
+        Bus::assertDispatchedAfterResponse(IssueFiscalDocumentJob::class, fn (IssueFiscalDocumentJob $job): bool => $job->tenantId === $this->tenant->id
+            && $job->saleId === $sale->id);
+        Bus::assertDispatchedAfterResponseTimes(IssueFiscalDocumentJob::class, 1);
+    }
+
+    public function test_after_the_response_the_automatic_note_is_issued_without_any_queue_worker(): void
+    {
+        $this->fakeNfeIo('Processing');
+
+        $sale = $this->closeSale($this->auto);
+        $this->assertSame(0, FiscalDocument::query()->withoutGlobalScopes()->count(), 'Nada é emitido antes da resposta.');
+
+        $this->forgetTenantContext();
+        $this->runAfterResponseJobs();
+
+        $document = FiscalDocument::query()->withoutGlobalScopes()->sole();
+        $this->assertSame($sale->id, $document->sale_id);
+        $this->assertSame($this->tenant->id, $document->tenant_id);
+        $this->assertSame(FiscalDocumentDecision::Automatic, $document->decision);
+        $this->assertNull(CurrentTenant::get(), 'O contexto do tenant é liberado ao fim.');
+        $this->assertSame(0, DB::table('jobs')->count(), 'Nenhum registro ficou parado na tabela de fila.');
     }
 
     public function test_no_job_when_no_payment_is_automatic(): void
     {
-        Queue::fake();
+        Bus::fake();
 
         $this->closeSale($this->manual);
 
-        Queue::assertNothingPushed();
+        Bus::assertNotDispatchedAfterResponse(IssueFiscalDocumentJob::class);
     }
 
     public function test_no_job_when_emission_is_not_enabled(): void
     {
-        Queue::fake();
+        Bus::fake();
         $this->nfceSettings($this->tenant)->update(['enabled_at' => null]);
 
         $this->closeSale($this->auto);
 
-        Queue::assertNothingPushed();
+        Bus::assertNotDispatchedAfterResponse(IssueFiscalDocumentJob::class);
     }
 
     public function test_no_job_without_the_feature(): void
     {
-        Queue::fake();
+        Bus::fake();
         Tenant::query()->whereKey($this->tenant->id)->update(['plan_id' => $this->planWithAllFeaturesAndPdv()->id]);
         $this->actAsTenant(Tenant::query()->find($this->tenant->id));
 
         $this->closeSale($this->auto);
 
-        Queue::assertNothingPushed();
+        Bus::assertNotDispatchedAfterResponse(IssueFiscalDocumentJob::class);
     }
 
     public function test_the_job_has_a_single_attempt(): void
@@ -137,6 +155,19 @@ class IssueFiscalDocumentJobTest extends TestCase
 
         Http::assertNothingSent();
         $this->assertSame(0, FiscalDocument::query()->withoutGlobalScopes()->count());
+    }
+
+    public function test_an_unexpected_error_is_reported_and_never_escapes_the_job(): void
+    {
+        $sale = $this->closeSale($this->manual);
+        Http::fake(['api.nfse.io/*' => Http::response(['message' => 'erro'], 500)]);
+        $this->forgetTenantContext();
+
+        // Dentro do `terminate()` uma exceção relançada abortaria os demais callbacks de terminação.
+        IssueFiscalDocumentJob::dispatchSync($this->tenant->id, $sale->id);
+
+        $this->assertNull(CurrentTenant::get());
+        Http::assertSentCount(1);
     }
 
     public function test_a_job_never_touches_a_sale_of_another_tenant(): void

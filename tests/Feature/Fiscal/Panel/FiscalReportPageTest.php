@@ -110,7 +110,7 @@ class FiscalReportPageTest extends TestCase
             ->assertDontSee('Por produto')
             ->set('groupings', ['product'])
             ->assertSee('Por produto')
-            ->assertSee('CALABRESA')
+            ->assertSee('Calabresa')
             ->assertDontSee('Por NCM')
             ->assertSee('Notas do período (1)')
             ->assertSee('Números reservados e não usados (0)')
@@ -187,9 +187,9 @@ class FiscalReportPageTest extends TestCase
         $csv = str_replace('"', '', $this->get($this->exportUrl('reports.fiscal.csv', ['groupings' => ['product']]))->streamedContent());
         $print = $this->get($this->exportUrl('reports.fiscal.print', ['groupings' => ['product']]))->getContent();
 
-        $this->assertStringNotContainsString('ESFIHA SECRETA', $csv);
-        $this->assertStringNotContainsString('ESFIHA SECRETA', $print);
-        $this->assertStringContainsString('CALABRESA', $csv);
+        $this->assertStringNotContainsStringIgnoringCase('Esfiha Secreta', $csv);
+        $this->assertStringNotContainsStringIgnoringCase('Esfiha Secreta', $print);
+        $this->assertStringContainsString('Calabresa', $csv);
     }
 
     public function test_invalid_query_parameters_fall_back_instead_of_failing(): void

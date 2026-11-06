@@ -9,8 +9,10 @@ use App\Enums\FiscalDocumentDecision;
 use App\Enums\FiscalPaymentMethod;
 use App\Enums\PersonType;
 use App\Exceptions\FiscalDocumentException;
+use App\Models\Addon;
 use App\Models\Category;
 use App\Models\FiscalDocument;
+use App\Models\FlavorQuantityOption;
 use App\Models\PaymentOption;
 use App\Models\Sale;
 use App\Models\Tenant;
@@ -89,7 +91,7 @@ class BuildNfcePayloadTest extends TestCase
         $this->assertCount(1, $body['items']);
 
         $item = $body['items'][0];
-        $this->assertSame('CALABRESA', $item['description']);
+        $this->assertSame('PIZZAS CALABRESA', $item['description']);
         $this->assertSame('19059090', $item['ncm']);
         $this->assertSame(5102, $item['cfop']);
         $this->assertSame('UN', $item['unit']);
@@ -97,9 +99,17 @@ class BuildNfcePayloadTest extends TestCase
         $this->assertEquals(40, $item['totalAmount']);
         $this->assertEquals(0, $item['othersAmount']);
         $this->assertEquals(0, $item['discountAmount']);
-        $this->assertSame('SEM GTIN', $item['codeGTIN']);
+        // Sem GTIN, `null` (a NFE.io preenche "SEM GTIN"); CEST e totalIndicator como no Pizzaria-App.
+        $this->assertNull($item['codeGTIN']);
+        $this->assertArrayHasKey('cest', $item);
+        $this->assertNull($item['cest']);
+        $this->assertTrue($item['totalIndicator']);
         $this->assertSame(['icms' => ['origin' => '0', 'csosn' => '102', 'baseTax' => 0, 'amount' => 0, 'rate' => 0]], $item['tax']);
-        $this->assertSame([['method' => 'InstantPayment', 'amount' => 40.0]], $body['payment'][0]['paymentDetail']);
+        $this->assertSame([[
+            'method' => 'InstantPayment',
+            'amount' => 40.0,
+            'card' => ['federalTaxNumber' => null, 'flag' => null, 'authorization' => null, 'integrationPaymentType' => 'notIntegrated'],
+        ]], $body['payment'][0]['paymentDetail']);
         $this->assertEquals(0, $body['payment'][0]['payback']);
     }
 
@@ -115,7 +125,7 @@ class BuildNfcePayloadTest extends TestCase
         $body = $this->build($this->finalizeNfceSale([$order], $this->pix))->body;
 
         $this->assertCount(1, $body['items']);
-        $this->assertSame('PIZZAS SALGADAS CALABRESA ACEBOLADA / FRANGO C/ CATUPIRY / QUATRO QUEIJOS', $body['items'][0]['description']);
+        $this->assertSame('PIZZAS SALGADAS 1/3 CALABRESA ACEBOLADA / 1/3 FRANGO C/ CATUPIRY / 1/3 QUATRO QUEIJOS', $body['items'][0]['description']);
         $this->assertSame((string) $a->id, $body['items'][0]['code']);
         $this->assertSame('19059090', $body['items'][0]['ncm']);
     }
@@ -128,7 +138,7 @@ class BuildNfcePayloadTest extends TestCase
         $description = $body['items'][0]['description'];
         $this->assertLessThanOrEqual(120, strlen($description));
         $this->assertMatchesRegularExpression('/^[A-Z0-9 \/.,\-]+$/', $description);
-        $this->assertStringStartsWith('PIZZA ACAI CAFE ESPECIAL LONGA', $description);
+        $this->assertStringStartsWith('PIZZAS PIZZA ACAI CAFE ESPECIAL LONGA', $description);
     }
 
     public function test_addons_go_to_others_amount_multiplied_by_quantity(): void
@@ -169,7 +179,7 @@ class BuildNfcePayloadTest extends TestCase
         $sale = $this->finalizeNfceSale([$order], $this->pix, standalone: [['product_id' => $soda->id, 'quantity' => 2]]);
         $body = $this->build($sale)->body;
 
-        $this->assertSame(['PIZZA', 'REFRIGERANTE'], array_column($body['items'], 'description'));
+        $this->assertSame(['PIZZAS PIZZA', 'PIZZAS REFRIGERANTE'], array_column($body['items'], 'description'));
         $this->assertSame(5600, $this->itemsCents($body));
     }
 
@@ -183,7 +193,7 @@ class BuildNfcePayloadTest extends TestCase
 
         $body = $this->build($this->finalizeNfceSale([$order], $this->pix))->body;
 
-        $this->assertSame(['PIZZA'], array_column($body['items'], 'description'));
+        $this->assertSame(['PIZZAS PIZZA'], array_column($body['items'], 'description'));
         $this->assertSame(4000, $this->itemsCents($body));
     }
 
@@ -206,10 +216,9 @@ class BuildNfcePayloadTest extends TestCase
         $this->assertEquals(50, $payment['paymentDetail'][0]['amount']);
         $this->assertSame('creditCard', $payment['paymentDetail'][1]['method']);
         $this->assertSame(
-            ['federalTaxNumber' => 33444555000166, 'flag' => 'americanExpress', 'authorization' => 'AUT123'],
+            ['federalTaxNumber' => '33444555000166', 'flag' => 'americanExpress', 'authorization' => 'AUT123', 'integrationPaymentType' => 'notIntegrated'],
             $payment['paymentDetail'][1]['card'],
         );
-        $this->assertArrayNotHasKey('integrationPaymentType', $payment['paymentDetail'][1]['card']);
         $this->assertArrayNotHasKey('card', $payment['paymentDetail'][0]);
     }
 
@@ -233,7 +242,7 @@ class BuildNfcePayloadTest extends TestCase
 
         $this->assertNull($result->buyerOmissionReason);
         $this->assertSame('Maria da Silva', $result->body['buyer']['name']);
-        $this->assertSame((int) self::VALID_CPF, $result->body['buyer']['federalTaxNumber']);
+        $this->assertSame(self::VALID_CPF, $result->body['buyer']['federalTaxNumber']);
         $this->assertSame(2, $result->body['buyer']['type']);
         $this->assertSame('NonTaxPayer', $result->body['buyer']['stateTaxNumberIndicator']);
         $this->assertSame('maria@example.com', $result->body['buyer']['email']);
@@ -246,7 +255,7 @@ class BuildNfcePayloadTest extends TestCase
 
         $buyer = $this->build($this->finalizeNfceSale([$order], $this->pix))->body['buyer'];
 
-        $this->assertSame(11222333000181, $buyer['federalTaxNumber']);
+        $this->assertSame('11222333000181', $buyer['federalTaxNumber']);
         $this->assertSame(4, $buyer['type']);
     }
 
@@ -267,7 +276,8 @@ class BuildNfcePayloadTest extends TestCase
 
             $result = $this->build($sale);
 
-            $this->assertArrayNotHasKey('buyer', $result->body, $label);
+            $this->assertArrayHasKey('buyer', $result->body, $label);
+            $this->assertNull($result->body['buyer'], $label);
             $this->assertNotNull($result->buyerOmissionReason, $label);
         }
     }
@@ -280,8 +290,163 @@ class BuildNfcePayloadTest extends TestCase
 
         $result = $this->build($this->finalizeNfceSale([$one, $two], $this->pix));
 
-        $this->assertArrayNotHasKey('buyer', $result->body);
+        $this->assertNull($result->body['buyer']);
         $this->assertStringContainsString('diferentes', $result->buyerOmissionReason);
+    }
+
+    public function test_the_description_carries_the_category_the_fractions_and_the_addons(): void
+    {
+        $category = Category::withoutGlobalScopes()->create(['tenant_id' => $this->tenant->id, 'name' => 'Pizzas', 'ncm' => '19059090', 'cfop' => '5102', 'csosn' => '102', 'origin_code' => '0', 'commercial_unit' => 'UN']);
+        $a = $this->makeProduct($this->tenant, 'Calabresa', 50, ['category_id' => $category->id]);
+        $b = $this->makeProduct($this->tenant, 'Mussarela', 50, ['category_id' => $category->id]);
+        $base = $this->makeFiscalProduct($this->tenant, 'Pizza Grande', 50);
+        $border = Addon::create(['tenant_id' => $this->tenant->id, 'name' => 'Borda Catupiry', 'price' => 5]);
+        $olive = Addon::create(['tenant_id' => $this->tenant->id, 'name' => 'Azeitona', 'price' => 2]);
+
+        $order = $this->makeNfceOrder($this->tenant, [[
+            'product' => $base,
+            'unit_price' => 50,
+            'addons_total' => 7,
+            'flavors' => [$a->id, $b->id],
+            'addons' => [['addon_id' => $border->id, 'quantity' => 1, 'target' => null], ['addon_id' => $olive->id, 'quantity' => 1, 'target' => null]],
+        ]]);
+
+        $body = $this->build($this->finalizeNfceSale([$order], $this->pix))->body;
+
+        $this->assertSame('PIZZAS 1/2 CALABRESA / 1/2 MUSSARELA ADIC. BORDA CATUPIRY ADIC. AZEITONA', $body['items'][0]['description']);
+    }
+
+    public function test_the_fractions_follow_the_configured_flavor_shares(): void
+    {
+        $category = Category::withoutGlobalScopes()->create(['tenant_id' => $this->tenant->id, 'name' => 'Pizzas', 'ncm' => '19059090', 'cfop' => '5102', 'csosn' => '102', 'origin_code' => '0', 'commercial_unit' => 'UN']);
+        FlavorQuantityOption::create(['tenant_id' => $this->tenant->id, 'category_id' => $category->id, 'label' => '2 sabores', 'flavor_count' => 2, 'flavor_shares' => [75, 25]]);
+        $a = $this->makeProduct($this->tenant, 'Calabresa', 50, ['category_id' => $category->id]);
+        $b = $this->makeProduct($this->tenant, 'Mussarela', 50, ['category_id' => $category->id]);
+
+        $order = $this->makeNfceOrder($this->tenant, [['product' => $this->makeFiscalProduct($this->tenant, 'Pizza', 50), 'unit_price' => 50, 'flavors' => [$a->id, $b->id]]]);
+        $body = $this->build($this->finalizeNfceSale([$order], $this->pix))->body;
+
+        $this->assertSame('PIZZAS 3/4 CALABRESA / 1/4 MUSSARELA', $body['items'][0]['description']);
+    }
+
+    public function test_a_free_item_is_not_flagged_as_part_of_the_total_unless_it_carries_freight(): void
+    {
+        $order = $this->makeNfceOrder($this->tenant, [
+            ['product' => $this->makeFiscalProduct($this->tenant, 'Pizza', 40)],
+            ['product' => $this->makeFiscalProduct($this->tenant, 'Cortesia', 0)],
+        ]);
+
+        $body = $this->build($this->finalizeNfceSale([$order], $this->pix))->body;
+        $this->assertSame([true, false], array_column($body['items'], 'totalIndicator'));
+
+        // Com frete rateado a linha passa a compor o total da nota (senão vNF < pagamentos).
+        $withFee = $this->makeNfceOrder($this->tenant, [
+            ['product' => $this->makeFiscalProduct($this->tenant, 'Pizza B', 40)],
+            ['product' => $this->makeFiscalProduct($this->tenant, 'Cortesia B', 0)],
+        ], deliveryFee: 3);
+
+        $body = $this->build($this->finalizeNfceSale([$withFee], $this->pix))->body;
+        $this->assertSame([true, true], array_column($body['items'], 'totalIndicator'));
+        $this->assertSame(4300, $this->itemsCents($body));
+    }
+
+    public function test_fractions_outside_the_usual_ones_keep_the_percent_sign_and_the_33_33_34_split_reads_as_thirds(): void
+    {
+        $category = Category::withoutGlobalScopes()->create(['tenant_id' => $this->tenant->id, 'name' => 'Pizzas', 'ncm' => '19059090', 'cfop' => '5102', 'csosn' => '102', 'origin_code' => '0', 'commercial_unit' => 'UN']);
+        FlavorQuantityOption::create(['tenant_id' => $this->tenant->id, 'category_id' => $category->id, 'label' => '2 sabores', 'flavor_count' => 2, 'flavor_shares' => [40, 60]]);
+        FlavorQuantityOption::create(['tenant_id' => $this->tenant->id, 'category_id' => $category->id, 'label' => '3 sabores', 'flavor_count' => 3, 'flavor_shares' => [33, 33, 34]]);
+        $a = $this->makeProduct($this->tenant, 'Calabresa', 50, ['category_id' => $category->id]);
+        $b = $this->makeProduct($this->tenant, 'Mussarela', 50, ['category_id' => $category->id]);
+        $c = $this->makeProduct($this->tenant, 'Frango', 50, ['category_id' => $category->id]);
+        $base = $this->makeFiscalProduct($this->tenant, 'Pizza', 50);
+
+        $two = $this->makeNfceOrder($this->tenant, [['product' => $base, 'unit_price' => 50, 'flavors' => [$a->id, $b->id]]]);
+        $this->assertSame('PIZZAS 40% CALABRESA / 60% MUSSARELA', $this->build($this->finalizeNfceSale([$two], $this->pix))->body['items'][0]['description']);
+
+        $three = $this->makeNfceOrder($this->tenant, [['product' => $base, 'unit_price' => 50, 'flavors' => [$a->id, $b->id, $c->id]]]);
+        $this->assertSame('PIZZAS 1/3 CALABRESA / 1/3 MUSSARELA / 1/3 FRANGO', $this->build($this->finalizeNfceSale([$three], $this->pix))->body['items'][0]['description']);
+    }
+
+    public function test_another_tenants_addons_and_flavor_options_never_influence_the_description(): void
+    {
+        $other = $this->makeNfceTenant('emporiodapizza', ['nfeio_company_id' => 'empresa-B'], cnpj: '45723174000110');
+        $this->actAsTenant($this->tenant);
+        $category = Category::withoutGlobalScopes()->create(['tenant_id' => $this->tenant->id, 'name' => 'Pizzas', 'ncm' => '19059090', 'cfop' => '5102', 'csosn' => '102', 'origin_code' => '0', 'commercial_unit' => 'UN']);
+        // Opção com o mesmo category_id/flavor_count, mas de OUTRO tenant: não pode valer.
+        FlavorQuantityOption::withoutGlobalScopes()->create(['tenant_id' => $other->id, 'category_id' => $category->id, 'label' => 'x', 'flavor_count' => 2, 'flavor_shares' => [90, 10]]);
+        $foreignAddon = Addon::withoutGlobalScopes()->create(['tenant_id' => $other->id, 'name' => 'Adicional Alheio', 'price' => 1]);
+        $a = $this->makeProduct($this->tenant, 'Calabresa', 50, ['category_id' => $category->id]);
+        $b = $this->makeProduct($this->tenant, 'Mussarela', 50, ['category_id' => $category->id]);
+
+        $order = $this->makeNfceOrder($this->tenant, [[
+            'product' => $this->makeFiscalProduct($this->tenant, 'Pizza', 50),
+            'unit_price' => 50,
+            'flavors' => [$a->id, $b->id],
+            'addons' => [['addon_id' => $foreignAddon->id, 'quantity' => 1, 'target' => null]],
+        ]]);
+
+        $this->assertSame('PIZZAS 1/2 CALABRESA / 1/2 MUSSARELA', $this->build($this->finalizeNfceSale([$order], $this->pix))->body['items'][0]['description']);
+    }
+
+    public function test_the_card_block_goes_with_all_four_keys_for_pix_and_cards_even_without_data(): void
+    {
+        $credit = $this->makeFiscalPaymentOption($this->tenant, 'Crédito', FiscalPaymentMethod::CreditCard);
+        $order = $this->makeNfceOrder($this->tenant, [['product' => $this->makeFiscalProduct($this->tenant, 'Pizza', 40)]]);
+
+        $pix = $this->build($this->finalizeNfceSale([$order], $this->pix))->body['payment'][0]['paymentDetail'][0];
+
+        $this->assertSame(
+            ['federalTaxNumber' => null, 'flag' => null, 'authorization' => null, 'integrationPaymentType' => 'notIntegrated'],
+            $pix['card'],
+        );
+
+        $order = $this->makeNfceOrder($this->tenant, [['product' => $this->makeFiscalProduct($this->tenant, 'Outra', 40)]]);
+        $card = $this->build($this->finalizeNfceSale([$order], $credit))->body['payment'][0]['paymentDetail'][0]['card'];
+
+        $this->assertSame(['federalTaxNumber', 'flag', 'authorization', 'integrationPaymentType'], array_keys($card));
+    }
+
+    public function test_the_buyer_document_is_text_so_a_leading_zero_is_kept(): void
+    {
+        $client = $this->makeNfceClient($this->tenant, ['cpf' => '01234567890']);
+        $order = $this->makeNfceOrder($this->tenant, [['product' => $this->makeFiscalProduct($this->tenant, 'Pizza', 40)]], client: $client);
+
+        $this->assertSame('01234567890', $this->build($this->finalizeNfceSale([$order], $this->pix))->body['buyer']['federalTaxNumber']);
+    }
+
+    public function test_a_company_buyer_carries_the_state_registration(): void
+    {
+        $client = $this->makeNfceClient($this->tenant, ['name' => 'Empresa X', 'person_type' => PersonType::Company, 'cnpj' => '11222333000181', 'cpf' => null, 'state_registration' => '123456789', 'email' => 'invalido']);
+        $order = $this->makeNfceOrder($this->tenant, [['product' => $this->makeFiscalProduct($this->tenant, 'Pizza', 40)]], client: $client);
+
+        $buyer = $this->build($this->finalizeNfceSale([$order], $this->pix))->body['buyer'];
+
+        $this->assertSame('123456789', $buyer['stateTaxNumber']);
+        $this->assertArrayNotHasKey('email', $buyer, 'E-mail inválido não vai na nota.');
+    }
+
+    public function test_a_company_without_cnpj_falls_back_to_a_valid_cpf(): void
+    {
+        $company = $this->makeNfceClient($this->tenant, ['name' => 'Empresa Y', 'person_type' => PersonType::Company, 'cnpj' => null, 'cpf' => self::VALID_CPF]);
+        $order = $this->makeNfceOrder($this->tenant, [['product' => $this->makeFiscalProduct($this->tenant, 'Pizza', 40)]], client: $company);
+        $buyer = $this->build($this->finalizeNfceSale([$order], $this->pix))->body['buyer'];
+
+        $this->assertSame(self::VALID_CPF, $buyer['federalTaxNumber']);
+        $this->assertSame(2, $buyer['type']);
+    }
+
+    public function test_the_payload_has_the_same_keys_as_the_pizzaria_app_in_production(): void
+    {
+        $client = $this->makeNfceClient($this->tenant, ['name' => 'Empresa X', 'person_type' => PersonType::Company, 'cnpj' => '11222333000181', 'cpf' => null, 'state_registration' => '123456789', 'email' => 'x@example.com']);
+        $order = $this->makeNfceOrder($this->tenant, [['product' => $this->makeFiscalProduct($this->tenant, 'Pizza', 40)]], client: $client);
+
+        $body = $this->build($this->finalizeNfceSale([$order], $this->pix))->body;
+
+        // Chaves de NfeIoService::montarPayload/montarItens/montarComprador do Pizzaria-App.
+        $this->assertEqualsCanonicalizing(['id', 'payment', 'serie', 'number', 'operationOn', 'operationNature', 'operationType', 'destination', 'purposeType', 'consumerType', 'presenceType', 'buyer', 'items'], array_keys($body));
+        $this->assertEqualsCanonicalizing(['code', 'codeGTIN', 'description', 'ncm', 'cfop', 'unit', 'quantity', 'unitAmount', 'totalAmount', 'unitTax', 'quantityTax', 'taxUnitAmount', 'discountAmount', 'othersAmount', 'totalIndicator', 'cest', 'tax'], array_keys($body['items'][0]));
+        $this->assertEqualsCanonicalizing(['stateTaxNumberIndicator', 'tradeName', 'taxRegime', 'stateTaxNumber', 'id', 'name', 'federalTaxNumber', 'email', 'type'], array_keys($body['buyer']));
+        $this->assertEqualsCanonicalizing(['paymentDetail', 'payback'], array_keys($body['payment'][0]));
     }
 
     public function test_csosn_with_icms_carries_total_tax_and_the_icms_block(): void

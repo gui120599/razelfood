@@ -24,3 +24,10 @@ Schedule::command('fiscal:sync-status')->everyTenMinutes()->withoutOverlapping(3
 
 // Retenção da auditoria de webhooks da NFE.io (90 dias).
 Schedule::command('model:prune', ['--model' => [FiscalWebhook::class]])->daily();
+
+// Fila `database` sem worker permanente (hospedagem compartilhada): a cada minuto processa o que
+// houver e sai (`--stop-when-empty`, no máximo 55 s), como o agendador do Pizzaria-App. Atende os
+// jobs que vão para a fila (reconciliações, sincronização de localidades, cancelamentos de vendas
+// sem pagamento). A NFC-e automática e a conclusão do cancelamento de venda NÃO passam por aqui:
+// usam `dispatchAfterResponse`.
+Schedule::command('queue:work --stop-when-empty --max-time=55')->everyMinute()->withoutOverlapping(10);

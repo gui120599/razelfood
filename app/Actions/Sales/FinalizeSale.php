@@ -153,13 +153,15 @@ class FinalizeSale
             return $sale->load(['payments', 'items', 'saleOrders']);
         }, attempts: 3);
 
-        // Emissão automática da NFC-e (RN-FIS-12): só depois do commit da venda e sempre em
-        // job (HTTP nunca roda aqui). O job revalida tudo ao executar.
+        // Emissão automática da NFC-e (RN-FIS-12): só depois do commit da venda e fora desta
+        // requisição (HTTP nunca roda aqui). `dispatchAfterResponse`, como no Pizzaria-App: roda
+        // depois da resposta ao usuário e não depende de worker de fila na hospedagem compartilhada.
+        // O job revalida tudo ao executar.
         // A venda já foi efetivada: uma falha ao decidir/enfileirar a nota não pode virar erro
         // de fechamento (um novo clique falharia com "pedidos já cobrados"). A nota sai pelo botão.
         try {
             if (($this->shouldAutoIssue)($tenant, $sale)) {
-                IssueFiscalDocumentJob::dispatch($tenantId, $sale->id)->afterCommit();
+                IssueFiscalDocumentJob::dispatchAfterResponse($tenantId, $sale->id);
             }
         } catch (Throwable $exception) {
             report($exception);
