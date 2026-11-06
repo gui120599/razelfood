@@ -69,7 +69,7 @@
 | Necessidade | Existe? |
 |---|---|
 | Mesas/comandas, sessão de mesa | ❌ (só `OrderOrigin::Table` e `OrderFulfillmentType::DineIn`) |
-| Seletor de produtos com sabores/adicionais/brindes | ✅ `ProductCatalogSelector`, `FlavorPickerModal`, `AddonPickerModal` (em `app/Filament/Tenant/Livewire/Orders/`) usados pela `AttendOrder` |
+| Seletor de produtos com sabores/adicionais/brindes | Regras ✅ em `ProductCatalogSelector`, `FlavorPickerModal` e `AddonPickerModal`; o front será a cópia de `pedido-produto-selector` (Fase 1.S), pré-requisito desta fase |
 | Criação/edição de pedido no servidor com preço/estoque/promoção | ✅ `CreateOrderFromCart`, `UpdateOrderFromCart`, `CartStockAndPromotionLedger` |
 | Transições de status | ✅ `AdvanceOrderStatus`, `CancelOrder`, `OrderStatusActions` |
 | Kanban de pedidos | ✅ `Kitchen` (mostra rodada automaticamente se for um `Order`) |
@@ -93,7 +93,7 @@
 | RF-G07 | Taxa de serviço por tenant; remover com autorização; restaurar | idem |
 | RF-G08 | Transferir mesa com autorização | idem |
 | RF-G09 | Pessoas da mesa e conta por pessoa | `ContaMesa` |
-| RF-G10 | Solicitar conta; pré-conta imprimível (72 mm, reutilizando o layout da comanda) | `PDFController::sessaoMesaPDF` |
+| RF-G10 | Solicitar conta; pré-conta imprimível, com o layout copiado do Pizzaria-App | `PDFController::sessaoMesaPDF` |
 | RF-G11 | Fechar mesa (libera a mesa; conta vai para "Contas a fechar" no fechamento de conta/Venda) | `fecharSessao` |
 | RF-G12 | Retirada lançada pelo garçom | `RetiradaService` |
 | RF-G13 | Aviso de "rodada pronta" ao garçom (notificação no painel + destaque no mapa) | notificação de banco |
@@ -158,23 +158,23 @@ O painel do garçom **não calcula preço, estoque nem status** — só chama as
 
 ---
 
-## 5. Experiência mobile (proposta)
+## 5. Cópia do front do Pizzaria-App
 
-Avaliação do Pizzaria-App: funcional e validado na operação, mas `AtenderMesa` concentra muitas ações num único componente (749 linhas) e depende de polling de 5 s. Para o SaaS:
+> Revisado em 2026-11-06: as telas **não são redesenhadas**. Os arquivos abaixo são copiados do Pizzaria-App conforme a §2.4.9 do documento principal, traduzindo apenas os vínculos com o back-end.
 
-| Tema | Proposta |
-|---|---|
-| Mapa | Grade de cartões grandes (2 colunas no celular), cor + ícone + texto do status (não só cor), contador de minutos, filtro "minhas mesas" |
-| Atender mesa | Abas fixas no rodapé: **Pedir** · **Rodadas** · **Conta**. Botão primário fixo "Enviar à cozinha (N itens)" |
-| Pedir | Busca + categorias horizontais + toque único para item simples; modal só para sabores/adicionais (reuso dos modais existentes) |
-| Confirmação | Enviar mostra resumo antes; feedback visual de enviado; reenvio seguro (idempotente) |
-| Prevenção de erros | Ações destrutivas (cancelar item, fechar mesa, transferir) com modal de confirmação e motivo; autorização por PIN no próprio modal |
-| Legibilidade | Fonte ≥ 16 px, alvos ≥ 48 px, contraste do design system (`docs/identidade-visual-design-system.md`) |
-| Tempo real | Polling com checagem de versão barata (contador em cache por tenant, padrão `CozinhaTempoReal`): mapa 10 s, mesa 5 s — compatível com HostGator (sem WebSocket) |
-| Offline | Banner "sem conexão", botões desabilitados; rascunho persistido no servidor evita perda |
-| Permissões | Botões ocultos sem permissão; ações sensíveis mostram "pedir autorização" em vez de sumir |
+| Tela | Arquivos copiados (origem em `resources/views/`) | Estrutura preservada |
+|---|---|---|
+| Mapa | `filament/garcom/pages/mapa-mesas.blade.php`, `partials/{sem-conexao,alerta-pronto}` | Abas Mesas, Comandas e Viagem; grade por área; legenda |
+| Atender mesa | `filament/garcom/pages/atender-mesa.blade.php`, `partials/{pessoas-mesa,carrinho-lateral,mesa-rodadas,mesa-conta}` | Celular: Pedir · Rodadas · Conta. Desktop: grid 12 colunas (7 + 5), painel com Rodada atual · Rodadas · Conta |
+| Seletor de produtos | `livewire/pedido-produto-selector.blade.php`, `resources/js/pizza-svg-painel.js` | Mesmo seletor do Atender Pedido, copiado na Fase 1.S |
+| Retirada | `filament/garcom/pages/atender-retirada.blade.php`, `livewire/{cliente-picker,entrega-pagamento-picker}`, `components/pedido/*` | Mesmo fluxo |
+| Pré-conta | View usada por `PDFController::sessaoMesaPDF` | Mesmo layout |
 
----
+Também são copiados o tema (`resources/css/filament/garcom/theme.css`) e a configuração visual de `GarcomPanelProvider`: `spa()`, `topNavigation()` e largura total. Mantidos: polling de 10 s no mapa e 5 s na mesa, rascunho salvo no servidor e confirmação nas ações destrutivas.
+
+Removidos da cópia até a fase correspondente: `mesa-qr`, `convite-push`, ponto, checklists e plantão. O `login-pin` só entra com dispositivo pareado (§4.2).
+
+**Aceite visual:** `diff` contra a origem com apenas vínculos traduzidos e exceções, e capturas lado a lado em desktop e celular.
 
 ## 6. Integração com os demais módulos
 

@@ -177,7 +177,7 @@ Recomendação: **3 FKs explícitas** (`order_id`, `table_session_id`, `sale_id`
 | `App\Actions\Sales\CreateSaleFromTerminalCharge` | RN-STO-13/14 (reusa Fase 1.0) |
 | `App\Http\Controllers\Webhooks\StoneWebhookController` | Rota `/webhooks/stone/{webhookToken}` → tenant → Basic Auth do tenant → grava → processa com `CurrentTenant` setado; verifica que o `terminal_charge` resolvido pertence ao tenant da URL |
 | `App\Console\Commands\ReconcileTerminalChargesCommand` | RN-STO-18, itera tenants com integração ativa, contexto por tenant |
-| UI | Botão "Cobrar na maquininha" no fechamento de conta (Direto), no pedido (Listado), na conta da mesa; `TerminalChargeResource` e `PaymentWebhookResource` no painel do tenant |
+| UI | Copiada do Pizzaria-App (§2.4.9 do documento principal): modais Stone de `operar-venda.blade.php` e `mesa-stone-cobranca.blade.php`, com a escolha "Cobrar na Stone"/"Lançar manual" dentro do modal de pagamento da **Nova Venda**, modal de cobrança com acompanhamento, envio no pedido (Listado) e na conta da mesa; `TerminalChargeResource` e `PaymentWebhookResource` no painel do tenant |
 
 ### 8.4 Riscos MT específicos
 
