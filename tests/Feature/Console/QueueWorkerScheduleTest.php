@@ -26,4 +26,15 @@ class QueueWorkerScheduleTest extends TestCase
         $this->assertStringContainsString('--max-time=55', $event->command);
         $this->assertTrue($event->withoutOverlapping);
     }
+
+    public function test_empty_drafts_are_swept_every_fifteen_minutes_with_a_bounded_mutex(): void
+    {
+        $event = collect(app(Schedule::class)->events())
+            ->first(fn (Event $event): bool => str_contains($event->command, 'sales:discard-empty-drafts'));
+
+        $this->assertNotNull($event);
+        $this->assertSame('*/15 * * * *', $event->expression);
+        $this->assertTrue($event->withoutOverlapping);
+        $this->assertSame(30, $event->expiresAt, 'Mutex com prazo: se o processo morrer, o comando volta a rodar.');
+    }
 }

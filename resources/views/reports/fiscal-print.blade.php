@@ -15,6 +15,7 @@
                 <tr><td>Itens</td><td class="num">{{ $summary['items'] }}</td></tr>
                 <tr><td>Valor dos itens</td><td class="num">{{ $money($summary['items_cents']) }}</td></tr>
                 <tr><td>Adicionais e frete</td><td class="num">{{ $money($summary['others_cents']) }}</td></tr>
+                <tr><td>Descontos</td><td class="num">{{ $money($summary['discount_cents']) }}</td></tr>
             </tbody>
             <tfoot>
                 <tr><td>Total das notas</td><td class="num">{{ $money($summary['total_cents']) }}</td></tr>
@@ -35,6 +36,7 @@
                             <th class="num">Qtd.</th>
                             <th class="num">Valor dos itens</th>
                             <th class="num">Adicionais e frete</th>
+                            <th class="num">Desconto</th>
                         @endif
                         <th class="num">{{ $withItems ? 'Total' : 'Valor' }}</th>
                     </tr>
@@ -48,11 +50,12 @@
                                 <td class="num">{{ $row['quantity'] }}</td>
                                 <td class="num">{{ $money($row['items_cents']) }}</td>
                                 <td class="num">{{ $money($row['others_cents']) }}</td>
+                                <td class="num">{{ $money($row['discount_cents']) }}</td>
                             @endif
                             <td class="num">{{ $money($row['total_cents']) }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="6">Sem dados no período.</td></tr>
+                        <tr><td colspan="7">Sem dados no período.</td></tr>
                     @endforelse
                 </tbody>
                 <tfoot>
@@ -63,6 +66,7 @@
                             <td class="num">{{ $group['total']['quantity'] }}</td>
                             <td class="num">{{ $money($group['total']['items_cents']) }}</td>
                             <td class="num">{{ $money($group['total']['others_cents']) }}</td>
+                            <td class="num">{{ $money($group['total']['discount_cents']) }}</td>
                         @endif
                         <td class="num">{{ $money($group['total']['total_cents']) }}</td>
                     </tr>

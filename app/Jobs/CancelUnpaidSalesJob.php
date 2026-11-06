@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Actions\Sales\CancelSale;
+use App\Actions\Sales\DiscardEmptySale;
 use App\Enums\SaleStatus;
 use App\Exceptions\SaleException;
 use App\Jobs\Concerns\RunsInTenantContext;
@@ -58,8 +59,20 @@ class CancelUnpaidSalesJob implements ShouldBeUnique, ShouldQueue
 
         $failure = null;
 
-        foreach (Sale::query()->where('status', SaleStatus::Finalized)->whereDoesntHave('payments')->orderBy('id')->get() as $sale) {
+        // Rascunhos abertos (D-08) também caem: vazios são descartados, os demais cancelados
+        // (liberam os itens reservados). Vendas finalizadas só se não tiverem pagamento.
+        $sales = Sale::query()
+            ->where(fn ($query) => $query->where('status', SaleStatus::Open)
+                ->orWhere(fn ($finalized) => $finalized->where('status', SaleStatus::Finalized)->whereDoesntHave('payments')))
+            ->orderBy('id')
+            ->get();
+
+        foreach ($sales as $sale) {
             try {
+                if ($sale->status === SaleStatus::Open && app(DiscardEmptySale::class)($sale)) {
+                    continue;
+                }
+
                 $cancelSale($sale, 'Cancelada automaticamente: o PDV foi desativado para o estabelecimento.');
             } catch (SaleException $exception) {
                 Log::warning("Venda {$sale->displayNumber()} não foi cancelada ao desativar o PDV: {$exception->getMessage()}", [

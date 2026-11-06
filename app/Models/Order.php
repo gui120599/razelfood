@@ -7,6 +7,7 @@ use App\Enums\OrderFulfillmentType;
 use App\Enums\OrderOrigin;
 use App\Enums\OrderPaymentStatus;
 use App\Enums\OrderStatus;
+use App\Enums\SaleStatus;
 use App\Models\Concerns\TenantScopedModel;
 use App\Support\CurrentTenant;
 use App\Support\Sales\PdvCutoff;
@@ -98,17 +99,68 @@ class Order extends TenantScopedModel
     }
 
     /**
-     * Situação de pagamento derivada (RN-PED-03): pago = o pedido está em uma
-     * venda finalizada. `CancelSale` desvincula o pedido, então ele volta a
-     * "a receber". Não altera nem depende de `OrderStatus`.
+     * Situação de pagamento derivada (RN-PED-03): Paga = todos os itens estão em vendas finalizadas
+     * (`sale_id` do pedido marca o caso comum, pedido cobrado por inteiro numa venda); Parcial =
+     * só alguns. Item reservado em rascunho ainda é "a receber". `CancelSale` desvincula os itens,
+     * então o pedido volta a "a receber". Não altera nem depende de `OrderStatus`.
      */
     public function paymentStatus(): OrderPaymentStatus
     {
-        return $this->sale_id !== null ? OrderPaymentStatus::Paid : OrderPaymentStatus::Pending;
+        if ($this->sale_id !== null) {
+            return OrderPaymentStatus::Paid;
+        }
+
+        // Listas usam `withPaymentProgress()` e evitam uma consulta por linha.
+        if (array_key_exists('items_count', $this->attributes) && array_key_exists('sold_items_count', $this->attributes)) {
+            return $this->statusFromProgress((int) $this->attributes['items_count'], (int) $this->attributes['sold_items_count']);
+        }
+
+        $progress = OrderItem::query()
+            ->where('order_items.order_id', $this->id)
+            ->leftJoin('sales', 'sales.id', '=', 'order_items.sale_id')
+            ->selectRaw('COUNT(*) as total, COALESCE(SUM(sales.status = ?), 0) as sold', [SaleStatus::Finalized->value])
+            ->first();
+
+        return $this->statusFromProgress((int) ($progress->total ?? 0), (int) ($progress->sold ?? 0));
+    }
+
+    private function statusFromProgress(int $total, int $sold): OrderPaymentStatus
+    {
+        return match (true) {
+            $total > 0 && $sold === $total => OrderPaymentStatus::Paid,
+            $sold > 0 => OrderPaymentStatus::PartiallyPaid,
+            default => OrderPaymentStatus::Pending,
+        };
     }
 
     /**
-     * Pedidos elegíveis a "Contas a fechar": sem venda, já aceitos (nem
+     * Carrega `items_count` e `sold_items_count` (itens em venda finalizada) para
+     * `paymentStatus()` não consultar o banco por linha numa lista.
+     */
+    public function scopeWithPaymentProgress(Builder $query): Builder
+    {
+        return $query->withCount([
+            'items',
+            'items as sold_items_count' => fn (Builder $items) => $items->whereIn(
+                'order_items.sale_id',
+                Sale::query()->withoutGlobalScopes()->select('id')->where('status', SaleStatus::Finalized->value),
+            ),
+        ]);
+    }
+
+    /**
+     * Algum item do pedido está numa venda, aberta (reservado) ou finalizada? Então o pedido não
+     * pode ser editado nem cancelado: tire os itens da venda ou cancele a venda. Consulta o banco
+     * (chame sobre o pedido já travado).
+     */
+    public function hasItemsInSale(): bool
+    {
+        return $this->sale_id !== null
+            || OrderItem::query()->where('order_id', $this->id)->whereNotNull('sale_id')->exists();
+    }
+
+    /**
+     * Pedidos elegíveis a "Contas a fechar": com ao menos um item livre (fora de qualquer venda), já aceitos (nem
      * "Iniciado" nem cancelado) e criados a partir da ativação do PDV do
      * tenant (data de corte). Sem data de corte (feature desligada) não há
      * nenhum elegível.
@@ -119,7 +171,8 @@ class Order extends TenantScopedModel
         $cutoff = $tenant ? PdvCutoff::for($tenant) : null;
 
         return $query
-            ->whereNull('orders.sale_id')
+            ->whereExists(fn ($items) => $items->selectRaw('1')->from('order_items')
+                ->whereColumn('order_items.order_id', 'orders.id')->whereNull('order_items.sale_id'))
             ->whereNotIn('orders.status', [OrderStatus::Started->value, OrderStatus::Cancelled->value])
             ->when(
                 $cutoff === null,

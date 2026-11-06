@@ -4,15 +4,13 @@ namespace App\Actions\Sales;
 
 use App\Actions\Fiscal\ShouldAutoIssue;
 use App\Actions\Orders\Support\CartStockAndPromotionLedger;
+use App\Actions\Sales\Concerns\DispatchesAutoIssue;
 use App\Enums\OrderStatus;
 use App\Enums\SaleStatus;
 use App\Exceptions\CheckoutException;
 use App\Exceptions\SaleException;
-use App\Jobs\IssueFiscalDocumentJob;
-use App\Models\CardBrand;
 use App\Models\Order;
 use App\Models\OrderItem;
-use App\Models\PaymentOption;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
@@ -22,12 +20,12 @@ use App\Models\User;
 use App\Support\CurrentTenant;
 use App\Support\FeatureKey;
 use App\Support\Sales\Money;
+use App\Support\Sales\PaymentLines;
 use App\Support\Sales\PdvCutoff;
 use App\Support\Sales\StandaloneItemPrice;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Throwable;
 
 /**
  * Fecha a conta: cria uma venda FINALIZADA que cobra 1+ pedidos inteiros e/ou
@@ -46,18 +44,14 @@ use Throwable;
  */
 class FinalizeSale
 {
-    private const MAX_CARD_BRAND_LENGTH = 60;
-
-    private const MAX_AUTHORIZATION_LENGTH = 100;
-
-    /** Maior valor que cabe em decimal(10,2), em centavos. */
-    private const MAX_CENTS = 9_999_999_999;
+    use DispatchesAutoIssue;
 
     public function __construct(
         private readonly CartStockAndPromotionLedger $ledger,
         private readonly AllocateSaleNumber $allocateSaleNumber,
         private readonly StandaloneItemPrice $standaloneItemPrice,
         private readonly ShouldAutoIssue $shouldAutoIssue,
+        private readonly PaymentLines $paymentLines,
     ) {}
 
     /**
@@ -96,7 +90,7 @@ class FinalizeSale
             $standaloneCents = $standalone['lines']->sum('total_cents');
             $totalCents = $ordersGrandCents + $standaloneCents;
 
-            $paymentLines = $this->buildPaymentLines($payments, $totalCents);
+            $paymentLines = $this->paymentLines->build($payments, $totalCents);
 
             $sale = Sale::create([
                 'tenant_id' => $tenantId,
@@ -119,6 +113,7 @@ class FinalizeSale
                     'order_status' => $order->status,
                     'client_name' => $order->client?->name,
                     'order_total' => $order->grand_total,
+                    'delivery_fee_charged' => $order->delivery_fee,
                 ]);
             }
 
@@ -153,19 +148,7 @@ class FinalizeSale
             return $sale->load(['payments', 'items', 'saleOrders']);
         }, attempts: 3);
 
-        // Emissão automática da NFC-e (RN-FIS-12): só depois do commit da venda e fora desta
-        // requisição (HTTP nunca roda aqui). `dispatchAfterResponse`, como no Pizzaria-App: roda
-        // depois da resposta ao usuário e não depende de worker de fila na hospedagem compartilhada.
-        // O job revalida tudo ao executar.
-        // A venda já foi efetivada: uma falha ao decidir/enfileirar a nota não pode virar erro
-        // de fechamento (um novo clique falharia com "pedidos já cobrados"). A nota sai pelo botão.
-        try {
-            if (($this->shouldAutoIssue)($tenant, $sale)) {
-                IssueFiscalDocumentJob::dispatchAfterResponse($tenantId, $sale->id);
-            }
-        } catch (Throwable $exception) {
-            report($exception);
-        }
+        $this->dispatchAutoIssue($tenant, $sale);
 
         return $sale;
     }
@@ -274,122 +257,5 @@ class FinalizeSale
         })->values();
 
         return ['lines' => $lines, 'consumption' => $consumption, 'stockControlled' => $stockControlled];
-    }
-
-    /**
-     * Valida os pagamentos recebidos e calcula o troco no servidor.
-     *
-     * @param  array<int, array{payment_option_id: int, amount: float|int|string, card_brand?: ?string, card_brand_id?: int|string|null, authorization_code?: ?string}>  $payments
-     * @return array<int, array<string, mixed>> Linhas prontas para SalePayment (sem tenant_id/sale_id).
-     */
-    private function buildPaymentLines(array $payments, int $totalCents): array
-    {
-        if ($payments === []) {
-            if ($totalCents > 0) {
-                throw new SaleException('Informe ao menos uma forma de pagamento.');
-            }
-
-            return [];
-        }
-
-        $options = PaymentOption::query()
-            ->whereIn('id', array_map(fn (array $payment): int => (int) $payment['payment_option_id'], $payments))
-            ->get()
-            ->keyBy('id');
-
-        $lines = [];
-        $receivedCents = 0;
-        $cashCents = 0;
-
-        foreach ($payments as $payment) {
-            $option = $options->get((int) $payment['payment_option_id']);
-
-            if ($option === null) {
-                throw new SaleException('Forma de pagamento inválida.');
-            }
-
-            $amountCents = Money::toCents($payment['amount']);
-
-            if ($amountCents <= 0) {
-                throw new SaleException("Informe um valor maior que zero para \"{$option->name}\".");
-            }
-
-            if ($amountCents > self::MAX_CENTS) {
-                throw new SaleException("O valor informado para \"{$option->name}\" é grande demais.");
-            }
-
-            $cardBrand = $this->cleanText($payment['card_brand'] ?? null, self::MAX_CARD_BRAND_LENGTH);
-            $registeredBrand = null;
-
-            if (filled($payment['card_brand_id'] ?? null)) {
-                // CardBrand é tenant-scoped: bandeira de outro estabelecimento nunca é encontrada.
-                $registeredBrand = CardBrand::query()->find((int) $payment['card_brand_id'])
-                    ?? throw new SaleException("Bandeira de cartão inválida para \"{$option->name}\".");
-                $cardBrand = mb_substr($registeredBrand->name, 0, self::MAX_CARD_BRAND_LENGTH);
-            }
-            $authorizationCode = $this->cleanText($payment['authorization_code'] ?? null, self::MAX_AUTHORIZATION_LENGTH);
-
-            if ($option->requires_card_brand && $cardBrand === null) {
-                throw new SaleException("Informe a bandeira do cartão para \"{$option->name}\".");
-            }
-
-            if ($option->requires_authorization_code && $authorizationCode === null) {
-                throw new SaleException("Informe o código de autorização para \"{$option->name}\".");
-            }
-
-            $receivedCents += $amountCents;
-            $cashCents += $option->is_cash ? $amountCents : 0;
-
-            $lines[] = [
-                'payment_option_id' => $option->id,
-                'payment_option_name' => $option->name,
-                'is_cash' => (bool) $option->is_cash,
-                'amount_cents' => $amountCents,
-                'change_cents' => 0,
-                'card_brand' => $cardBrand,
-                'card_brand_id' => $registeredBrand?->id,
-                'authorization_code' => $authorizationCode,
-            ];
-        }
-
-        if ($receivedCents < $totalCents) {
-            throw new SaleException('Pagamento insuficiente: faltam '.Money::format($totalCents - $receivedCents).'.');
-        }
-
-        $changeCents = $receivedCents - $totalCents;
-
-        if ($changeCents > $cashCents) {
-            throw new SaleException('O valor recebido passa do total em '.Money::format($changeCents).', mas o troco só pode sair de pagamento em dinheiro.');
-        }
-
-        // Troco sai das linhas em dinheiro, da última para a primeira.
-        foreach (array_reverse(array_keys($lines)) as $index) {
-            if ($changeCents === 0) {
-                break;
-            }
-
-            if (! $lines[$index]['is_cash']) {
-                continue;
-            }
-
-            $applied = min($changeCents, $lines[$index]['amount_cents']);
-            $lines[$index]['change_cents'] = $applied;
-            $changeCents -= $applied;
-        }
-
-        return array_map(function (array $line): array {
-            $line['amount'] = Money::fromCents($line['amount_cents']);
-            $line['change_amount'] = Money::fromCents($line['change_cents']);
-            unset($line['amount_cents'], $line['change_cents']);
-
-            return $line;
-        }, $lines);
-    }
-
-    private function cleanText(?string $value, int $maxLength): ?string
-    {
-        $value = trim((string) $value);
-
-        return $value === '' ? null : mb_substr($value, 0, $maxLength);
     }
 }

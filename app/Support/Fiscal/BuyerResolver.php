@@ -5,6 +5,7 @@ namespace App\Support\Fiscal;
 use App\Enums\PersonType;
 use App\Models\Client;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\Sale;
 use App\Models\Scopes\TenantScope;
 use App\Rules\ValidCnpj;
@@ -12,8 +13,8 @@ use App\Rules\ValidCpf;
 use Illuminate\Support\Facades\Validator;
 
 /**
- * Decide se a NFC-e leva comprador identificado (RN-FIS-10): só quando TODOS os
- * pedidos da venda são de um mesmo cliente, com nome e CPF/CNPJ válidos.
+ * Decide se a NFC-e leva comprador identificado (RN-FIS-10): o cliente da venda, ou, sem ele,
+ * só quando TODOS os pedidos da venda são de um mesmo cliente, com nome e CPF/CNPJ válidos.
  * Qualquer dúvida omite o comprador (consumidor não identificado) e devolve o
  * motivo, para ficar registrado no documento.
  */
@@ -24,28 +25,37 @@ class BuyerResolver
      */
     public function __invoke(Sale $sale): array
     {
-        $orders = Order::query()->withoutGlobalScope(TenantScope::class)
-            ->where('tenant_id', $sale->tenant_id)
-            ->where('sale_id', $sale->id)
-            ->get(['id', 'client_id']);
+        // O cliente escolhido na venda (tela Nova Venda) tem precedência; sem ele vale a regra dos
+        // pedidos: todos de um mesmo cliente.
+        $clientId = $sale->client_id;
 
-        if ($orders->isEmpty()) {
-            return $this->omit('Venda sem pedidos: consumidor não identificado.');
-        }
+        if ($clientId === null) {
+            $orders = Order::query()->withoutGlobalScope(TenantScope::class)
+                ->where('tenant_id', $sale->tenant_id)
+                ->where(fn ($query) => $query->where('sale_id', $sale->id)
+                    ->orWhereIn('id', OrderItem::query()->where('sale_id', $sale->id)->select('order_id')))
+                ->get(['id', 'client_id']);
 
-        $clientIds = $orders->pluck('client_id')->unique()->values();
+            if ($orders->isEmpty()) {
+                return $this->omit('Venda sem pedidos: consumidor não identificado.');
+            }
 
-        if ($clientIds->count() > 1) {
-            return $this->omit('Pedidos de clientes diferentes: consumidor não identificado.');
-        }
+            $clientIds = $orders->pluck('client_id')->unique()->values();
 
-        if ($clientIds->first() === null) {
-            return $this->omit('Pedido sem cliente cadastrado: consumidor não identificado.');
+            if ($clientIds->count() > 1) {
+                return $this->omit('Pedidos de clientes diferentes: consumidor não identificado.');
+            }
+
+            if ($clientIds->first() === null) {
+                return $this->omit('Pedido sem cliente cadastrado: consumidor não identificado.');
+            }
+
+            $clientId = $clientIds->first();
         }
 
         $client = Client::query()->withoutGlobalScope(TenantScope::class)
             ->where('tenant_id', $sale->tenant_id)
-            ->find($clientIds->first());
+            ->find($clientId);
 
         if ($client === null || blank($client->name)) {
             return $this->omit('Cliente sem nome cadastrado: consumidor não identificado.');

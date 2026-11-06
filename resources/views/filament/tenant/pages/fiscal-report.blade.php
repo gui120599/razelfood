@@ -55,6 +55,7 @@
             ['Itens', $summary['items']],
             ['Valor dos itens', $money($summary['items_cents'])],
             ['Adicionais e frete', $money($summary['others_cents'])],
+            ['Descontos', $money($summary['discount_cents'])],
             ['Total das notas', $money($summary['total_cents'])],
         ] as [$label, $value])
             <div class="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
@@ -143,6 +144,6 @@
     </details>
 
     <p class="text-xs text-gray-400 dark:text-gray-500">
-        Só NFC-e autorizadas e ainda válidas (inclui as com cancelamento solicitado ou que falhou), pela data em que o sistema registrou a autorização. Os itens são os que foram enviados na nota: brindes e itens removidos ficam fora; adicionais e frete aparecem em "Adicionais e frete".
+        Só NFC-e autorizadas e ainda válidas (inclui as com cancelamento solicitado ou que falhou), pela data em que o sistema registrou a autorização. Os itens são os que foram enviados na nota: brindes e itens removidos ficam fora; adicionais e frete aparecem em "Adicionais e frete" e o desconto dado na venda, em "Desconto".
     </p>
 </x-filament-panels::page>

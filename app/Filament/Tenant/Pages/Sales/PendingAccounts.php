@@ -59,7 +59,8 @@ class PendingAccounts extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(fn (): Builder => Order::query()->awaitingSale()->with(['client', 'payments']))
+            // Tela legada: só pedidos INTEIROS (sem item em venda). Pedido parcial é da Nova Venda.
+            ->query(fn (): Builder => Order::query()->awaitingSale()->whereDoesntHave('items', fn (Builder $items) => $items->whereNotNull('sale_id'))->with(['client', 'payments']))
             ->defaultSort('created_at', 'desc')
             ->columns([
                 TextColumn::make('id')

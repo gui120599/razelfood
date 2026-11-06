@@ -10,10 +10,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
- * Venda / fechamento de conta (Fase 1.0). Agrega pedidos inteiros
- * (`orders.sale_id` / `order_items.sale_id`), itens avulsos (`sale_items`) e os
- * pagamentos recebidos (`sale_payments`). Criada e cancelada só por
- * App\Actions\Sales\FinalizeSale / CancelSale.
+ * Venda / fechamento de conta. Agrega itens de pedidos (`order_items.sale_id` é a fonte de
+ * verdade: reserva em venda Aberta, cobrança em Finalizada; `orders.sale_id` só marca o pedido
+ * cobrado por inteiro numa única venda), itens avulsos (`sale_items`) e os pagamentos recebidos
+ * (`sale_payments`). Nasce como rascunho (`open`) ou, pelo fechamento direto, já Finalizada;
+ * mudada só pelas Actions de App\Actions\Sales.
  */
 class Sale extends TenantScopedModel
 {
@@ -21,12 +22,17 @@ class Sale extends TenantScopedModel
         'tenant_id',
         'number',
         'status',
+        'client_id',
+        'client_manual',
         'items_total',
         'discount_total',
+        'discount_percent',
+        'manual_discount_total',
         'delivery_fee',
         'total',
         'finalized_at',
         'finalized_by_user_id',
+        'opened_by_user_id',
         'cancelled_at',
         'cancelled_by_user_id',
         'cancellation_note',
@@ -40,8 +46,11 @@ class Sale extends TenantScopedModel
         return [
             'number' => 'integer',
             'status' => SaleStatus::class,
+            'client_manual' => 'boolean',
             'items_total' => 'decimal:2',
             'discount_total' => 'decimal:2',
+            'discount_percent' => 'decimal:2',
+            'manual_discount_total' => 'decimal:2',
             'delivery_fee' => 'decimal:2',
             'total' => 'decimal:2',
             'finalized_at' => 'datetime',
@@ -76,6 +85,21 @@ class Sale extends TenantScopedModel
     public function orderItems(): HasMany
     {
         return $this->hasMany(OrderItem::class);
+    }
+
+    public function client(): BelongsTo
+    {
+        return $this->belongsTo(Client::class);
+    }
+
+    public function openedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'opened_by_user_id');
+    }
+
+    public function isOpen(): bool
+    {
+        return $this->status === SaleStatus::Open;
     }
 
     public function finalizedBy(): BelongsTo
@@ -143,6 +167,10 @@ class Sale extends TenantScopedModel
 
     public function displayNumber(): string
     {
-        return '#'.$this->number;
+        if ($this->number !== null) {
+            return '#'.$this->number;
+        }
+
+        return $this->status === SaleStatus::Open ? 'Rascunho' : "Rascunho #{$this->id}";
     }
 }

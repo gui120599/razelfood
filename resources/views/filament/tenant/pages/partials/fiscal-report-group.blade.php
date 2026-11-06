@@ -11,6 +11,7 @@
                 <th class="px-4 py-2 text-right">Qtd.</th>
                 <th class="px-4 py-2 text-right">Valor dos itens</th>
                 <th class="px-4 py-2 text-right">Adicionais e frete</th>
+                <th class="px-4 py-2 text-right">Desconto</th>
             @endif
             <th class="px-4 py-2 text-right">{{ $withItems ? 'Total' : 'Valor' }}</th>
         </tr>
@@ -24,11 +25,12 @@
                     <td class="px-4 py-2 text-right">{{ $row['quantity'] }}</td>
                     <td class="px-4 py-2 text-right">{{ $money($row['items_cents']) }}</td>
                     <td class="px-4 py-2 text-right">{{ $money($row['others_cents']) }}</td>
+                    <td class="px-4 py-2 text-right">{{ $money($row['discount_cents']) }}</td>
                 @endif
                 <td class="px-4 py-2 text-right">{{ $money($row['total_cents']) }}</td>
             </tr>
         @empty
-            <tr><td colspan="6" class="p-6 text-center text-gray-400">Sem dados no período.</td></tr>
+            <tr><td colspan="7" class="p-6 text-center text-gray-400">Sem dados no período.</td></tr>
         @endforelse
     </tbody>
     <tfoot class="bg-gray-50 font-semibold dark:bg-white/5">
@@ -39,6 +41,7 @@
                 <td class="px-4 py-2 text-right">{{ $group['total']['quantity'] }}</td>
                 <td class="px-4 py-2 text-right">{{ $money($group['total']['items_cents']) }}</td>
                 <td class="px-4 py-2 text-right">{{ $money($group['total']['others_cents']) }}</td>
+                <td class="px-4 py-2 text-right">{{ $money($group['total']['discount_cents']) }}</td>
             @endif
             <td class="px-4 py-2 text-right">{{ $money($group['total']['total_cents']) }}</td>
         </tr>

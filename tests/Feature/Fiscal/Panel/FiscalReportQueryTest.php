@@ -2,6 +2,11 @@
 
 namespace Tests\Feature\Fiscal\Panel;
 
+use App\Actions\Sales\AddSalePayment;
+use App\Actions\Sales\AddStandaloneItem;
+use App\Actions\Sales\ApplySaleDiscountPercent;
+use App\Actions\Sales\FinalizeOpenSale;
+use App\Actions\Sales\StartSale;
 use App\Enums\FiscalDocumentStatus;
 use App\Enums\FiscalPaymentMethod;
 use App\Models\Category;
@@ -80,7 +85,7 @@ class FiscalReportQueryTest extends TestCase
         $summary = $report->summary();
 
         // nota 1: 80 + 8 itens, 10 adicionais + 4 frete; nota 2: 40
-        $this->assertSame(['notes' => 2, 'items' => 3, 'items_cents' => 12800, 'others_cents' => 1400, 'total_cents' => 14200], $summary);
+        $this->assertSame(['notes' => 2, 'items' => 3, 'items_cents' => 12800, 'others_cents' => 1400, 'discount_cents' => 0, 'total_cents' => 14200], $summary);
 
         $ncm = $report->group('ncm');
         $this->assertSame(['19059090', '22021000'], $ncm['rows']->pluck('label')->all());
@@ -158,9 +163,28 @@ class FiscalReportQueryTest extends TestCase
         $otherSale = $this->finalizeNfceSale([$this->makeNfceOrder($other, [['product' => $this->makeFiscalProduct($other, 'Esfiha', 10)]])], $otherPix);
         $this->issueNfce($otherSale);
 
-        $this->assertSame(['notes' => 1, 'items' => 1, 'items_cents' => 4000, 'others_cents' => 0, 'total_cents' => 4000], $this->report()->summary());
+        $this->assertSame(['notes' => 1, 'items' => 1, 'items_cents' => 4000, 'others_cents' => 0, 'discount_cents' => 0, 'total_cents' => 4000], $this->report()->summary());
         $this->assertSame(['Esfiha'], $this->report(tenant: $other)->group('product')['rows']->pluck('label')->all());
         $this->assertSame(['Pix' => 4000], $this->report()->group('payment')['rows']->pluck('total_cents', 'label')->all());
+    }
+
+    public function test_a_manual_discount_is_its_own_column_and_the_totals_still_match_the_notes(): void
+    {
+        $sale = app(StartSale::class)();
+        app(AddStandaloneItem::class)($sale, $this->makeFiscalProduct($this->tenant, 'Pizza', 100)->id);
+        app(ApplySaleDiscountPercent::class)($sale, 10);
+        app(AddSalePayment::class)($sale, ['payment_option_id' => $this->pix->id, 'amount' => '90.00']);
+        $finalized = app(FinalizeOpenSale::class)($sale);
+        $this->issueNfce($finalized, now());
+
+        $summary = $this->report()->summary();
+
+        $this->assertSame(['notes' => 1, 'items' => 1, 'items_cents' => 10000, 'others_cents' => 0, 'discount_cents' => 1000, 'total_cents' => 9000], $summary);
+        $ncm = $this->report()->group('ncm');
+        $this->assertSame(1000, $ncm['rows'][0]['discount_cents']);
+        $this->assertSame(9000, $ncm['total']['total_cents']);
+        $this->assertSame(9000, $this->report()->notesTotals()['total_cents'], 'Total das notas = soma dos itens − desconto.');
+        $this->assertSame(['Pix' => 9000], $this->report()->group('payment')['rows']->pluck('total_cents', 'label')->all());
     }
 
     public function test_the_snapshot_keeps_the_report_stable_after_catalog_changes(): void
@@ -228,7 +252,7 @@ class FiscalReportQueryTest extends TestCase
         $this->assertStringContainsString('Notas autorizadas;1', $flat);
         $this->assertStringContainsString('Total das notas;40,00', $flat);
         $this->assertStringContainsString('Por NCM', $flat);
-        $this->assertStringContainsString('19059090;1;1;40,00;0,00;40,00', $flat);
+        $this->assertStringContainsString('19059090;1;1;40,00;0,00;0,00;40,00', $flat);
         $this->assertStringContainsString('Por forma de pagamento', $flat);
         $this->assertStringNotContainsString('invalida', $flat);
         $this->assertSame(['ncm', 'payment'], FiscalReportQuery::dimensionsFrom(['payment', 'x', 'ncm']));

@@ -147,7 +147,7 @@ class FiscalReportPageTest extends TestCase
         $this->assertStringContainsString('Total das notas;44,00', $content);
         $this->assertStringContainsString('Por NCM', $content);
         $this->assertStringContainsString('Por forma de pagamento', $content);
-        $this->assertStringContainsString('Pix;;;;;44,00', $content);
+        $this->assertStringContainsString('Pix;;;;;;44,00', $content);
     }
 
     public function test_the_print_view_renders_the_same_numbers_with_the_tenant_header(): void

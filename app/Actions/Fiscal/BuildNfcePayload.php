@@ -33,10 +33,11 @@ use Illuminate\Support\Str;
  *
  * Valores (RN-FIS-05..09): `unitAmount` é o preço unitário do item; `totalAmount`
  * = quantidade × preço; `othersAmount` leva os adicionais (× quantidade) mais a
- * fração do frete, rateado igualmente em centavos entre as linhas; o desconto do
- * pedido é só informativo (os preços já são líquidos), então `discountAmount` é 0.
+ * fração do frete, rateado igualmente em centavos entre as linhas; o desconto das promoções
+ * do pedido é só informativo (os preços já são líquidos), mas o desconto MANUAL da venda
+ * (`manual_discount_total`) é rateado proporcionalmente em `discountAmount`.
  * Pizza de sabores é UM item. Brindes ficam fora da nota. A soma das linhas tem de
- * bater com o total da venda, e pagamentos − troco também, centavo a centavo.
+ * bater com o total da venda (itens + adicionais/frete − desconto), e pagamentos − troco também, centavo a centavo.
  */
 class BuildNfcePayload
 {
@@ -62,8 +63,14 @@ class BuildNfcePayload
         }
 
         $lines = $this->applyFreight($lines, Money::toCents($sale->delivery_fee));
+        try {
+            $lines = $this->applyDiscount($lines, Money::toCents($sale->manual_discount_total));
+        } catch (\InvalidArgumentException $exception) {
+            throw new FiscalDocumentException('Não foi possível ratear o desconto da venda entre os itens. Revise a venda antes de emitir.', previous: $exception);
+        }
+
         $totalCents = Money::toCents($sale->total);
-        $itemsCents = $lines->sum(fn (array $line): int => $line['total_cents'] + $line['others_cents']);
+        $itemsCents = $lines->sum(fn (array $line): int => $line['total_cents'] + $line['others_cents'] - $line['discount_cents']);
 
         if ($itemsCents !== $totalCents) {
             throw new FiscalDocumentException('Os itens da venda ('.Money::format($itemsCents).') não fecham com o total da venda ('.Money::format($totalCents).'). Revise a venda antes de emitir.');
@@ -231,6 +238,9 @@ class BuildNfcePayload
             'unit_cents' => $unitCents,
             'total_cents' => $unitCents * $quantity,
             'others_cents' => $addonsCents,
+            'discount_cents' => 0,
+            // Valor do item (preço × quantidade + adicionais), sem o frete: base do rateio do desconto.
+            'gross_cents' => $unitCents * $quantity + $addonsCents,
         ];
     }
 
@@ -250,6 +260,28 @@ class BuildNfcePayload
 
         return $lines->values()->map(function (array $line, int $index) use ($shares): array {
             $line['others_cents'] += $shares[$index];
+
+            return $line;
+        });
+    }
+
+    /**
+     * Rateia o desconto manual da venda entre as linhas, proporcional ao valor de cada uma
+     * (maior resto, em centavos), em `discountAmount`. Sem desconto, as linhas ficam como estão.
+     *
+     * @param  Collection<int, array<string, mixed>>  $lines
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function applyDiscount(Collection $lines, int $discountCents): Collection
+    {
+        if ($discountCents === 0) {
+            return $lines;
+        }
+
+        $shares = CentAllocator::proportional($discountCents, $lines->values()->map(fn (array $line): int => $line['gross_cents'])->all());
+
+        return $lines->values()->map(function (array $line, int $index) use ($shares): array {
+            $line['discount_cents'] = $shares[$index];
 
             return $line;
         });
@@ -347,7 +379,7 @@ class BuildNfcePayload
             'unitTax' => $fiscal->commercialUnit,
             'quantityTax' => $line['quantity'],
             'taxUnitAmount' => $unitAmount,
-            'discountAmount' => 0,
+            'discountAmount' => $this->amount($line['discount_cents']),
             'othersAmount' => $this->amount($line['others_cents']),
             // Sempre verdadeiro, como na produção do Pizzaria-App: lá `(bool) item_venda_valor` recebe o texto
             // "0.00" do cast decimal (verdadeiro em PHP), então o item sempre compõe o total da nota.
@@ -355,7 +387,7 @@ class BuildNfcePayload
             'cest' => filled($fiscal->cest) ? $fiscal->cest : null,
         ];
 
-        $item['tax'] = $this->taxBlock($fiscal, $line['total_cents'] + $line['others_cents'], $settings);
+        $item['tax'] = $this->taxBlock($fiscal, $line['total_cents'] + $line['others_cents'] - $line['discount_cents'], $settings);
 
         return $item;
     }
@@ -417,6 +449,7 @@ class BuildNfcePayload
             'unit_amount' => Money::fromCents($line['unit_cents']),
             'total_amount' => Money::fromCents($line['total_cents']),
             'others_amount' => Money::fromCents($line['others_cents']),
+            'discount_amount' => Money::fromCents($line['discount_cents']),
         ];
     }
 
