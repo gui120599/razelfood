@@ -4,7 +4,9 @@ namespace App\Enums;
 
 /**
  * Bandeira de cartão aceita no bloco `card` da NFC-e. `apiValue()` é o texto
- * que a NFE.io espera em `card.flag`; as cinco bandeiras vêm do Pizzaria-App.
+ * enviado em `card.flag`; as oito bandeiras são as do Pizzaria-App. Comprovadas em
+ * produção (570 notas emitidas lá): `Visa`, `MasterCard` e `Elo`. As demais seguem a
+ * mesma grafia, ainda sem prova real.
  */
 enum CardBrand: string
 {
@@ -12,6 +14,9 @@ enum CardBrand: string
     case Mastercard = 'mastercard';
     case AmericanExpress = 'american_express';
     case Sorocred = 'sorocred';
+    case Elo = 'elo';
+    case Alelo = 'alelo';
+    case Hipercard = 'hipercard';
     case Other = 'other';
 
     public function label(): string
@@ -21,6 +26,9 @@ enum CardBrand: string
             self::Mastercard => 'Mastercard',
             self::AmericanExpress => 'American Express',
             self::Sorocred => 'Sorocred',
+            self::Elo => 'Elo',
+            self::Alelo => 'Alelo',
+            self::Hipercard => 'Hipercard',
             self::Other => 'Outra',
         };
     }
@@ -28,11 +36,14 @@ enum CardBrand: string
     public function apiValue(): string
     {
         return match ($this) {
-            self::Visa => 'visa',
-            self::Mastercard => 'mastercard',
-            self::AmericanExpress => 'americanExpress',
-            self::Sorocred => 'sorocred',
-            self::Other => 'other',
+            self::Visa => 'Visa',
+            self::Mastercard => 'MasterCard',
+            self::AmericanExpress => 'AmericanExpress',
+            self::Sorocred => 'Sorocred',
+            self::Elo => 'Elo',
+            self::Alelo => 'Alelo',
+            self::Hipercard => 'HiperCard',
+            self::Other => 'Other',
         };
     }
 }
