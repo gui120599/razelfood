@@ -2,12 +2,14 @@
 
 namespace Tests\Feature\Fiscal\Nfce;
 
+use App\Actions\Sales\AttachOrderItems;
 use App\Actions\Sales\FinalizeSale;
+use App\Actions\Sales\StartSale;
 use App\Actions\Tenants\SeedDefaultTenantRoles;
 use App\Enums\CardBrand as CardBrandEnum;
 use App\Enums\FiscalDocumentStatus;
 use App\Enums\FiscalPaymentMethod;
-use App\Filament\Tenant\Pages\Sales\CloseAccount;
+use App\Filament\Tenant\Pages\Sales\NewSale;
 use App\Filament\Tenant\Resources\CardBrands\CardBrandResource;
 use App\Filament\Tenant\Resources\CardBrands\Pages\CreateCardBrand;
 use App\Filament\Tenant\Resources\CardBrands\Pages\EditCardBrand;
@@ -16,6 +18,7 @@ use App\Filament\Tenant\Resources\Sales\Pages\ListSales;
 use App\Filament\Tenant\Resources\Sales\Pages\ViewSale;
 use App\Models\CardBrand;
 use App\Models\FiscalDocument;
+use App\Models\Order;
 use App\Models\PaymentOption;
 use App\Models\Sale;
 use App\Models\SalePayment;
@@ -304,7 +307,12 @@ class NfceUiTest extends TestCase
 
     // ---- Fechamento de conta --------------------------------------------
 
-    public function test_close_account_uses_the_registered_card_brand_and_requires_it_when_the_option_demands(): void
+    private function draftFor(Order $order): Sale
+    {
+        return app(AttachOrderItems::class)(app(StartSale::class)(), $order->id);
+    }
+
+    public function test_the_new_sale_uses_the_registered_card_brand_and_requires_it_when_the_option_demands(): void
     {
         Queue::fake();
         $this->actingAsRole('Caixa');
@@ -313,19 +321,15 @@ class NfceUiTest extends TestCase
         $brand = $this->makeCardBrand($this->tenant, CardBrandEnum::Mastercard);
         $order = $this->makeNfceOrder($this->tenant, [['product' => $this->makeFiscalProduct($this->tenant, 'Pizza', 40)]]);
 
-        Livewire::withQueryParams(['orders' => (string) $order->id])
-            ->test(CloseAccount::class)
-            ->fillForm(['payments' => [['payment_option_id' => $credit->id, 'amount' => '40,00']]])
-            ->call('finalize')
-            ->assertHasFormErrors(['payments.0.card_brand_id' => 'required']);
+        $component = Livewire::test(NewSale::class, ['sale' => $this->draftFor($order)->id])
+            ->set('paymentOptionId', $credit->id)
+            ->set('receivedAmount', 40.0)
+            ->call('registerPayment')
+            ->assertHasErrors('receivedAmount');
 
-        $this->assertSame(0, Sale::query()->count());
+        $this->assertSame(0, SalePayment::query()->count());
 
-        Livewire::withQueryParams(['orders' => (string) $order->id])
-            ->test(CloseAccount::class)
-            ->fillForm(['payments' => [['payment_option_id' => $credit->id, 'amount' => '40,00', 'card_brand_id' => $brand->id]]])
-            ->call('finalize')
-            ->assertHasNoFormErrors();
+        $component->set('cardBrandId', $brand->id)->call('registerPayment')->assertHasNoErrors()->call('finalizeSale')->assertHasNoErrors();
 
         $payment = SalePayment::query()->sole();
         $this->assertSame($brand->id, $payment->card_brand_id);

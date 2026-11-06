@@ -2,20 +2,26 @@
 
 namespace Tests\Feature\Sales;
 
+use App\Actions\Sales\AttachOrderItems;
 use App\Actions\Sales\FinalizeSale;
+use App\Actions\Sales\StartSale;
 use App\Actions\Tenants\SeedDefaultTenantRoles;
 use App\Enums\OrderPaymentStatus;
 use App\Enums\OrderStatus;
 use App\Enums\SaleStatus;
 use App\Filament\Tenant\Pages\Sales\CloseAccount;
+use App\Filament\Tenant\Pages\Sales\NewSale;
 use App\Filament\Tenant\Pages\Sales\PendingAccounts;
 use App\Filament\Tenant\Resources\Orders\Pages\ListOrders;
 use App\Filament\Tenant\Resources\Sales\Pages\ListSales;
 use App\Filament\Tenant\Resources\Sales\Pages\ViewSale;
 use App\Filament\Tenant\Resources\Sales\SaleResource;
+use App\Models\Order;
 use App\Models\OrderPayment;
 use App\Models\PaymentOption;
 use App\Models\Sale;
+use App\Models\SaleItem;
+use App\Models\SalePayment;
 use App\Models\Tenant;
 use App\Models\User;
 use BezhanSalleh\FilamentShield\Facades\FilamentShield;
@@ -66,6 +72,11 @@ class SalesPagesTest extends TestCase
         parent::tearDown();
     }
 
+    private function draftFor(Order $order): Sale
+    {
+        return app(AttachOrderItems::class)(app(StartSale::class)(), $order->id);
+    }
+
     private function actingAsRole(string $role): User
     {
         $user = User::factory()->create(['tenant_id' => $this->tenant->id]);
@@ -82,9 +93,9 @@ class SalesPagesTest extends TestCase
         return app(FinalizeSale::class)([$order->id], [], [['payment_option_id' => $this->cash->id, 'amount' => $total]]);
     }
 
-    // ---- Contas a fechar -------------------------------------------------
+    // ---- Pedidos a cobrar (aba Pedidos da Nova Venda) --------------------
 
-    public function test_pending_accounts_lists_only_orders_without_sale_and_not_cancelled(): void
+    public function test_the_orders_tab_lists_only_orders_without_sale_and_not_cancelled(): void
     {
         $this->actingAsRole('Caixa');
         $pending = $this->makeSaleOrder($this->tenant, 40, OrderStatus::Delivered);
@@ -93,13 +104,15 @@ class SalesPagesTest extends TestCase
         $sold = $this->makeSaleOrder($this->tenant, 20);
         app(FinalizeSale::class)([$sold->id], [], [['payment_option_id' => $this->cash->id, 'amount' => 20]]);
 
-        Livewire::test(PendingAccounts::class)
+        Livewire::test(NewSale::class)
             ->assertOk()
-            ->assertCanSeeTableRecords([$pending, $preparing])
-            ->assertCanNotSeeTableRecords([$cancelled, $sold]);
+            ->assertSee("Pedido #{$pending->id}")
+            ->assertSee("Pedido #{$preparing->id}")
+            ->assertDontSee("Pedido #{$cancelled->id}")
+            ->assertDontSee("Pedido #{$sold->id}");
     }
 
-    public function test_pending_accounts_never_shows_orders_of_another_tenant(): void
+    public function test_the_orders_tab_never_shows_orders_of_another_tenant(): void
     {
         $this->actingAsRole('Caixa');
         $own = $this->makeSaleOrder($this->tenant, 40);
@@ -107,39 +120,39 @@ class SalesPagesTest extends TestCase
         $other = $this->makeSaleTenant('emporiodapizza');
         $foreign = $this->makeSaleOrder($other, 99);
 
-        Livewire::test(PendingAccounts::class)
-            ->assertCanSeeTableRecords([$own])
-            ->assertCanNotSeeTableRecords([$foreign]);
+        Livewire::test(NewSale::class)
+            ->assertSee("Pedido #{$own->id}")
+            ->assertDontSee("Pedido #{$foreign->id}");
     }
 
-    public function test_pending_accounts_row_and_bulk_actions_lead_to_the_close_screen(): void
+    public function test_the_old_pending_accounts_and_close_account_urls_lead_to_the_new_screen(): void
     {
         $this->actingAsRole('Caixa');
         $a = $this->makeSaleOrder($this->tenant, 40);
         $b = $this->makeSaleOrder($this->tenant, 30);
 
-        Livewire::test(PendingAccounts::class)
-            ->assertTableActionHasUrl('closeAccount', CloseAccount::getUrl(['orders' => $a->id]), $a)
-            ->callTableBulkAction('closeSelected', [$a, $b])
-            ->assertRedirect(CloseAccount::getUrl(['orders' => "{$a->id},{$b->id}"]));
+        Livewire::test(PendingAccounts::class)->assertRedirect(NewSale::getUrl());
+        Livewire::withQueryParams(['orders' => "{$a->id},{$b->id}"])->test(CloseAccount::class)
+            ->assertRedirect(NewSale::getUrl().'?orders='.urlencode("{$a->id},{$b->id}"));
     }
 
-    // ---- Fechar conta ----------------------------------------------------
+    // ---- Nova Venda: fechamento de conta ---------------------------------
 
-    public function test_close_account_prefills_declared_payment_and_finalizes_the_sale(): void
+    public function test_the_new_sale_suggests_the_declared_payment_and_finalizes_the_sale(): void
     {
         $user = $this->actingAsRole('Caixa');
         $order = $this->makeSaleOrder($this->tenant, 40);
         OrderPayment::create(['order_id' => $order->id, 'payment_option_name' => 'Dinheiro', 'is_cash' => true, 'amount' => 40]);
 
-        Livewire::withQueryParams(['orders' => (string) $order->id])
-            ->test(CloseAccount::class)
-            ->assertOk()
-            ->assertSee('Total da conta')
+        Livewire::test(NewSale::class, ['sale' => $this->draftFor($order)->id])
             ->assertSee('R$ 40,00')
-            ->assertSee('Conta coberta')
-            ->call('finalize')
-            ->assertHasNoFormErrors()
+            ->call('openPaymentModal')
+            ->assertSee('Forma de pagamento indicada no pedido')
+            ->assertSet('paymentOptionId', $this->cash->id)
+            ->assertSet('receivedAmount', 40.0)
+            ->call('registerPayment')
+            ->call('finalizeSale')
+            ->assertHasNoErrors()
             ->assertNotified('Venda #1 finalizada');
 
         $sale = Sale::first();
@@ -150,57 +163,60 @@ class SalesPagesTest extends TestCase
         $this->assertSame('Dinheiro', $sale->payments->first()->payment_option_name);
     }
 
-    public function test_close_account_preview_shows_remaining_and_change(): void
+    public function test_the_new_sale_preview_shows_remaining_and_change_and_refuses_change_from_a_card(): void
     {
         $this->actingAsRole('Caixa');
         $order = $this->makeSaleOrder($this->tenant, 40);
 
-        $component = Livewire::withQueryParams(['orders' => (string) $order->id])->test(CloseAccount::class);
+        $component = Livewire::test(NewSale::class, ['sale' => $this->draftFor($order)->id]);
 
-        $component
-            ->fillForm(['payments' => [['payment_option_id' => $this->cash->id, 'amount' => '15.00']]])
-            ->assertSee('Falta receber')
-            ->assertSee('R$ 25,00');
+        $component->set('paymentOptionId', $this->cash->id)->set('receivedAmount', 15.0)->call('registerPayment')
+            ->call('openPaymentModal')
+            ->assertSee('Restante')
+            ->assertSet('receivedAmount', 25.0);
 
-        $component
-            ->fillForm(['payments' => [['payment_option_id' => $this->cash->id, 'amount' => '50.00']]])
-            ->assertSee('R$ 10,00')
-            ->assertSee('Conta coberta');
+        $component->set('receivedAmount', 35.0)->set('tenderedAmount', 35.0)->call('registerPayment')
+            ->assertSee('Troco')
+            ->assertSee('R$ 10,00');
 
-        $component
-            ->fillForm(['payments' => [['payment_option_id' => $this->card->id, 'amount' => '50.00']]])
+        // Cartão acima do total: o servidor recusa ao finalizar (troco só de dinheiro).
+        $this->assertSame(0, Sale::where('status', SaleStatus::Finalized)->count());
+        $component->call('removePayment', SalePayment::orderBy('id')->first()->id)
+            ->call('removePayment', SalePayment::orderBy('id')->first()->id)
+            ->set('paymentOptionId', $this->card->id)->set('receivedAmount', 50.0)->call('registerPayment')
+            ->set('cardBrandText', 'Visa')
+            ->call('finalizeSale')
+            ->assertHasErrors('finalize')
             ->assertSee('o troco só pode sair de pagamento em dinheiro');
     }
 
-    public function test_close_account_rejects_insufficient_payment_with_a_toast_and_creates_nothing(): void
+    public function test_the_new_sale_rejects_insufficient_payment_and_creates_no_finalized_sale(): void
     {
         $this->actingAsRole('Caixa');
         $order = $this->makeSaleOrder($this->tenant, 40);
 
-        Livewire::withQueryParams(['orders' => (string) $order->id])
-            ->test(CloseAccount::class)
-            ->fillForm(['payments' => [['payment_option_id' => $this->cash->id, 'amount' => '10.00']]])
-            ->call('finalize')
-            ->assertNotified()
+        Livewire::test(NewSale::class, ['sale' => $this->draftFor($order)->id])
+            ->set('paymentOptionId', $this->cash->id)->set('receivedAmount', 10.0)->call('registerPayment')
+            ->call('finalizeSale')
+            ->assertHasErrors('finalize')
             ->assertNoRedirect();
 
-        $this->assertSame(0, Sale::count());
+        $this->assertSame(0, Sale::where('status', SaleStatus::Finalized)->count());
         $this->assertNull($order->fresh()->sale_id);
     }
 
-    public function test_close_account_sells_standalone_items_without_any_order(): void
+    public function test_the_new_sale_sells_standalone_items_without_any_order(): void
     {
         $this->actingAsRole('Caixa');
         $product = $this->makeProduct($this->tenant, 'Refrigerante', 8, ['controls_stock' => true, 'stock_quantity' => 5]);
 
-        Livewire::test(CloseAccount::class)
-            ->fillForm([
-                'standalone_items' => [['product_id' => $product->id, 'quantity' => 2]],
-                'payments' => [['payment_option_id' => $this->card->id, 'amount' => '16,00', 'card_brand' => 'Visa']],
-            ])
+        Livewire::test(NewSale::class)
+            ->dispatch('product-selected', productId: $product->id)
+            ->call('changeQuantity', SaleItem::sole()->id, 2)
             ->assertSee('R$ 16,00')
-            ->call('finalize')
-            ->assertHasNoFormErrors()
+            ->set('paymentOptionId', $this->card->id)->set('receivedAmount', 16.0)->set('cardBrandText', 'Visa')->call('registerPayment')
+            ->call('finalizeSale')
+            ->assertHasNoErrors()
             ->assertNotified();
 
         $sale = Sale::first();
@@ -209,33 +225,28 @@ class SalesPagesTest extends TestCase
         $this->assertSame('3.00', $product->fresh()->stock_quantity);
     }
 
-    public function test_close_account_cannot_be_submitted_twice_for_a_standalone_sale(): void
+    public function test_the_new_sale_cannot_be_finalized_twice(): void
     {
         $this->actingAsRole('Caixa');
         $product = $this->makeProduct($this->tenant, 'Refrigerante', 8, ['controls_stock' => true, 'stock_quantity' => 10]);
 
-        Livewire::test(CloseAccount::class)
-            ->fillForm([
-                'standalone_items' => [['product_id' => $product->id, 'quantity' => 1]],
-                'payments' => [['payment_option_id' => $this->cash->id, 'amount' => '8.00']],
-            ])
-            ->call('finalize')
-            ->call('finalize'); // duplo clique
+        Livewire::test(NewSale::class)
+            ->dispatch('product-selected', productId: $product->id)
+            ->set('paymentOptionId', $this->cash->id)->set('receivedAmount', 8.0)->call('registerPayment')
+            ->call('finalizeSale')
+            ->call('finalizeSale'); // duplo clique
 
         $this->assertSame(1, Sale::count());
         $this->assertSame('9.00', $product->fresh()->stock_quantity, 'Estoque debitado uma única vez.');
     }
 
-    public function test_close_account_order_ids_cannot_be_tampered_with_from_the_client(): void
+    public function test_the_new_sale_id_cannot_be_tampered_with_from_the_client(): void
     {
         $this->actingAsRole('Caixa');
-        $own = $this->makeSaleOrder($this->tenant, 40);
 
         $this->expectException(CannotUpdateLockedPropertyException::class);
 
-        Livewire::withQueryParams(['orders' => (string) $own->id])
-            ->test(CloseAccount::class)
-            ->set('orderIds', [999999]);
+        Livewire::test(NewSale::class)->set('saleId', 999999);
     }
 
     public function test_cancelled_orders_show_no_payment_status_in_the_history(): void
@@ -247,15 +258,16 @@ class SalesPagesTest extends TestCase
             ->assertTableColumnStateSet('payment_status', null, $cancelled);
     }
 
-    public function test_close_account_ignores_orders_that_are_no_longer_available(): void
+    public function test_the_new_sale_ignores_orders_that_are_no_longer_available(): void
     {
         $this->actingAsRole('Caixa');
         $sold = $this->makeSaleOrder($this->tenant, 40);
         app(FinalizeSale::class)([$sold->id], [], [['payment_option_id' => $this->cash->id, 'amount' => 40]]);
+        $salesBefore = Sale::count();
 
-        $component = Livewire::withQueryParams(['orders' => (string) $sold->id])->test(CloseAccount::class);
+        Livewire::withQueryParams(['orders' => (string) $sold->id])->test(NewSale::class)->assertNotified()->assertSet('saleId', null);
 
-        $component->assertNotified()->assertSet('orderIds', []);
+        $this->assertSame($salesBefore, Sale::count(), 'Nenhum rascunho é criado para pedido indisponível.');
     }
 
     // ---- Vendas ----------------------------------------------------------
@@ -365,10 +377,12 @@ class SalesPagesTest extends TestCase
     {
         $this->actingAsRole('Admin');
 
+        $this->assertTrue(NewSale::canAccess());
         $this->assertTrue(PendingAccounts::canAccess());
         $this->assertTrue(CloseAccount::canAccess());
         $this->assertTrue(SaleResource::canAccess());
-        $this->assertTrue(PendingAccounts::shouldRegisterNavigation());
+        $this->assertTrue(NewSale::shouldRegisterNavigation());
+        $this->assertFalse(PendingAccounts::shouldRegisterNavigation(), 'As telas antigas saíram do menu.');
         $this->assertFalse(CloseAccount::shouldRegisterNavigation(), 'A tela de fechamento não aparece no menu.');
     }
 

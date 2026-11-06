@@ -2,12 +2,17 @@
 
 namespace Tests\Feature\Sales;
 
+use App\Actions\Sales\AttachOrderItems;
 use App\Actions\Sales\FinalizeSale;
+use App\Actions\Sales\StartSale;
 use App\Actions\Tenants\SeedDefaultTenantRoles;
+use App\Enums\SaleStatus;
 use App\Exceptions\SaleException;
-use App\Filament\Tenant\Pages\Sales\CloseAccount;
+use App\Filament\Tenant\Pages\Sales\NewSale;
+use App\Models\Order;
 use App\Models\PaymentOption;
 use App\Models\Sale;
+use App\Models\SalePayment;
 use App\Models\Tenant;
 use App\Models\User;
 use Filament\Facades\Filament;
@@ -93,30 +98,35 @@ class PaymentRequirementsTest extends TestCase
         $this->assertSame('40.00', $this->finalize([])->total);
     }
 
-    public function test_the_close_account_screen_marks_the_fields_as_required(): void
+    private function draftFor(Order $order): Sale
+    {
+        return app(AttachOrderItems::class)(app(StartSale::class)(), $order->id);
+    }
+
+    public function test_the_new_sale_screen_requires_brand_and_authorization_when_the_option_demands(): void
     {
         $user = User::factory()->create(['tenant_id' => $this->tenant->id]);
         $user->assignRole('Caixa');
         $this->actingAs($user);
         $order = $this->makeSaleOrder($this->tenant, 40);
 
-        $component = Livewire::withQueryParams(['orders' => (string) $order->id])
-            ->test(CloseAccount::class)
-            ->fillForm(['payments' => [['payment_option_id' => $this->card->id, 'amount' => '40.00']]])
-            ->call('finalize');
+        $component = Livewire::test(NewSale::class, ['sale' => $this->draftFor($order)->id])
+            ->set('paymentOptionId', $this->card->id)
+            ->set('receivedAmount', 40.0)
+            ->call('registerPayment')
+            ->assertHasErrors('receivedAmount');
 
-        $keys = $component->errors()->keys();
-        $this->assertTrue(collect($keys)->contains(fn (string $key): bool => str_contains($key, 'card_brand')), 'Bandeira deveria ser obrigatória: '.implode(', ', $keys));
-        $this->assertTrue(collect($keys)->contains(fn (string $key): bool => str_contains($key, 'authorization_code')), 'Autorização deveria ser obrigatória: '.implode(', ', $keys));
+        $this->assertSame(0, SalePayment::count(), 'Pagamento sem bandeira/autorização não é salvo.');
+        $this->assertSame(0, Sale::where('status', SaleStatus::Finalized)->count());
 
-        $this->assertSame(0, Sale::count());
+        $component
+            ->set('cardBrandText', 'Visa')
+            ->set('authorizationCode', '999')
+            ->call('registerPayment')
+            ->assertHasNoErrors()
+            ->call('finalizeSale')
+            ->assertHasNoErrors();
 
-        Livewire::withQueryParams(['orders' => (string) $order->id])
-            ->test(CloseAccount::class)
-            ->fillForm(['payments' => [['payment_option_id' => $this->card->id, 'amount' => '40.00', 'card_brand' => 'Visa', 'authorization_code' => '999']]])
-            ->call('finalize')
-            ->assertHasNoFormErrors();
-
-        $this->assertSame(1, Sale::count());
+        $this->assertSame(1, Sale::where('status', SaleStatus::Finalized)->count());
     }
 }

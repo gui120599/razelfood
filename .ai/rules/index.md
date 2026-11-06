@@ -31,6 +31,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 | app/Models/*.php, app/Models/Tenant.php | .ai/rules/models.md |
 | resources/views/{orders/ticket.blade.php,components/reports/print-layout.blade.php,reports/*-print.blade.php} | .ai/rules/orders-reports.md |
 | app/Filament/Tenant/{Pages,Livewire}/Orders/** | .ai/rules/orders.md |
+| app/Filament/Tenant/Pages/Sales/** | .ai/rules/pages-sales.md |
 | app/Filament/Tenant/Pages/**/*.php | .ai/rules/pages.md |
 | {app/Filament/Tenant/Pages/Sales/**,app/Filament/Tenant/Resources/Sales/**,app/Policies/SalePolicy.php} | .ai/rules/policies.md |
 | app/{Actions/Menu/ResolvePriceForCartLine.php,Actions/Orders/Support/CartStockAndPromotionLedger.php,Models/ProductGift.php,Filament/Tenant/Resources/Products/RelationManagers/GiftsRelationManager.php} | .ai/rules/products-relation-managers.md |
@@ -40,6 +41,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 | routes/web.php | .ai/rules/routes.md |
 | app/{Actions/Fiscal/**,Actions/Sales/CancelSaleWithFiscalDocument.php,Jobs/CompleteSaleCancellationJob.php,Console/Commands/SyncFiscalDocumentsCommand.php} | .ai/rules/sales-commands.md |
 | {app/Actions/Sales/**,app/Support/Sales/**,app/Models/Sale.php,app/Models/Order.php} | .ai/rules/sales-models-models.md |
+| {app/Filament/Tenant/Pages/Sales/NewSale.php,app/Filament/Tenant/Livewire/Sales/**,resources/views/filament/tenant/pages/sales/new-sale*,resources/views/filament/tenant/livewire/sales/**,app/Support/Sales/SaleCartLines.php} | .ai/rules/sales.md |
 | scripts/promote-producao.sh | .ai/rules/scripts.md |
 | app/{Actions/Menu/ResolvePriceForCartLine.php,Actions/Orders/Support/CartStockAndPromotionLedger.php,Models/ProductGift.php,Support/Orders/GiftLineLabel.php} | .ai/rules/support-orders.md |
 | app/Actions/Orders/Support/CartStockAndPromotionLedger.php | .ai/rules/support.md |

@@ -80,6 +80,7 @@ class SalesTable
                         ->when($data['until'] ?? null, fn (Builder $q, $date) => $q->whereDate('finalized_at', '<=', $date))),
             ])
             ->recordActions([
+                SaleActions::resume(),
                 ViewAction::make(),
                 SaleActions::cancel(),
             ])

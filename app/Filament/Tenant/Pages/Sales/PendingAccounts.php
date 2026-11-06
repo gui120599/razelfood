@@ -53,7 +53,16 @@ class PendingAccounts extends Page implements HasTable
 
     public static function shouldRegisterNavigation(): bool
     {
-        return static::canAccess();
+        return false;
+    }
+
+    /**
+     * Tela substituída pela aba Pedidos da Nova Venda (Fase 1.R.2): a URL antiga redireciona.
+     * A classe segue até a aprovação para apagá-la.
+     */
+    public function mount(): void
+    {
+        $this->redirect(NewSale::getUrl());
     }
 
     public function table(Table $table): Table

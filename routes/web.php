@@ -8,6 +8,7 @@ use App\Http\Controllers\Reports\DeliveriesReportPrintController;
 use App\Http\Controllers\Reports\FiscalReportCsvController;
 use App\Http\Controllers\Reports\FiscalReportPrintController;
 use App\Http\Controllers\Reports\OrdersReportPrintController;
+use App\Http\Controllers\SaleDiscardEmptyController;
 use App\Http\Middleware\ResolveTenantFromPath;
 use App\Livewire\Checkout;
 use App\Livewire\Menu;
@@ -42,6 +43,9 @@ Route::prefix('{tenant}')
         // Relatório fiscal (NFC-e): CSV e versão imprimível; feature + permissão validadas no controller.
         Route::get('/relatorios/fiscal/csv', FiscalReportCsvController::class)->name('reports.fiscal.csv');
         Route::get('/relatorios/fiscal/imprimir', FiscalReportPrintController::class)->name('reports.fiscal.print');
+        // Nova Venda: ao sair da tela, o navegador avisa (sendBeacon) e o rascunho VAZIO é descartado.
+        // Auth + feature + permissão no controller; só apaga venda aberta sem conteúdo.
+        Route::post('/vendas/{sale}/descartar-vazia', SaleDiscardEmptyController::class)->name('sales.discard_empty');
         // GET+POST na mesma rota assinada (RF-28): o form de confirmação reenvia a
         // própria URL assinada, então o middleware "signed" valida os dois métodos.
         Route::match(['GET', 'POST'], '/entrega/{order}', DeliveryConfirmationController::class)

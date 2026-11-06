@@ -36,6 +36,7 @@ use Illuminate\Support\HtmlString;
 use Livewire\Attributes\Locked;
 
 /**
+ * [Substituída pela Nova Venda — a URL redireciona; aguardando aprovação para apagar.]
  * Tela de fechamento de conta (oculta do menu; entra por "Contas a fechar" ou
  * "Venda avulsa"). Mostra os pedidos escolhidos, aceita itens avulsos e
  * pagamentos múltiplos e finaliza a venda por FinalizeSale. O resumo de
@@ -79,6 +80,14 @@ class CloseAccount extends Page
 
     public function mount(): void
     {
+        // Tela substituída pela Nova Venda (Fase 1.R.2): a URL antiga redireciona e leva os
+        // pedidos pedidos em `?orders=`. O restante da classe segue até a aprovação para apagá-la.
+        $orders = (string) request()->query('orders', '');
+
+        $this->redirect(NewSale::getUrl().($orders !== '' ? '?'.http_build_query(['orders' => $orders]) : ''));
+
+        return;
+
         $requested = collect(explode(',', (string) request()->query('orders', '')))
             ->map(fn (string $id): int => (int) $id)
             ->filter(fn (int $id): bool => $id > 0)
