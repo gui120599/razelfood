@@ -347,19 +347,23 @@ class IssueFiscalDocumentTest extends TestCase
     {
         Http::fake(['api.nfse.io/*' => Http::sequence()
             ->push(['id' => 'nfe-1', 'status' => 'Processing'], 202)
-            ->push(['status' => 'IssueFailed', 'statusReason' => 'Rejeição 539'])
             ->push(['status' => 'AlgumaCoisaNova'])
+            ->push(['status' => 'IssueFailed', 'statusReason' => 'Rejeição 539'])
+            ->push(['status' => 'Processing'])
             ->push(['status' => 'Cancelled'])]);
         $document = $this->issue($this->sale());
         $sync = app(SyncFiscalDocumentStatus::class);
+
+        $unknown = $sync($document);
+        $this->assertSame(FiscalDocumentStatus::Processing, $unknown->status);
+        $this->assertSame('AlgumaCoisaNova', $unknown->provider_status);
 
         $failed = $sync($document);
         $this->assertSame(FiscalDocumentStatus::Failed, $failed->status);
         $this->assertSame('Rejeição 539', $failed->error_message);
 
-        $unknown = $sync($document);
-        $this->assertSame(FiscalDocumentStatus::Processing, $unknown->status);
-        $this->assertSame('AlgumaCoisaNova', $unknown->provider_status);
+        // Um "Processing" atrasado nunca revive uma nota já rejeitada.
+        $this->assertSame(FiscalDocumentStatus::Failed, $sync($document)->status);
 
         $cancelled = $sync($document);
         $this->assertSame(FiscalDocumentStatus::Cancelled, $cancelled->status);

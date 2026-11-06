@@ -41,7 +41,7 @@ class SaleInfolist
                 ]),
             Section::make('Documento fiscal (NFC-e)')
                 ->visible(fn (): bool => FiscalDocumentActions::tenantUsesFiscal())
-                ->extraAttributes(fn (Sale $record): array => $record->currentFiscalDocument?->shouldPoll()
+                ->extraAttributes(fn (Sale $record): array => ($record->currentFiscalDocument?->shouldPoll() || $record->isAwaitingPendingCancellation())
                     ? ['wire:poll.5s' => 'pollFiscalDocument']
                     : [])
                 ->schema([
@@ -73,6 +73,15 @@ class SaleInfolist
                             ->label('Consumidor')
                             ->columnSpanFull()
                             ->visible(fn (Sale $record): bool => filled($record->currentFiscalDocument?->buyer_omission_reason)),
+                    ]),
+                ]),
+            Section::make('Cancelamento aguardando a NFC-e')
+                ->description('A NFE.io ainda precisa confirmar o cancelamento da NFC-e. Assim que confirmar, a venda é cancelada sozinha com o motivo abaixo.')
+                ->visible(fn (Sale $record): bool => $record->hasPendingCancellation() && $record->status === SaleStatus::Finalized)
+                ->schema([
+                    Grid::make(3)->schema([
+                        TextEntry::make('pending_cancellation_at')->label('Solicitado em')->dateTime('d/m/Y H:i'),
+                        TextEntry::make('pending_cancellation_note')->label('Motivo')->placeholder('—'),
                     ]),
                 ]),
             Section::make('Cancelamento')

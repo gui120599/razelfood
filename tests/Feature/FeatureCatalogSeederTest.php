@@ -17,7 +17,7 @@ use Tests\TestCase;
  * D-02: PDV/venda, NFC-e e Stone Connect estão em escopo como features de
  * plano, DESLIGADAS por padrão. `pdv` virou liberável ao fim da Fase 1.0 (só o
  * plano Completo ou um override a ligam); NFC-e e Stone Connect seguem
- * reservadas (is_available = false) até as fases 1.2 e 2.
+ * reservadas (is_available = false) até a fase 2 (a `nfe_emissao` foi liberada ao fim da 1.3).
  */
 class FeatureCatalogSeederTest extends TestCase
 {
@@ -29,7 +29,6 @@ class FeatureCatalogSeederTest extends TestCase
     public static function plannedFeatureKeys(): array
     {
         return [
-            'nfe_emissao' => [FeatureKey::NFE_EMISSAO],
             'stone_connect' => [FeatureKey::STONE_CONNECT],
         ];
     }
@@ -109,5 +108,44 @@ class FeatureCatalogSeederTest extends TestCase
         $essencial->featureOverrides()->create(['feature_id' => $pdv->id, 'enabled' => true]);
 
         $this->assertTrue($essencial->fresh()->hasFeature(FeatureKey::PDV));
+    }
+
+    public function test_nfe_emissao_is_available_after_the_fiscal_lifecycle_phase_but_only_the_full_plan_or_an_override_turn_it_on(): void
+    {
+        $this->seed([FeatureSeeder::class, PlanSeeder::class]);
+
+        $nfe = Feature::where('key', FeatureKey::NFE_EMISSAO)->first();
+        $this->assertTrue($nfe->is_available);
+
+        $makeTenant = fn (string $slug, string $plan): Tenant => Tenant::create([
+            'name' => $slug, 'slug' => $slug, 'status' => TenantStatus::Active,
+            'whatsapp_number' => '5511999999999', 'plan_id' => Plan::where('slug', $plan)->value('id'),
+        ]);
+
+        $essencial = $makeTenant('essencial-nfe', 'essencial');
+        $completo = $makeTenant('completo-nfe', 'completo');
+
+        $this->assertFalse($essencial->hasFeature(FeatureKey::NFE_EMISSAO));
+        $this->assertTrue($completo->hasFeature(FeatureKey::NFE_EMISSAO));
+
+        $essencial->featureOverrides()->create(['feature_id' => $nfe->id, 'enabled' => true]);
+
+        $this->assertTrue($essencial->fresh()->hasFeature(FeatureKey::NFE_EMISSAO));
+    }
+
+    public function test_the_release_migration_makes_the_feature_available_and_is_reversible(): void
+    {
+        $this->seed(FeatureSeeder::class);
+        Feature::where('key', FeatureKey::NFE_EMISSAO)->update(['is_available' => false]);
+
+        $migration = require database_path('migrations/2026_11_06_095134_release_nfe_emissao_feature.php');
+        $migration->up();
+        $migration->up();
+
+        $this->assertTrue(Feature::where('key', FeatureKey::NFE_EMISSAO)->first()->is_available);
+
+        $migration->down();
+
+        $this->assertFalse(Feature::where('key', FeatureKey::NFE_EMISSAO)->first()->is_available);
     }
 }

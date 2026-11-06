@@ -29,6 +29,9 @@ class Sale extends TenantScopedModel
         'cancelled_at',
         'cancelled_by_user_id',
         'cancellation_note',
+        'pending_cancellation_note',
+        'pending_cancellation_by_user_id',
+        'pending_cancellation_at',
     ];
 
     protected function casts(): array
@@ -42,6 +45,7 @@ class Sale extends TenantScopedModel
             'total' => 'decimal:2',
             'finalized_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            'pending_cancellation_at' => 'datetime',
         ];
     }
 
@@ -102,6 +106,25 @@ class Sale extends TenantScopedModel
     public function hasLiveFiscalDocument(): bool
     {
         return $this->fiscalDocuments()->live()->exists();
+    }
+
+    /**
+     * Cancelamento pedido, aguardando a NFE.io cancelar a NFC-e (a venda segue Finalizada).
+     */
+    public function hasPendingCancellation(): bool
+    {
+        return $this->pending_cancellation_at !== null;
+    }
+
+    /**
+     * Cancelamento pendente recente (dentro da janela de polling da tela): a tela da venda
+     * se atualiza sozinha até o cancelamento ser concluído.
+     */
+    public function isAwaitingPendingCancellation(): bool
+    {
+        return $this->status === SaleStatus::Finalized
+            && $this->pending_cancellation_at !== null
+            && $this->pending_cancellation_at->gte(now()->subMinutes(FiscalDocument::POLL_WINDOW_MINUTES * 4));
     }
 
     public function displayNumber(): string

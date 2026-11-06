@@ -2,14 +2,18 @@
 
 namespace Tests\Concerns;
 
+use App\Actions\Fiscal\ReserveFiscalNumber;
 use App\Actions\Sales\FinalizeSale;
 use App\Enums\CardBrand as CardBrandEnum;
+use App\Enums\FiscalDocumentDecision;
+use App\Enums\FiscalDocumentStatus;
 use App\Enums\FiscalPaymentMethod;
 use App\Enums\OrderOrigin;
 use App\Enums\OrderStatus;
 use App\Enums\PersonType;
 use App\Models\CardBrand;
 use App\Models\Client;
+use App\Models\FiscalDocument;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\PaymentOption;
@@ -19,6 +23,7 @@ use App\Models\Tenant;
 use App\Models\TenantFiscalSettings;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Testing\TestResponse;
 
 /**
  * Fixtures da Fase 1.2 (NFC-e): tenant com PDV + emissão, dados fiscais habilitados,
@@ -166,5 +171,57 @@ trait CreatesNfceFixtures
     protected function nfceSettings(Tenant $tenant): TenantFiscalSettings
     {
         return TenantFiscalSettings::query()->withoutGlobalScopes()->where('tenant_id', $tenant->id)->firstOrFail();
+    }
+
+    /**
+     * Documento fiscal da venda no estado informado, sem HTTP (número reservado de verdade).
+     */
+    protected function makeFiscalDocumentFor(Sale $sale, FiscalDocumentStatus $status, ?string $providerId = null): FiscalDocument
+    {
+        $tenant = Tenant::query()->findOrFail($sale->tenant_id);
+        $document = app(ReserveFiscalNumber::class)($sale, $tenant, $this->nfceSettings($tenant), FiscalDocumentDecision::Manual);
+
+        $document->update([
+            'status' => $status,
+            'provider_id' => $providerId ?? 'nfe-'.$document->id,
+            'provider_status' => match ($status) {
+                FiscalDocumentStatus::Issued => 'Issued',
+                FiscalDocumentStatus::Cancelled => 'Cancelled',
+                FiscalDocumentStatus::CancelFailed => 'CancelFailed',
+                default => 'Processing',
+            },
+            'sent_at' => now()->subMinutes(30),
+            'cancel_requested_at' => $status === FiscalDocumentStatus::CancelRequested ? now()->subMinutes(12) : null,
+            'authorized_at' => in_array($status, [FiscalDocumentStatus::Issued, FiscalDocumentStatus::CancelRequested], true) ? now()->subMinutes(30) : null,
+        ]);
+
+        return $document->refresh();
+    }
+
+    /**
+     * Define o token da URL do webhook do tenant.
+     */
+    protected function setWebhookToken(Tenant $tenant, string $token): void
+    {
+        $this->nfceSettings($tenant)->forceFill(['webhook_token' => $token])->save();
+    }
+
+    /**
+     * Chama o webhook da NFE.io com o corpo assinado (HMAC-SHA1 no header X-Hub-Signature).
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    protected function postNfeIoWebhook(string $token, array $payload, ?string $secret = 'segredo-do-webhook', ?string $signature = null): TestResponse
+    {
+        $content = json_encode($payload);
+        $server = ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json'];
+
+        $signature ??= $secret === null ? null : hash_hmac('sha1', $content, $secret);
+
+        if ($signature !== null) {
+            $server['HTTP_X_HUB_SIGNATURE'] = $signature;
+        }
+
+        return $this->call('POST', route('webhooks.nfeio', ['token' => $token]), [], [], [], $server, $content);
     }
 }

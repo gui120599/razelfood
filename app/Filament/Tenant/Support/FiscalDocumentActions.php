@@ -2,6 +2,7 @@
 
 namespace App\Filament\Tenant\Support;
 
+use App\Actions\Fiscal\CancelFiscalDocument;
 use App\Actions\Fiscal\IssueFiscalDocument;
 use App\Actions\Fiscal\SyncFiscalDocumentStatus;
 use App\Enums\FiscalDocumentDecision;
@@ -63,6 +64,32 @@ class FiscalDocumentActions
                     FiscalDocumentStatus::Processing => Notification::make()->title('NFC-e enviada: aguardando a autorização')->success()->send(),
                     default => Notification::make()->title('A NFC-e não foi enviada')->body((string) $document->error_message)->danger()->send(),
                 };
+            });
+    }
+
+    public static function cancel(): Action
+    {
+        return Action::make('cancelFiscalDocument')
+            ->label('Cancelar NFC-e')
+            ->icon(Heroicon::OutlinedNoSymbol)
+            ->color('danger')
+            ->authorize('cancel_fiscal_document')
+            ->visible(fn (Sale $record): bool => self::tenantUsesFiscal()
+                && $record->currentFiscalDocument?->status === FiscalDocumentStatus::Issued
+                && ! $record->hasPendingCancellation())
+            ->requiresConfirmation()
+            ->modalHeading('Cancelar NFC-e')
+            ->modalDescription('O cancelamento é pedido à NFE.io e confirmado pela SEFAZ; pode ser recusado se estiver fora do prazo. A venda continua como está. Para cancelar a venda junto, use "Cancelar venda".')
+            ->action(function (Sale $record): void {
+                try {
+                    app(CancelFiscalDocument::class)($record->currentFiscalDocument, auth()->user());
+                } catch (FiscalDocumentException $exception) {
+                    Notification::make()->title('Não foi possível cancelar a NFC-e')->body($exception->getMessage())->danger()->send();
+
+                    return;
+                }
+
+                Notification::make()->title('Cancelamento da NFC-e solicitado: aguardando a confirmação da NFE.io')->success()->send();
             });
     }
 

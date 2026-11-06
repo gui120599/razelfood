@@ -27,6 +27,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Enums\Alignment;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\HtmlString;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
 use Throwable;
 use UnitEnum;
@@ -111,6 +112,11 @@ class FiscalSettings extends Page
                         )),
                     ]),
                 ...FiscalSettingsFields::sections(),
+                Section::make('Webhook da NFE.io')
+                    ->description('A NFE.io avisa o resultado das notas (autorizada, rejeitada, cancelada) nesta URL. Cadastre-a na NFE.io junto com o mesmo "Segredo do webhook" informado acima.')
+                    ->schema([
+                        Text::make(fn (): HtmlString => new HtmlString($this->webhookUrlHtml())),
+                    ]),
                 Section::make('Emissão')
                     ->schema([
                         Toggle::make('emission_enabled')
@@ -162,6 +168,45 @@ class FiscalSettings extends Page
             ->title('Dados fiscais salvos')
             ->success()
             ->send();
+    }
+
+    /**
+     * URL do webhook deste estabelecimento (token opaco, não o slug) ou a orientação para gerá-la.
+     */
+    private function webhookUrlHtml(): string
+    {
+        $token = TenantFiscalSettings::query()->value('webhook_token');
+
+        if (blank($token)) {
+            return '<span class="text-sm text-gray-500">Ainda não há URL. Use o botão "Gerar URL do webhook" no topo da página.</span>';
+        }
+
+        $url = route('webhooks.nfeio', ['token' => $token]);
+
+        return '<code class="break-all text-sm">'.e($url).'</code>';
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('generateWebhookToken')
+                ->label('Gerar URL do webhook')
+                ->icon(Heroicon::OutlinedLink)
+                ->color('gray')
+                ->requiresConfirmation()
+                ->modalHeading('Gerar URL do webhook')
+                ->modalDescription('Se já existir uma URL, ela deixa de valer: atualize-a na NFE.io, ou os avisos de status deixam de chegar.')
+                ->action(function (): void {
+                    abort_unless(static::canAccess(), 403);
+
+                    $settings = TenantFiscalSettings::query()->firstOrNew(['tenant_id' => CurrentTenant::id()]);
+                    $settings->forceFill(['webhook_token' => Str::random(48)])->save();
+
+                    CurrentTenant::get()->unsetRelation('fiscalSettings');
+
+                    Notification::make()->title('URL do webhook gerada')->success()->send();
+                }),
+        ];
     }
 
     protected function getFormActions(): array

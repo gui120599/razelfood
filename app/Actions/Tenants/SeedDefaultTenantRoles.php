@@ -63,6 +63,7 @@ class SeedDefaultTenantRoles
         $editOrderAdvancedStatus = Permission::findOrCreate('edit_order_advanced_status');
         $manageSales = Permission::findOrCreate('manage_sales');
         $emitFiscalDocument = Permission::findOrCreate('emit_fiscal_document');
+        $cancelFiscalDocument = Permission::findOrCreate('cancel_fiscal_document');
 
         $orderResourcePermissions = FilamentShield::getResources()[OrderResource::class]['permissions'] ?? [];
         $viewOrders = collect([
@@ -127,6 +128,7 @@ class SeedDefaultTenantRoles
                 ->merge($manageProductionLines)
                 ->push($manageSales)
                 ->push($emitFiscalDocument)
+                ->push($cancelFiscalDocument)
                 ->merge($viewSales)
                 ->filter()
         );

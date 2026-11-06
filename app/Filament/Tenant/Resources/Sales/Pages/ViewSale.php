@@ -18,38 +18,42 @@ class ViewSale extends ViewRecord
     {
         return [
             FiscalDocumentActions::issue(),
+            FiscalDocumentActions::cancel(),
             FiscalDocumentActions::refresh(),
             FiscalDocumentActions::danfe(),
+            SaleActions::discardPendingCancellation(),
             SaleActions::cancel(),
         ];
     }
 
     /**
      * Chamado pelo `wire:poll` da seção "Documento fiscal" enquanto a nota está em
-     * processamento (e só dentro da janela de polling): consulta a NFE.io e atualiza a
-     * tela. Exige a feature e `emit_fiscal_document` — é um método público do Livewire e
-     * usa as credenciais do estabelecimento. Qualquer falha é registrada e não interrompe a tela;
+     * processamento ou o cancelamento da venda está pendente (dentro da janela de polling):
+     * recarrega a venda e, SÓ com a feature e `emit_fiscal_document` (é um método público do
+     * Livewire e usa as credenciais do estabelecimento), consulta a NFE.io. Qualquer falha é registrada e não interrompe a tela;
      * o botão "Atualizar status" mostra o motivo.
      */
     public function pollFiscalDocument(): void
     {
-        if (! FiscalDocumentActions::tenantUsesFiscal() || ! (auth()->user()?->can('emit_fiscal_document') ?? false)) {
-            return;
-        }
+        $this->record->refresh();
 
-        $this->record->unsetRelation('currentFiscalDocument');
-        $document = $this->record->currentFiscalDocument;
+        $canSync = FiscalDocumentActions::tenantUsesFiscal() && (auth()->user()?->can('emit_fiscal_document') ?? false);
 
-        if ($document?->shouldPoll()) {
-            try {
-                app(SyncFiscalDocumentStatus::class)($document);
-            } catch (FiscalDocumentException) {
-                // Mensagem segura já tratada pelo botão manual.
-            } catch (Throwable $exception) {
-                report($exception);
+        if ($canSync) {
+            $document = $this->record->currentFiscalDocument;
+
+            if ($document?->shouldPoll()) {
+                try {
+                    app(SyncFiscalDocumentStatus::class)($document);
+                } catch (FiscalDocumentException) {
+                    // Mensagem segura já tratada pelo botão manual.
+                } catch (Throwable $exception) {
+                    report($exception);
+                }
             }
         }
 
+        $this->record->refresh();
         $this->record->unsetRelation('currentFiscalDocument');
         $this->record->load('currentFiscalDocument');
     }

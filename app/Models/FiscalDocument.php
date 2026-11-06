@@ -32,6 +32,8 @@ class FiscalDocument extends TenantScopedModel
         'user_id',
         'sent_at',
         'authorized_at',
+        'cancel_requested_at',
+        'cancel_requested_by_user_id',
         'cancelled_at',
         'error_message',
         'buyer_omission_reason',
@@ -48,6 +50,7 @@ class FiscalDocument extends TenantScopedModel
             'decision' => FiscalDocumentDecision::class,
             'sent_at' => 'datetime',
             'authorized_at' => 'datetime',
+            'cancel_requested_at' => 'datetime',
             'cancelled_at' => 'datetime',
         ];
     }
@@ -91,10 +94,17 @@ class FiscalDocument extends TenantScopedModel
 
     public function shouldPoll(): bool
     {
-        return $this->status === FiscalDocumentStatus::Processing
-            && filled($this->provider_id)
-            && $this->sent_at !== null
-            && $this->sent_at->gte(now()->subMinutes(self::POLL_WINDOW_MINUTES));
+        if (blank($this->provider_id)) {
+            return false;
+        }
+
+        $since = match ($this->status) {
+            FiscalDocumentStatus::Processing => $this->sent_at,
+            FiscalDocumentStatus::CancelRequested => $this->cancel_requested_at,
+            default => null,
+        };
+
+        return $since !== null && $since->gte(now()->subMinutes(self::POLL_WINDOW_MINUTES));
     }
 
     public function scopeLive(Builder $query): Builder

@@ -78,6 +78,9 @@ class CancelSale
                 'cancelled_at' => now(),
                 'cancelled_by_user_id' => $cancelledBy?->id,
                 'cancellation_note' => $note,
+                'pending_cancellation_note' => null,
+                'pending_cancellation_by_user_id' => null,
+                'pending_cancellation_at' => null,
             ]);
 
             return $locked->load(['payments', 'items']);

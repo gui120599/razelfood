@@ -63,6 +63,17 @@ class NfeIoClient
         return $uri;
     }
 
+    /**
+     * Pede o cancelamento da NFC-e (`DELETE`). A resposta só diz se o pedido foi aceito: o
+     * resultado final chega por webhook ou consulta.
+     *
+     * @throws NfeIoException
+     */
+    public function cancel(TenantFiscalSettings $settings, string $providerId): void
+    {
+        $this->request($settings, fn (PendingRequest $http): Response => $http->delete($this->invoicesPath($settings).'/'.rawurlencode($providerId)));
+    }
+
     private function invoicesPath(TenantFiscalSettings $settings): string
     {
         return '/companies/'.rawurlencode((string) $settings->nfeio_company_id).'/consumerinvoices';

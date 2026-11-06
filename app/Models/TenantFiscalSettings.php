@@ -38,6 +38,7 @@ class TenantFiscalSettings extends TenantScopedModel
     protected $hidden = [
         'nfeio_api_key',
         'nfeio_webhook_secret',
+        'webhook_token',
     ];
 
     protected function casts(): array
