@@ -2,6 +2,7 @@
 
 namespace Tests\Concerns;
 
+use App\Actions\Fiscal\IssueFiscalDocument;
 use App\Actions\Fiscal\ReserveFiscalNumber;
 use App\Actions\Sales\FinalizeSale;
 use App\Enums\CardBrand as CardBrandEnum;
@@ -21,8 +22,10 @@ use App\Models\Product;
 use App\Models\Sale;
 use App\Models\Tenant;
 use App\Models\TenantFiscalSettings;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Testing\TestResponse;
 
 /**
@@ -223,5 +226,44 @@ trait CreatesNfceFixtures
         }
 
         return $this->call('POST', route('webhooks.nfeio', ['token' => $token]), [], [], [], $server, $content);
+    }
+
+    private int $nfeSequence = 0;
+
+    /** @var list<mixed> */
+    private array $nfeQueue = [];
+
+    /**
+     * Simula a NFE.io respondendo a cada envio com um id novo e o status informado (nunca chamada real).
+     */
+    protected function fakeNfeIo(string $status = 'Issued'): void
+    {
+        Http::preventStrayRequests();
+        Http::fake(fn () => array_shift($this->nfeQueue) ?? Http::response(['id' => 'nfe-'.(++$this->nfeSequence), 'status' => $status], 200));
+    }
+
+    /**
+     * Enfileira a próxima resposta da NFE.io simulada (antes do padrão de fakeNfeIo).
+     *
+     * @param  array<string, mixed>  $body
+     */
+    protected function queueNfeIo(array $body, int $status = 200): void
+    {
+        $this->nfeQueue[] = Http::response($body, $status);
+    }
+
+    /**
+     * Emite de verdade (IssueFiscalDocument + NFE.io simulada): grava documento e snapshot dos itens.
+     * `$authorizedAt` ajusta a data de autorização para testes de período.
+     */
+    protected function issueNfce(Sale $sale, ?CarbonInterface $authorizedAt = null): FiscalDocument
+    {
+        $document = app(IssueFiscalDocument::class)($sale, FiscalDocumentDecision::Manual);
+
+        if ($authorizedAt !== null) {
+            $document->update(['authorized_at' => $authorizedAt]);
+        }
+
+        return $document->refresh();
     }
 }

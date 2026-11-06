@@ -10,6 +10,7 @@ use App\Enums\TaxRegime;
 use App\Exceptions\FiscalDocumentException;
 use App\Exceptions\NfeIoException;
 use App\Models\FiscalDocument;
+use App\Models\FiscalDocumentItem;
 use App\Models\Sale;
 use App\Models\Scopes\TenantScope;
 use App\Models\Tenant;
@@ -18,6 +19,7 @@ use App\Models\User;
 use App\Services\Fiscal\NfeIoClient;
 use App\Support\FeatureKey;
 use App\Support\Fiscal\FiscalReadiness;
+use App\Support\Fiscal\NfcePayload;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -79,7 +81,7 @@ class IssueFiscalDocument
             throw $exception;
         }
 
-        $this->markSending($document, $sale, $payload->buyerOmissionReason);
+        $this->markSending($document, $sale, $payload);
 
         try {
             $body = $this->client->issue($settings, $payload->body);
@@ -130,10 +132,10 @@ class IssueFiscalDocument
      *
      * @throws FiscalDocumentException
      */
-    private function markSending(FiscalDocument $document, Sale $sale, ?string $buyerOmissionReason): void
+    private function markSending(FiscalDocument $document, Sale $sale, NfcePayload $payload): void
     {
         try {
-            DB::transaction(function () use ($document, $sale, $buyerOmissionReason): void {
+            DB::transaction(function () use ($document, $sale, $payload): void {
                 $locked = Sale::query()->withoutGlobalScope(TenantScope::class)->whereKey($sale->id)->lockForUpdate()->firstOrFail();
 
                 if ($locked->status !== SaleStatus::Finalized) {
@@ -144,8 +146,24 @@ class IssueFiscalDocument
                     'status' => FiscalDocumentStatus::Processing,
                     'sent_at' => now(),
                     'error_message' => null,
-                    'buyer_omission_reason' => $buyerOmissionReason,
+                    'buyer_omission_reason' => $payload->buyerOmissionReason,
                 ]);
+
+                // Snapshot dos itens como enviados (base do relatório fiscal); reenvio com número
+                // reaproveitado troca o anterior. Leitura sem lock + DELETE por PK: um DELETE por
+                // fiscal_document_id sem linhas tomaria gap lock no fim do índice, onde entram os itens
+                // de todos os tenants (deadlock entre emissões simultâneas).
+                $previous = FiscalDocumentItem::query()->withoutGlobalScope(TenantScope::class)->where('fiscal_document_id', $document->id)->pluck('id');
+
+                if ($previous->isNotEmpty()) {
+                    FiscalDocumentItem::query()->withoutGlobalScope(TenantScope::class)->whereKey($previous->all())->delete();
+                }
+
+                $now = now();
+                FiscalDocumentItem::query()->insert(array_map(
+                    fn (array $line): array => $line + ['tenant_id' => $document->tenant_id, 'fiscal_document_id' => $document->id, 'created_at' => $now, 'updated_at' => $now],
+                    $payload->lines,
+                ));
             }, attempts: 3);
         } catch (FiscalDocumentException $exception) {
             $document->update(['status' => FiscalDocumentStatus::Reserved, 'error_message' => Str::limit($exception->getMessage(), 500)]);

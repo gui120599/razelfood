@@ -89,7 +89,7 @@ class BuildNfcePayload
         $body['payment'] = [$payment];
         $body['items'] = $lines->map(fn (array $line): array => $this->toItem($line, $settings))->values()->all();
 
-        return new NfcePayload($body, $reason);
+        return new NfcePayload($body, $reason, $lines->values()->map(fn (array $line, int $index): array => $this->snapshot($line, $index + 1))->all());
     }
 
     /**
@@ -171,6 +171,7 @@ class BuildNfcePayload
             'product' => $product,
             'fiscal' => $fiscal,
             'description' => $this->sanitizeDescription($description),
+            'category_name' => $this->categoryName($product),
             'quantity' => $quantity,
             'unit_cents' => $unitCents,
             'total_cents' => $unitCents * $quantity,
@@ -343,6 +344,48 @@ class BuildNfcePayload
                 'csosn' => $fiscal->csosn,
             ],
         ];
+    }
+
+    /**
+     * Linha como será gravada em fiscal_document_items (valores como foram enviados).
+     *
+     * @param  array<string, mixed>  $line
+     * @return array<string, mixed>
+     */
+    private function snapshot(array $line, int $position): array
+    {
+        /** @var ProductFiscalData $fiscal */
+        $fiscal = $line['fiscal'];
+
+        return [
+            'position' => $position,
+            'product_id' => $line['product']->id,
+            'description' => $line['description'],
+            'category_name' => $line['category_name'] === null ? null : Str::limit($line['category_name'], 250, ''),
+            'ncm' => $fiscal->ncm,
+            'cfop' => $fiscal->cfop,
+            'csosn' => $fiscal->csosn,
+            'origin_code' => $fiscal->originCode,
+            'unit' => $fiscal->commercialUnit === null ? null : mb_substr($fiscal->commercialUnit, 0, 6),
+            'quantity' => $line['quantity'],
+            'unit_amount' => Money::fromCents($line['unit_cents']),
+            'total_amount' => Money::fromCents($line['total_cents']),
+            'others_amount' => Money::fromCents($line['others_cents']),
+        ];
+    }
+
+    /**
+     * "Pai › Filha" (ou só o nome) da categoria do produto que define os dados fiscais da linha.
+     */
+    private function categoryName(Product $product): ?string
+    {
+        $category = $product->category;
+
+        if ($category === null) {
+            return null;
+        }
+
+        return $category->parent !== null ? $category->parent->name.' › '.$category->name : $category->name;
     }
 
     private function amount(int $cents): float

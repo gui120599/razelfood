@@ -3,8 +3,11 @@
 namespace App\Filament\Resources\Tenants\Tables;
 
 use App\Enums\CentralRole;
+use App\Enums\FiscalDocumentStatus;
+use App\Enums\FiscalEnvironment;
 use App\Enums\TenantStatus;
 use App\Filament\Support\InputMasks;
+use App\Models\Scopes\TenantScope;
 use App\Models\Tenant;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
@@ -29,7 +32,21 @@ class TenantsTable
     public static function configure(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query) => $query->with('plan'))
+            ->modifyQueryUsing(fn (Builder $query) => $query
+                ->with('plan')
+                // Notas AUTORIZADAS e ainda válidas (emitidas ou com cancelamento pendente) em produção (homologação
+                // não é cobrada), mês corrente e total. Documentos apagados (soft delete) ficam de fora.
+                ->withCount([
+                    'fiscalDocuments as nfce_month_count' => fn (Builder $documents) => $documents
+                        ->withoutGlobalScope(TenantScope::class)
+                        ->whereIn('status', FiscalDocumentStatus::standingValues())
+                        ->where('environment', FiscalEnvironment::Production->value)
+                        ->where('authorized_at', '>=', now()->startOfMonth()),
+                    'fiscalDocuments as nfce_total_count' => fn (Builder $documents) => $documents
+                        ->withoutGlobalScope(TenantScope::class)
+                        ->whereIn('status', FiscalDocumentStatus::standingValues())
+                        ->where('environment', FiscalEnvironment::Production->value),
+                ]))
             ->columns([
                 TextColumn::make('name')
                     ->label('Nome')
@@ -54,6 +71,15 @@ class TenantsTable
                 TextColumn::make('whatsapp_number')
                     ->label('WhatsApp')
                     ->formatStateUsing(fn (?string $state): ?string => InputMasks::formatPhone($state)),
+                TextColumn::make('nfce_month_count')
+                    ->label('NFC-e (mês)')
+                    ->sortable()
+                    ->tooltip('NFC-e autorizadas em produção neste mês'),
+                TextColumn::make('nfce_total_count')
+                    ->label('NFC-e (total)')
+                    ->sortable()
+                    ->toggleable()
+                    ->tooltip('NFC-e autorizadas em produção, desde sempre'),
                 TextColumn::make('users_count')
                     ->label('Usuários')
                     ->counts('users'),

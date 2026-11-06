@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\SaleStatus;
 use App\Models\Concerns\TenantScopedModel;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -106,6 +107,19 @@ class Sale extends TenantScopedModel
     public function hasLiveFiscalDocument(): bool
     {
         return $this->fiscalDocuments()->live()->exists();
+    }
+
+    /**
+     * Vendas pela situação da NFC-e MAIS RECENTE (`none` = nunca teve documento). `$status` é um
+     * valor de FiscalDocumentStatus ou `none`.
+     */
+    public function scopeFiscalStatus(Builder $query, string $status): Builder
+    {
+        if ($status === 'none') {
+            return $query->whereDoesntHave('fiscalDocuments');
+        }
+
+        return $query->whereHas('currentFiscalDocument', fn (Builder $document): Builder => $document->where('status', $status));
     }
 
     /**

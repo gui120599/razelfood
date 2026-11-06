@@ -11,6 +11,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 | app/{Support/Tenancy/**,Jobs/**,Console/Concerns/**,Console/Commands/**} | .ai/rules/concerns-commands.md |
 | config/filament-shield.php, config/*.php | .ai/rules/config.md |
 | {app/Actions/Sales/SyncPdvActivation.php,app/Support/Sales/PdvCutoff.php,app/Jobs/CancelUnpaidSalesJob.php,app/Console/Commands/SyncPdvActivationCommand.php} | .ai/rules/console-commands.md |
+| app/{Support/Fiscal/FiscalReportQuery.php,Filament/Tenant/Pages/FiscalReport.php,Http/Controllers/Reports/FiscalReport*.php,Models/FiscalDocumentItem.php} | .ai/rules/controllers-reports.md |
 | app/Filament/Tenant/Resources/DeliveryZones/RelationManagers/NeighborhoodsRelationManager.php | .ai/rules/delivery-zones-relation-managers.md |
 | tests/Feature/**/*.php | .ai/rules/feature.md |
 | app/Filament/Resources/** | .ai/rules/filament-resources.md |

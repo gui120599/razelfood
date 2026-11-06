@@ -8,6 +8,7 @@ use App\Enums\FiscalEnvironment;
 use App\Models\Concerns\TenantScopedModel;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -116,6 +117,30 @@ class FiscalDocument extends TenantScopedModel
                 ->orWhereNotNull('provider_id')
                 ->orWhereNull('sent_at')
                 ->orWhere('sent_at', '>=', now()->subMinutes(self::STALE_SENDING_MINUTES)));
+    }
+
+    /** Horas sem uso para um número reservado virar candidato à inutilização. */
+    public const UNUSED_NUMBER_AFTER_HOURS = 24;
+
+    /**
+     * Números reservados e nunca consumidos na SEFAZ (candidatos à inutilização): estados que não
+     * consomem número, há mais de 24 h. `Processing` sem identificador é ambíguo e fica de fora.
+     */
+    public function scopeUnusedNumbers(Builder $query): Builder
+    {
+        return $query
+            ->whereIn('status', [FiscalDocumentStatus::Reserved->value, FiscalDocumentStatus::FailedToSend->value, FiscalDocumentStatus::Failed->value])
+            ->where('created_at', '<', now()->subHours(self::UNUSED_NUMBER_AFTER_HOURS));
+    }
+
+    public function items(): HasMany
+    {
+        return $this->hasMany(FiscalDocumentItem::class)->orderBy('position');
+    }
+
+    public function webhooks(): HasMany
+    {
+        return $this->hasMany(FiscalWebhook::class)->latest('received_at');
     }
 
     public function sale(): BelongsTo

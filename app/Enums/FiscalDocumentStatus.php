@@ -86,6 +86,17 @@ enum FiscalDocumentStatus: string
     }
 
     /**
+     * Notas AUTORIZADAS e ainda de pé na SEFAZ: emitida e também com cancelamento solicitado ou
+     * falho (continuam válidas até a confirmação). Base do relatório fiscal e do contador da central.
+     *
+     * @return list<string>
+     */
+    public static function standingValues(): array
+    {
+        return [self::Issued->value, self::CancelRequested->value, self::CancelFailed->value];
+    }
+
+    /**
      * O número já foi consumido na SEFAZ e não pode ser reaproveitado.
      */
     public function consumesNumber(): bool

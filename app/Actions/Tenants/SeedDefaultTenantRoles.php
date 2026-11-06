@@ -3,11 +3,13 @@
 namespace App\Actions\Tenants;
 
 use App\Filament\Tenant\Pages\Deliveries;
+use App\Filament\Tenant\Pages\FiscalReport;
 use App\Filament\Tenant\Pages\FiscalSettings;
 use App\Filament\Tenant\Pages\Kitchen;
 use App\Filament\Tenant\Pages\Orders\AttendOrder;
 use App\Filament\Tenant\Pages\OrderSettings;
 use App\Filament\Tenant\Pages\Reports;
+use App\Filament\Tenant\Resources\FiscalDocuments\FiscalDocumentResource;
 use App\Filament\Tenant\Resources\Orders\OrderResource;
 use App\Filament\Tenant\Resources\ProductionLines\ProductionLineResource;
 use App\Filament\Tenant\Resources\Sales\SaleResource;
@@ -114,6 +116,21 @@ class SeedDefaultTenantRoles
             Permission::findOrCreate($fiscalSettingsPageKey);
         }
 
+        // Relatório fiscal (NFC-e): Admin (Permission::all) e Gerente.
+        $fiscalReportPagePermissions = FilamentShield::getPages()[FiscalReport::class]['permissions'] ?? [];
+        $fiscalReportAccess = ($fiscalReportPageKey = array_key_first($fiscalReportPagePermissions))
+            ? Permission::findOrCreate($fiscalReportPageKey)
+            : null;
+
+        // Documentos fiscais (lista só leitura): Gerente e Caixa, como as vendas.
+        $fiscalDocumentPermissions = FilamentShield::getResources()[FiscalDocumentResource::class]['permissions'] ?? [];
+        $viewFiscalDocuments = collect([
+            $fiscalDocumentPermissions['viewAny']['key'] ?? null,
+            $fiscalDocumentPermissions['view']['key'] ?? null,
+        ])
+            ->filter()
+            ->map(fn (string $name) => Permission::findOrCreate($name));
+
         $productionLinePermissions = FilamentShield::getResources()[ProductionLineResource::class]['permissions'] ?? [];
         $manageProductionLines = collect($productionLinePermissions)
             ->pluck('key')
@@ -129,6 +146,8 @@ class SeedDefaultTenantRoles
                 ->push($manageSales)
                 ->push($emitFiscalDocument)
                 ->push($cancelFiscalDocument)
+                ->push($fiscalReportAccess)
+                ->merge($viewFiscalDocuments)
                 ->merge($viewSales)
                 ->filter()
         );
@@ -136,7 +155,7 @@ class SeedDefaultTenantRoles
         // Caixa: fecha contas e consulta vendas/pedidos (feature `pdv`); não
         // avança pedido nem mexe na cozinha.
         Role::findOrCreate('Caixa')->givePermissionTo(
-            collect([$manageSales, $emitFiscalDocument])->merge($viewSales)->merge($viewOrders)->filter()
+            collect([$manageSales, $emitFiscalDocument])->merge($viewFiscalDocuments)->merge($viewSales)->merge($viewOrders)->filter()
         );
 
         Role::findOrCreate('Atendente')->givePermissionTo(

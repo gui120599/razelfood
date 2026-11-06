@@ -7,6 +7,7 @@ use App\Enums\SaleStatus;
 use App\Filament\Tenant\Support\FiscalDocumentActions;
 use App\Filament\Tenant\Support\SaleActions;
 use App\Models\Sale;
+use Filament\Actions\BulkActionGroup;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Columns\TextColumn;
@@ -56,6 +57,13 @@ class SalesTable
                     ->sortable(),
             ])
             ->filters([
+                SelectFilter::make('fiscal_status')
+                    ->label('Situação da NFC-e')
+                    ->visible(fn (): bool => FiscalDocumentActions::tenantUsesFiscal())
+                    ->options(['none' => 'Sem nota'] + collect(FiscalDocumentStatus::cases())->mapWithKeys(
+                        fn (FiscalDocumentStatus $status): array => [$status->value => $status->label()]
+                    )->all())
+                    ->query(fn (Builder $query, array $data): Builder => filled($data['value'] ?? null) ? $query->fiscalStatus($data['value']) : $query),
                 SelectFilter::make('status')
                     ->label('Situação')
                     ->options(collect(SaleStatus::cases())->mapWithKeys(
@@ -74,6 +82,12 @@ class SalesTable
             ->recordActions([
                 ViewAction::make(),
                 SaleActions::cancel(),
+            ])
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    FiscalDocumentActions::issueInBatch(),
+                    FiscalDocumentActions::refreshInBatch(),
+                ]),
             ]);
     }
 }

@@ -72,6 +72,11 @@ class Tenant extends Model
         return $this->hasOne(TenantFiscalSettings::class);
     }
 
+    public function fiscalDocuments(): HasMany
+    {
+        return $this->hasMany(FiscalDocument::class);
+    }
+
     public function users(): HasMany
     {
         return $this->hasMany(User::class);
