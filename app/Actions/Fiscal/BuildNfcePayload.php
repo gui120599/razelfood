@@ -349,7 +349,9 @@ class BuildNfcePayload
             'taxUnitAmount' => $unitAmount,
             'discountAmount' => 0,
             'othersAmount' => $this->amount($line['others_cents']),
-            'totalIndicator' => $line['total_cents'] + $line['others_cents'] > 0,
+            // Sempre verdadeiro, como na produção do Pizzaria-App: lá `(bool) item_venda_valor` recebe o texto
+            // "0.00" do cast decimal (verdadeiro em PHP), então o item sempre compõe o total da nota.
+            'totalIndicator' => true,
             'cest' => filled($fiscal->cest) ? $fiscal->cest : null,
         ];
 

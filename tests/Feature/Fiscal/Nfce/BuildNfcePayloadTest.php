@@ -216,7 +216,7 @@ class BuildNfcePayloadTest extends TestCase
         $this->assertEquals(50, $payment['paymentDetail'][0]['amount']);
         $this->assertSame('creditCard', $payment['paymentDetail'][1]['method']);
         $this->assertSame(
-            ['federalTaxNumber' => '33444555000166', 'flag' => 'americanExpress', 'authorization' => 'AUT123', 'integrationPaymentType' => 'notIntegrated'],
+            ['federalTaxNumber' => '33444555000166', 'flag' => 'AmericanExpress', 'authorization' => 'AUT123', 'integrationPaymentType' => 'notIntegrated'],
             $payment['paymentDetail'][1]['card'],
         );
         $this->assertArrayNotHasKey('card', $payment['paymentDetail'][0]);
@@ -329,23 +329,16 @@ class BuildNfcePayloadTest extends TestCase
         $this->assertSame('PIZZAS 3/4 CALABRESA / 1/4 MUSSARELA', $body['items'][0]['description']);
     }
 
-    public function test_a_free_item_is_not_flagged_as_part_of_the_total_unless_it_carries_freight(): void
+    public function test_every_item_composes_the_note_total_like_the_pizzaria_app_in_production(): void
     {
         $order = $this->makeNfceOrder($this->tenant, [
             ['product' => $this->makeFiscalProduct($this->tenant, 'Pizza', 40)],
             ['product' => $this->makeFiscalProduct($this->tenant, 'Cortesia', 0)],
-        ]);
-
-        $body = $this->build($this->finalizeNfceSale([$order], $this->pix))->body;
-        $this->assertSame([true, false], array_column($body['items'], 'totalIndicator'));
-
-        // Com frete rateado a linha passa a compor o total da nota (senão vNF < pagamentos).
-        $withFee = $this->makeNfceOrder($this->tenant, [
-            ['product' => $this->makeFiscalProduct($this->tenant, 'Pizza B', 40)],
-            ['product' => $this->makeFiscalProduct($this->tenant, 'Cortesia B', 0)],
         ], deliveryFee: 3);
 
-        $body = $this->build($this->finalizeNfceSale([$withFee], $this->pix))->body;
+        $body = $this->build($this->finalizeNfceSale([$order], $this->pix))->body;
+
+        // No Pizzaria-App `(bool) "0.00"` é verdadeiro: o item sempre compõe o total (senão vNF < pagamentos).
         $this->assertSame([true, true], array_column($body['items'], 'totalIndicator'));
         $this->assertSame(4300, $this->itemsCents($body));
     }
@@ -404,6 +397,21 @@ class BuildNfcePayloadTest extends TestCase
         $card = $this->build($this->finalizeNfceSale([$order], $credit))->body['payment'][0]['paymentDetail'][0]['card'];
 
         $this->assertSame(['federalTaxNumber', 'flag', 'authorization', 'integrationPaymentType'], array_keys($card));
+    }
+
+    public function test_card_flags_use_the_spelling_proven_in_production(): void
+    {
+        $this->assertSame('Visa', CardBrandEnum::Visa->apiValue());
+        $this->assertSame('MasterCard', CardBrandEnum::Mastercard->apiValue());
+        $this->assertSame('Elo', CardBrandEnum::Elo->apiValue());
+
+        $credit = $this->makeFiscalPaymentOption($this->tenant, 'Crédito', FiscalPaymentMethod::CreditCard);
+        $brand = $this->makeCardBrand($this->tenant, CardBrandEnum::Elo, '11222333000181');
+        $order = $this->makeNfceOrder($this->tenant, [['product' => $this->makeFiscalProduct($this->tenant, 'Pizza', 40)]]);
+
+        $card = $this->build($this->finalizeNfceSale([$order], $credit, [['payment_option_id' => $credit->id, 'amount' => 40, 'card_brand_id' => $brand->id, 'authorization_code' => 'A1']]))->body['payment'][0]['paymentDetail'][0]['card'];
+
+        $this->assertSame('Elo', $card['flag']);
     }
 
     public function test_the_buyer_document_is_text_so_a_leading_zero_is_kept(): void

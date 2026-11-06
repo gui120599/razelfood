@@ -143,7 +143,7 @@ class NfceTenantIsolationTest extends TestCase
         app(SeedDefaultTenantOptions::class)($tenant);
 
         $brands = CardBrand::query()->withoutGlobalScopes()->where('tenant_id', $tenant->id)->orderBy('id')->pluck('name')->all();
-        $this->assertSame(['Visa', 'Mastercard', 'American Express', 'Sorocred', 'Outra'], $brands);
+        $this->assertSame(['Visa', 'Mastercard', 'American Express', 'Sorocred', 'Elo', 'Alelo', 'Hipercard', 'Outra'], $brands);
     }
 
     public function test_a_sale_with_a_live_note_cannot_be_cancelled(): void
