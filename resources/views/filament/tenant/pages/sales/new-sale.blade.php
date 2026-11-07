@@ -147,25 +147,33 @@
 
                             <div class="flex items-center justify-between gap-3">
                                 <div class="flex items-center gap-2">
-                                    @if ($line['editable'])
-                                        <button
-                                            wire:click="changeQuantity({{ $line['id'] }}, {{ max(0, $line['quantity'] - 1) }})"
-                                            type="button"
-                                            class="w-7 h-7 rounded-full border border-gray-300 dark:border-white/10 text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-white/20 flex items-center justify-center"
-                                        >
-                                            <x-filament::icon icon="heroicon-o-minus" class="h-3.5 w-3.5" />
-                                        </button>
-                                    @endif
+                                    <button
+                                        wire:click="changeLineQuantity('{{ $line['kind'] }}', {{ $line['id'] }}, {{ max(0, $line['quantity'] - 1) }})"
+                                        type="button"
+                                        class="w-7 h-7 rounded-full border border-gray-300 dark:border-white/10 text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-white/20 flex items-center justify-center"
+                                    >
+                                        <x-filament::icon icon="heroicon-o-minus" class="h-3.5 w-3.5" />
+                                    </button>
                                     <span class="text-sm font-semibold w-8 text-center text-gray-800 dark:text-gray-200">{{ $line['quantity'] }}</span>
-                                    @if ($line['editable'])
-                                        <button
-                                            wire:click="changeQuantity({{ $line['id'] }}, {{ $line['quantity'] + 1 }})"
-                                            type="button"
-                                            class="w-7 h-7 rounded-full border border-gray-300 dark:border-white/10 text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-white/20 flex items-center justify-center"
-                                        >
-                                            <x-filament::icon icon="heroicon-o-plus" class="h-3.5 w-3.5" />
-                                        </button>
-                                    @endif
+                                    <button
+                                        wire:click="changeLineQuantity('{{ $line['kind'] }}', {{ $line['id'] }}, {{ $line['quantity'] + 1 }})"
+                                        type="button"
+                                        class="w-7 h-7 rounded-full border border-gray-300 dark:border-white/10 text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-white/20 flex items-center justify-center"
+                                    >
+                                        <x-filament::icon icon="heroicon-o-plus" class="h-3.5 w-3.5" />
+                                    </button>
+                                </div>
+
+                                <div class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                                    <span>Desc. R$</span>
+                                    <input
+                                        type="text"
+                                        inputmode="decimal"
+                                        value="{{ number_format($line['discount_cents'] / 100, 2, ',', '.') }}"
+                                        x-on:input="$el.value = Currency.masking($el.value, {locales:'pt-BR'})"
+                                        x-on:change="$wire.updateLineDiscount('{{ $line['kind'] }}', {{ $line['id'] }}, Number($el.value.replace(/\D/g, '')) / 100).then(() => $el.value = '{{ number_format($line['discount_cents'] / 100, 2, ',', '.') }}')"
+                                        class="w-16 text-xs border border-gray-300 dark:border-white/10 dark:bg-gray-900 dark:text-gray-100 rounded-md px-1.5 py-1 text-right focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                    />
                                 </div>
 
                                 <span class="text-sm font-semibold text-gray-800 dark:text-gray-200">

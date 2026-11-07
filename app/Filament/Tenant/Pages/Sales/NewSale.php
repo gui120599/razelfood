@@ -14,6 +14,7 @@ use App\Actions\Sales\DetachOrderItems;
 use App\Actions\Sales\FinalizeOpenSale;
 use App\Actions\Sales\RemoveSalePayment;
 use App\Actions\Sales\RemoveStandaloneItem;
+use App\Actions\Sales\SetLineDiscount;
 use App\Actions\Sales\SetSaleClient;
 use App\Actions\Sales\SetSaleDeliveryFee;
 use App\Actions\Sales\SplitSaleBill;
@@ -615,6 +616,36 @@ class NewSale extends Page
                 ? app(RemoveStandaloneItem::class)($sale, $saleItemId)
                 : app(UpdateStandaloneItem::class)($sale, $saleItemId, $quantity);
         });
+    }
+
+    /**
+     * Botões − 1 + de qualquer linha. Como na origem, só o item avulso muda de quantidade: a linha vinda
+     * de pedido tem a quantidade do pedido (cobrar menos unidades = tirar o item na aba Pedidos).
+     */
+    public function changeLineQuantity(string $kind, int $id, int $quantity): void
+    {
+        $this->authorizeOperation();
+
+        if ($kind === 'order') {
+            Notification::make()
+                ->warning()
+                ->title('Item lançado de pedido')
+                ->body('A quantidade é a do pedido. Para cobrar menos unidades, desmarque o item na aba Pedidos.')
+                ->send();
+
+            return;
+        }
+
+        $this->changeQuantity($id, $quantity);
+    }
+
+    /**
+     * Campo "Desc. R$" da linha: desconto em reais, limitado ao valor da linha.
+     */
+    public function updateLineDiscount(string $kind, int $id, float|int|string $amount): void
+    {
+        // Sem ensureSale(): numa tela velha (rascunho já descartado) não se cria rascunho só para recusar.
+        $this->guard(fn () => app(SetLineDiscount::class)($this->sale ?? throw new SaleException('Esta venda não está mais aberta.'), $kind, $id, $amount));
     }
 
     public function removeCartLine(string $kind, int $id): void

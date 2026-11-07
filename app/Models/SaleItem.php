@@ -19,6 +19,7 @@ class SaleItem extends TenantScopedModel
         'quantity',
         'unit_price',
         'total',
+        'discount_amount',
     ];
 
     protected function casts(): array
@@ -27,6 +28,7 @@ class SaleItem extends TenantScopedModel
             'quantity' => 'integer',
             'unit_price' => 'decimal:2',
             'total' => 'decimal:2',
+            'discount_amount' => 'decimal:2',
         ];
     }
 

@@ -9,6 +9,7 @@ use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Support\CurrentTenant;
+use App\Support\Sales\LineDiscount;
 use App\Support\Sales\Money;
 use App\Support\Sales\OpenSale;
 use App\Support\Sales\StandaloneItemPrice;
@@ -60,9 +61,12 @@ class AddStandaloneItem
                     'total' => Money::fromCents($unitCents * $newQuantity),
                 ]);
             } else {
+                $grossCents = Money::toCents($line->unit_price) * $newQuantity;
+
                 $line->update([
                     'quantity' => $newQuantity,
-                    'total' => Money::fromCents(Money::toCents($line->unit_price) * $newQuantity),
+                    'total' => Money::fromCents($grossCents),
+                    'discount_amount' => Money::fromCents(LineDiscount::scale(Money::toCents($line->discount_amount), (int) $line->quantity, $newQuantity, $grossCents)),
                 ]);
             }
 

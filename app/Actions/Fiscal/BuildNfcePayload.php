@@ -13,6 +13,7 @@ use App\Models\PaymentOption;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\SaleOrderItemDiscount;
 use App\Models\SalePayment;
 use App\Models\Scopes\TenantScope;
 use App\Models\TenantFiscalSettings;
@@ -122,6 +123,8 @@ class BuildNfcePayload
             ->keyBy('id');
 
         $addonNames = $this->addonNames($sale, $orderItems);
+        $itemDiscounts = SaleOrderItemDiscount::query()->withoutGlobalScope(TenantScope::class)
+            ->where('tenant_id', $sale->tenant_id)->where('sale_id', $sale->id)->pluck('amount', 'order_item_id');
         $lines = collect();
 
         foreach ($orderItems as $item) {
@@ -141,6 +144,7 @@ class BuildNfcePayload
                 $quantity,
                 Money::toCents($item->unit_price),
                 Money::toCents($item->addons_total) * $quantity,
+                Money::toCents($itemDiscounts[$item->id] ?? 0),
             ));
         }
 
@@ -155,7 +159,7 @@ class BuildNfcePayload
                 throw new FiscalDocumentException("O total do item avulso \"{$item->product_name}\" não fecha com preço × quantidade.");
             }
 
-            $lines->push($this->line($product, $this->describe($product, $item->product_name, []), $quantity, $unitCents, 0));
+            $lines->push($this->line($product, $this->describe($product, $item->product_name, []), $quantity, $unitCents, 0, Money::toCents($item->discount_amount)));
         }
 
         return $lines;
@@ -217,7 +221,7 @@ class BuildNfcePayload
     /**
      * @return array<string, mixed>
      */
-    private function line(Product $product, string $description, int $quantity, int $unitCents, int $addonsCents): array
+    private function line(Product $product, string $description, int $quantity, int $unitCents, int $addonsCents, int $ownDiscountCents = 0): array
     {
         $fiscal = ($this->resolveProductFiscalData)($product);
 
@@ -238,7 +242,10 @@ class BuildNfcePayload
             'unit_cents' => $unitCents,
             'total_cents' => $unitCents * $quantity,
             'others_cents' => $addonsCents,
-            'discount_cents' => 0,
+            // Desconto em reais dado na própria linha (Desc. R$, nunca acima do valor da linha); `discount_cents`
+            // soma a ele a parte do percentual.
+            'own_discount_cents' => min($ownDiscountCents, $unitCents * $quantity + $addonsCents),
+            'discount_cents' => min($ownDiscountCents, $unitCents * $quantity + $addonsCents),
             // Valor do item (preço × quantidade + adicionais), sem o frete: base do rateio do desconto.
             'gross_cents' => $unitCents * $quantity + $addonsCents,
         ];
@@ -266,8 +273,9 @@ class BuildNfcePayload
     }
 
     /**
-     * Rateia o desconto manual da venda entre as linhas, proporcional ao valor de cada uma
-     * (maior resto, em centavos), em `discountAmount`. Sem desconto, as linhas ficam como estão.
+     * Desconto manual da venda por linha (`discountAmount`): cada linha leva o desconto em reais que
+     * recebeu (Desc. R$) mais uma parte do que resta do desconto total (o percentual), rateado
+     * proporcionalmente ao valor LÍQUIDO da linha (maior resto, em centavos).
      *
      * @param  Collection<int, array<string, mixed>>  $lines
      * @return Collection<int, array<string, mixed>>
@@ -278,10 +286,20 @@ class BuildNfcePayload
             return $lines;
         }
 
-        $shares = CentAllocator::proportional($discountCents, $lines->values()->map(fn (array $line): int => $line['gross_cents'])->all());
+        $lines = $lines->values();
+        $own = $lines->sum(fn (array $line): int => $line['own_discount_cents']);
 
-        return $lines->values()->map(function (array $line, int $index) use ($shares): array {
-            $line['discount_cents'] = $shares[$index];
+        if ($own > $discountCents) {
+            throw new FiscalDocumentException('Os descontos por item passam do desconto total da venda. Revise a venda antes de emitir.');
+        }
+
+        $shares = CentAllocator::proportional(
+            $discountCents - $own,
+            $lines->map(fn (array $line): int => max(0, $line['gross_cents'] - $line['own_discount_cents']))->all(),
+        );
+
+        return $lines->map(function (array $line, int $index) use ($shares): array {
+            $line['discount_cents'] = $line['own_discount_cents'] + $shares[$index];
 
             return $line;
         });

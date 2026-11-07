@@ -9,7 +9,8 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Aplica (ou, com null/0, desfaz) o desconto percentual da venda em rascunho. O desconto vale
- * sobre os itens (pedidos + avulsos) e acompanha mudanças nos itens (SyncSaleTotals). Na NFC-e
+ * sobre os itens (pedidos + avulsos) JÁ DESCONTADOS por linha (Desc. R$) e acompanha mudanças nos
+ * itens (SyncSaleTotals). Na NFC-e
  * ele é rateado em centavos entre as linhas (`discountAmount`).
  */
 class ApplySaleDiscountPercent

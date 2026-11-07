@@ -39,6 +39,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 | app/Filament/Tenant/Pages/{Dashboard.php,Reports.php},app/Filament/Tenant/Widgets/Reports/** | .ai/rules/reports.md |
 | app/Filament/Tenant/Resources/**/*Resource.php | .ai/rules/resources.md |
 | routes/web.php | .ai/rules/routes.md |
+| {app/Actions/Sales/**,app/Support/Sales/**,app/Actions/Fiscal/BuildNfcePayload.php} | .ai/rules/sales-actions-fiscal.md |
 | app/{Actions/Fiscal/**,Actions/Sales/CancelSaleWithFiscalDocument.php,Jobs/CompleteSaleCancellationJob.php,Console/Commands/SyncFiscalDocumentsCommand.php} | .ai/rules/sales-commands.md |
 | {app/Actions/Sales/**,app/Support/Sales/**,app/Models/Sale.php,app/Models/Order.php} | .ai/rules/sales-models-models.md |
 | {app/Filament/Tenant/Pages/Sales/NewSale.php,app/Filament/Tenant/Livewire/Sales/**,resources/views/filament/tenant/pages/sales/new-sale*,resources/views/filament/tenant/livewire/sales/**,app/Support/Sales/SaleCartLines.php} | .ai/rules/sales.md |

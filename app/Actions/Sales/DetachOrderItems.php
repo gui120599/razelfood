@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Sale;
 use App\Models\SaleOrder;
+use App\Models\SaleOrderItemDiscount;
 use App\Support\Sales\Money;
 use App\Support\Sales\OpenSale;
 use Illuminate\Support\Facades\DB;
@@ -44,6 +45,7 @@ class DetachOrderItems
             }
 
             OrderItem::query()->whereKey($targets->modelKeys())->update(['sale_id' => null]);
+            SaleOrderItemDiscount::query()->where('sale_id', $locked->id)->whereIn('order_item_id', $targets->modelKeys())->delete();
 
             if ($this->orderItemsCents($locked, $order) === 0 && ! OrderItem::query()->where('order_id', $order->id)->where('sale_id', $locked->id)->exists()) {
                 $line = SaleOrder::query()->where('sale_id', $locked->id)->where('order_id', $order->id)->first();

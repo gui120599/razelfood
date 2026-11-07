@@ -8,6 +8,7 @@ use App\Exceptions\SaleException;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Support\Sales\LineDiscount;
 use App\Support\Sales\Money;
 use App\Support\Sales\OpenSale;
 use Illuminate\Support\Facades\DB;
@@ -47,9 +48,13 @@ class UpdateStandaloneItem
                 }
             }
 
+            $grossCents = Money::toCents($line->unit_price) * $quantity;
+
+            // O desconto da linha escala com a quantidade (desconto por unidade preservado).
             $line->update([
                 'quantity' => $quantity,
-                'total' => Money::fromCents(Money::toCents($line->unit_price) * $quantity),
+                'total' => Money::fromCents($grossCents),
+                'discount_amount' => Money::fromCents(LineDiscount::scale(Money::toCents($line->discount_amount), (int) $line->quantity, $quantity, $grossCents)),
             ]);
 
             ($this->syncTotals)($locked);
