@@ -54,15 +54,15 @@ class AddonPickerWiringTest extends TestCase
             ->assertNotDispatched('order-item-selected');
     }
 
-    public function test_selecting_a_simple_product_without_addons_dispatches_item_selected_directly(): void
+    public function test_selecting_a_simple_product_without_addons_still_opens_the_item_modal(): void
     {
         $category = Category::create(['tenant_id' => $this->tenant->id, 'name' => 'Bebidas', 'display_order' => 1]);
         $product = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $category->id, 'name' => 'Refrigerante', 'price' => 8]);
 
         Livewire::test(ProductCatalogSelector::class)
             ->call('selectProduct', $product->id)
-            ->assertDispatched('order-item-selected', productId: $product->id)
-            ->assertNotDispatched('order-addons-requested');
+            ->assertDispatched('order-addons-requested', type: 'simple', productId: $product->id, flavorIds: [])
+            ->assertNotDispatched('order-item-selected');
     }
 
     public function test_confirming_a_combo_with_addons_dispatches_addons_requested_instead_of_cart_line_confirmed(): void
@@ -133,7 +133,7 @@ class AddonPickerWiringTest extends TestCase
             ]);
     }
 
-    public function test_addon_picker_asks_before_showing_the_addon_list(): void
+    public function test_addon_picker_lists_the_addons_right_away_without_asking_first(): void
     {
         $category = Category::create(['tenant_id' => $this->tenant->id, 'name' => 'Bebidas', 'display_order' => 1]);
         $product = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $category->id, 'name' => 'Refrigerante', 'price' => 8]);
@@ -142,14 +142,14 @@ class AddonPickerWiringTest extends TestCase
 
         Livewire::test(AddonPickerModal::class)
             ->call('open', 'simple', $product->id, [])
-            ->assertSet('wantsAddons', null)
-            ->assertNotDispatched('order-cart-line-confirmed')
-            ->call('chooseWantsAddons', true)
-            ->assertSet('wantsAddons', true)
+            ->assertSet('open', true)
+            ->assertSee('Quer adicionar algo?')
+            ->assertSee('Gelo extra')
+            ->assertSee('+ R$ 1,00')
             ->assertNotDispatched('order-cart-line-confirmed');
     }
 
-    public function test_choosing_not_to_add_addons_confirms_the_line_immediately(): void
+    public function test_confirming_without_marking_any_addon_adds_the_plain_line(): void
     {
         $category = Category::create(['tenant_id' => $this->tenant->id, 'name' => 'Bebidas', 'display_order' => 1]);
         $product = Product::create(['tenant_id' => $this->tenant->id, 'category_id' => $category->id, 'name' => 'Refrigerante', 'price' => 8]);
@@ -158,7 +158,7 @@ class AddonPickerWiringTest extends TestCase
 
         Livewire::test(AddonPickerModal::class)
             ->call('open', 'simple', $product->id, [])
-            ->call('chooseWantsAddons', false)
+            ->call('confirmAddons')
             ->assertDispatched('order-cart-line-confirmed', item: [
                 'type' => 'simple', 'product_id' => $product->id, 'flavor_ids' => [], 'quantity' => 1, 'note' => null, 'addons' => [],
                 'gifts' => [],
@@ -181,7 +181,6 @@ class AddonPickerWiringTest extends TestCase
 
         Livewire::test(AddonPickerModal::class)
             ->call('open', 'simple', $product->id, [])
-            ->call('chooseWantsAddons', true)
             ->call('setQuantity', $addon->id, 1)
             ->assertDontSee('Produto inteiro')
             ->assertDontSee('Só Refrigerante');
@@ -196,7 +195,6 @@ class AddonPickerWiringTest extends TestCase
 
         Livewire::test(AddonPickerModal::class)
             ->call('open', 'simple', $product->id, [])
-            ->call('chooseWantsAddons', true)
             ->call('setQuantity', $addon->id, 2)
             ->call('skipAddons')
             ->assertDispatched('order-cart-line-confirmed', item: [
@@ -215,7 +213,6 @@ class AddonPickerWiringTest extends TestCase
 
         Livewire::test(AddonPickerModal::class)
             ->call('editForLine', 2, 'simple', $product->id, [], [['addon_id' => $addon->id, 'quantity' => 1, 'target' => null]])
-            ->assertSet('wantsAddons', true)
             ->assertSet('editingIndex', 2)
             ->assertSet('selections', [$addon->id => ['quantity' => 1, 'target' => null]])
             ->call('setQuantity', $addon->id, 3)
@@ -251,7 +248,6 @@ class AddonPickerWiringTest extends TestCase
 
         Livewire::test(AddonPickerModal::class)
             ->call('open', 'combo', $flavorA->id, [$flavorA->id, $flavorB->id])
-            ->call('chooseWantsAddons', true)
             ->call('setQuantity', $addon->id, 1)
             ->assertSee('Produto inteiro')
             ->assertSee('Só Marguerita');

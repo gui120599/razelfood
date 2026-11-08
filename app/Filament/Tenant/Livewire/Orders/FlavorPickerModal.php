@@ -3,10 +3,10 @@
 namespace App\Filament\Tenant\Livewire\Orders;
 
 use App\Actions\Menu\ResolvePriceForCartLine;
+use App\Actions\Menu\ResolvePriceForProduct;
+use App\Models\Addon;
 use App\Models\Category;
 use App\Models\Product;
-use App\Models\ProductAddon;
-use App\Models\ProductGift;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
 use Livewire\Attributes\Computed;
@@ -32,6 +32,9 @@ class FlavorPickerModal extends Component
         'flavor_ids' => [],
     ];
 
+    /** Observação do item (digitada no rodapé do modal, como na tela original). */
+    public ?string $note = null;
+
     public ?string $errorMessage = null;
 
     #[On('order-combo-requested')]
@@ -46,8 +49,29 @@ class FlavorPickerModal extends Component
             'required_count' => $defaultOption?->flavor_count,
             'flavor_ids' => $initialProductId ? [$initialProductId] : [],
         ];
+        $this->note = null;
         $this->errorMessage = null;
         $this->open = true;
+    }
+
+    /**
+     * "Voltar" do passo de adicionais: reabre o modal com a seleção de sabores preservada
+     * (confirmCombo só o esconde quando há adicionais/brindes a perguntar).
+     */
+    #[On('order-combo-resume')]
+    public function resume(): void
+    {
+        if ($this->comboBuilder['category_id'] !== null) {
+            $this->open = true;
+        }
+    }
+
+    /** O passo de adicionais terminou (linha confirmada ou cancelada): descarta o que ficou guardado. */
+    #[On('order-addons-cancelled')]
+    #[On('order-cart-line-confirmed')]
+    public function discard(): void
+    {
+        $this->closeModal();
     }
 
     public function selectFlavorQuantity(int $optionId): void
@@ -97,9 +121,11 @@ class FlavorPickerModal extends Component
             return;
         }
 
+        $note = blank($this->note) ? null : mb_substr(trim($this->note), 0, 255);
+
         $item = $requiredCount === 1
-            ? ['type' => 'simple', 'product_id' => $flavorIds[0], 'flavor_ids' => [], 'quantity' => 1, 'note' => null, 'addons' => [], 'gifts' => []]
-            : ['type' => 'combo', 'product_id' => $flavorIds[0], 'flavor_ids' => $flavorIds, 'quantity' => 1, 'note' => null, 'addons' => [], 'gifts' => []];
+            ? ['type' => 'simple', 'product_id' => $flavorIds[0], 'flavor_ids' => [], 'quantity' => 1, 'note' => $note, 'addons' => [], 'gifts' => []]
+            : ['type' => 'combo', 'product_id' => $flavorIds[0], 'flavor_ids' => $flavorIds, 'quantity' => 1, 'note' => $note, 'addons' => [], 'gifts' => []];
 
         try {
             app(ResolvePriceForCartLine::class)($item);
@@ -109,14 +135,10 @@ class FlavorPickerModal extends Component
             return;
         }
 
-        $anchorIds = $requiredCount === 1 ? [$flavorIds[0]] : $flavorIds;
-
-        $hasExtras = ProductAddon::whereIn('product_id', $anchorIds)->exists()
-            || ProductGift::whereIn('product_id', $anchorIds)->where('is_active', true)->exists();
-
-        if ($hasExtras) {
-            $this->dispatch('order-addons-requested', type: $item['type'], productId: $item['product_id'], flavorIds: $item['flavor_ids']);
-            $this->closeModal();
+        if ($this->hasExtras) {
+            // O modal só some da tela: "Voltar" no passo de adicionais o reabre com a seleção intacta.
+            $this->dispatch('order-addons-requested', type: $item['type'], productId: $item['product_id'], flavorIds: $item['flavor_ids'], note: $note, canGoBack: true);
+            $this->open = false;
 
             return;
         }
@@ -129,6 +151,7 @@ class FlavorPickerModal extends Component
     {
         $this->open = false;
         $this->comboBuilder = ['category_id' => null, 'quantity_option_id' => null, 'required_count' => null, 'flavor_ids' => []];
+        $this->note = null;
         $this->errorMessage = null;
     }
 
@@ -147,6 +170,12 @@ class FlavorPickerModal extends Component
         return $this->loadCategory($this->comboBuilder['category_id']);
     }
 
+    /**
+     * Sabores da categoria com o preço já resolvido (promoção/relâmpago), para a lista do modal.
+     * A regra de preço continua sendo a do servidor em ResolvePriceForCartLine ao confirmar.
+     *
+     * @return Collection<int, Product>
+     */
     #[Computed]
     public function availableFlavors(): Collection
     {
@@ -157,7 +186,79 @@ class FlavorPickerModal extends Component
         return Product::where('category_id', $this->comboBuilder['category_id'])
             ->where('show_in_waiter_menu', true)
             ->orderBy('display_order')
-            ->get();
+            ->get()
+            ->map(function (Product $product): Product {
+                $resolved = app(ResolvePriceForProduct::class)($product);
+
+                $product->setAttribute('resolved_price', $resolved->finalPrice);
+                $product->setAttribute('resolved_original_price', $resolved->originalPrice);
+
+                return $product;
+            });
+    }
+
+    /**
+     * Sabores já escolhidos, na ordem da escolha (1º, 2º…).
+     *
+     * @return Collection<int, Product>
+     */
+    #[Computed]
+    public function chosenFlavors(): Collection
+    {
+        $flavors = $this->availableFlavors->keyBy('id');
+
+        return collect($this->comboBuilder['flavor_ids'])
+            ->map(fn (int $id): ?Product => $flavors->get($id))
+            ->filter()
+            ->values();
+    }
+
+    /**
+     * Prévia do preço da pizza: média dos preços dos sabores escolhidos (RN-16), a mesma regra de
+     * ResolvePriceForCartLine::resolveCombo, que segue sendo a fonte de verdade ao confirmar.
+     */
+    #[Computed]
+    public function previewPrice(): ?float
+    {
+        if ($this->chosenFlavors->isEmpty()) {
+            return null;
+        }
+
+        return round($this->chosenFlavors->avg('resolved_price'), 2);
+    }
+
+    /**
+     * Há algo a perguntar nos sabores escolhidos (adicionais ou brindes), então "Continuar" abre mais um passo.
+     * Usa o mesmo critério da lista do AddonPickerModal, para não levar a um passo vazio.
+     */
+    #[Computed]
+    public function hasExtras(): bool
+    {
+        $anchorIds = $this->comboBuilder['flavor_ids'];
+
+        if ($anchorIds === []) {
+            return false;
+        }
+
+        if (Addon::whereHas('products', fn ($query) => $query->whereIn('products.id', $anchorIds))->exists()) {
+            return true;
+        }
+
+        $flavorCount = count($anchorIds);
+
+        return Product::whereIn('id', $anchorIds)
+            ->with(['gifts' => fn ($query) => $query->wherePivot('is_active', true)])
+            ->get()
+            ->flatMap(fn (Product $anchor) => $anchor->gifts)
+            ->contains(function (Product $gift) use ($anchorIds, $flavorCount): bool {
+                if (in_array($gift->id, $anchorIds, true)) {
+                    return false;
+                }
+
+                $counts = $gift->pivot->flavor_counts;
+
+                return empty($counts) || in_array($flavorCount, array_map('intval', $counts), true);
+            });
     }
 
     public function render()

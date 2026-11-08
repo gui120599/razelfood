@@ -49,16 +49,9 @@ class ProductCatalogSelector extends Component
             return;
         }
 
-        // Produto simples com adicionais e/ou brindes ativos: abre o modal
-        // (AddonPickerModal cobre os dois) pra o atendente escolher antes de
-        // a linha entrar no carrinho.
-        if ($product->addons()->exists() || $product->gifts()->wherePivot('is_active', true)->exists()) {
-            $this->dispatch('order-addons-requested', type: 'simple', productId: $productId, flavorIds: []);
-
-            return;
-        }
-
-        $this->dispatch('order-item-selected', productId: $productId);
+        // Produto simples: o modal (AddonPickerModal) pergunta quantidade, adicionais, brindes e
+        // observação antes de a linha entrar no carrinho, como na tela original.
+        $this->dispatch('order-addons-requested', type: 'simple', productId: $productId, flavorIds: []);
     }
 
     #[Computed]

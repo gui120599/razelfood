@@ -18,6 +18,7 @@ use App\Models\Product;
 use App\Models\ProductAddon;
 use App\Support\CurrentTenant;
 use App\Support\FeatureKey;
+use App\Support\Fiscal\FlavorFraction;
 use App\Support\Orders\GiftLineLabel;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
@@ -93,7 +94,8 @@ class AttendOrder extends Page
 
     public function getHeading(): string
     {
-        return $this->currentOrder ? "Editando Pedido #{$this->currentOrder->id}" : 'Novo Pedido por Telefone';
+        // Mesmo título da origem (tela "Pedido"); o número do pedido aparece no chip de atendimento.
+        return 'Pedido';
     }
 
     /**
@@ -306,6 +308,18 @@ class AttendOrder extends Page
                 return "{$selection['quantity']}x {$addonName} ({$target})";
             })->all();
 
+            // Pizza de vários sabores: uma linha por sabor com a fração ("MEIA Calabresa"), como na origem.
+            $flavorLines = [];
+
+            if ($item['type'] === 'combo' && count($item['flavor_ids']) > 1) {
+                $flavorLines = collect($item['flavor_ids'])->values()->map(function (int $id, int $position) use ($products, $resolved): string {
+                    $percent = (float) (($resolved['flavor_shares'][$position] ?? 0) * 100);
+                    $label = abs($percent - 50) < 0.5 ? 'MEIA' : FlavorFraction::label($percent);
+
+                    return $label.' '.($products->get($id)?->name ?? 'Sabor removido');
+                })->all();
+            }
+
             $giftsDisplay = collect($resolved['gifts'] ?? [])
                 ->filter(fn (array $gift) => $gift['accepted'] === true)
                 ->map(fn (array $gift) => GiftLineLabel::accepted($gift, $item['quantity'], $giftNames->get($gift['gift_product_id']) ?? 'Brinde removido'))
@@ -315,6 +329,7 @@ class AttendOrder extends Page
             $lines[] = [
                 'index' => $index,
                 'name' => $name,
+                'flavor_lines' => $flavorLines,
                 'category_name' => $mainProduct?->category?->name,
                 'image_url' => $mainProduct?->image_url,
                 'has_addons' => collect($relevantIds)->intersect($productIdsWithAddons)->isNotEmpty(),
@@ -387,6 +402,42 @@ class AttendOrder extends Page
     public function grandTotalPreview(): float
     {
         return round($this->cartTotal + $this->deliveryFeePreviewAmount, 2);
+    }
+
+    /**
+     * Tipo de atendimento (chip do topo): segue a opção de entrega escolhida. A opção é um cadastro
+     * livre do estabelecimento, então o rótulo é o nome dela; o ícone diz se exige endereço.
+     *
+     * @return array{label: string, requires_address: bool, icon: string}
+     */
+    #[Computed]
+    public function serviceType(): array
+    {
+        $option = $this->selectedDeliveryOption();
+
+        return [
+            'label' => $option?->name ?? 'Defina a entrega',
+            'requires_address' => (bool) $option?->requires_address,
+            'icon' => $option === null ? 'heroicon-o-question-mark-circle' : ($option->requires_address ? 'heroicon-o-truck' : 'heroicon-o-shopping-bag'),
+        ];
+    }
+
+    /**
+     * Aviso (só exibição) de que as formas de pagamento não somam o total: o `save()` recusa do mesmo jeito.
+     */
+    #[Computed]
+    public function paymentMismatch(): bool
+    {
+        $payments = collect($this->fulfillmentData['payments'] ?? []);
+
+        if (empty($this->cartLines) || $payments->count() < 2) {
+            return false;
+        }
+
+        $filled = $payments->filter(fn (array $payment): bool => filled($payment['amount'] ?? null));
+
+        return $filled->isNotEmpty()
+            && abs($filled->sum(fn (array $payment): float => $this->parseBrl($payment['amount'])) - $this->grandTotalPreview) > 0.01;
     }
 
     private function selectedDeliveryOption(): ?DeliveryOption
@@ -485,16 +536,20 @@ class AttendOrder extends Page
     {
         $withoutClient = $this->clientData['without_client'] ?? false;
 
+        // O bloco de endereço some quando a opção não o exige (retirada): o que ficou digitado não vai junto.
+        $sendsAddress = $this->selectedDeliveryOption()?->requires_address ?? false;
+        $address = fn (string $key): mixed => $sendsAddress ? $this->clientData[$key] : null;
+
         return [
             'phone' => $withoutClient ? '' : $this->clientData['phone'],
             'name' => $withoutClient ? '' : $this->clientData['name'],
-            'zip_code' => $this->clientData['zip_code'],
-            'street' => $this->clientData['street'],
-            'number' => $this->clientData['number'],
-            'complement' => $this->clientData['complement'],
-            'neighborhood' => $this->clientData['neighborhood'],
-            'city' => $this->clientData['city'],
-            'state' => $this->clientData['state'],
+            'zip_code' => $address('zip_code'),
+            'street' => $address('street'),
+            'number' => $address('number'),
+            'complement' => $address('complement'),
+            'neighborhood' => $address('neighborhood'),
+            'city' => $address('city'),
+            'state' => $address('state'),
             'delivery_option_id' => $this->fulfillmentData['delivery_option_id'],
             'payments' => collect($this->fulfillmentData['payments'] ?? [])->map(fn (array $p) => [
                 'payment_option_id' => (int) $p['payment_option_id'],

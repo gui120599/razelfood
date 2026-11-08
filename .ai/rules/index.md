@@ -17,6 +17,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 | tests/Feature/**/*.php | .ai/rules/feature.md |
 | app/Filament/Resources/** | .ai/rules/filament-resources.md |
 | app/Filament/Support/EstablishmentDocumentFields.php, app/Filament/Support/InputMasks.php | .ai/rules/filament-support.md |
+| app/Filament/Tenant/Livewire/Orders/{AddonPickerModal,FlavorPickerModal,ProductCatalogSelector}.php | .ai/rules/filament-tenant-livewire-orders.md |
 | resources/css/filament/**/*.css | .ai/rules/filament.md |
 | app/{Actions/Fiscal/BuildNfcePayload.php,Support/Fiscal/BuyerResolver.php,Support/Fiscal/FlavorFraction.php} | .ai/rules/fiscal-fiscal.md |
 | {app/Support/Fiscal/**,app/Models/TenantFiscalSettings.php} | .ai/rules/fiscal-models.md |
@@ -47,6 +48,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 | scripts/promote-producao.sh | .ai/rules/scripts.md |
 | app/{Actions/Menu/ResolvePriceForCartLine.php,Actions/Orders/Support/CartStockAndPromotionLedger.php,Models/ProductGift.php,Support/Orders/GiftLineLabel.php} | .ai/rules/support-orders.md |
 | app/Actions/Orders/Support/CartStockAndPromotionLedger.php | .ai/rules/support.md |
+| resources/views/filament/tenant/livewire/orders/** | .ai/rules/tenant-livewire-orders.md |
 | app/{Actions/Orders/AdvanceOrderStatus.php,Filament/Tenant/Support/OrderStatusActions.php,Filament/Tenant/Pages/Kitchen.php,Models/Order.php} | .ai/rules/tenant-pages.md |
 | {app/Filament/Support/FiscalSettingsFields.php,app/Filament/Tenant/Pages/FiscalSettings.php,app/Filament/Resources/Tenants/**} | .ai/rules/tenants.md |
 | app/Filament/Tenant/Resources/Users/** | .ai/rules/users.md |
