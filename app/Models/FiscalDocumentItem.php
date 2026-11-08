@@ -28,6 +28,7 @@ class FiscalDocumentItem extends TenantScopedModel
         'unit_amount',
         'total_amount',
         'others_amount',
+        'discount_amount',
     ];
 
     protected function casts(): array
@@ -38,6 +39,7 @@ class FiscalDocumentItem extends TenantScopedModel
             'unit_amount' => 'decimal:2',
             'total_amount' => 'decimal:2',
             'others_amount' => 'decimal:2',
+            'discount_amount' => 'decimal:2',
         ];
     }
 

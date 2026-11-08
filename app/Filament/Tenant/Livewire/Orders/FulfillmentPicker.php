@@ -57,9 +57,13 @@ class FulfillmentPicker extends Component
         $this->emitChange();
     }
 
-    public function selectDeliveryOption(int $id): void
+    public function selectDeliveryOption(int|string|null $id): void
     {
-        $this->deliveryOptionId = $id;
+        // O select tem a opção "Selecione...": valor vazio limpa a escolha.
+        $id = blank($id) ? null : (int) $id;
+
+        // Só ids da lista mostrada (do tenant e visíveis): uma chamada forjada com id alheio vira "sem escolha".
+        $this->deliveryOptionId = $id !== null && $this->deliveryOptions->contains('id', $id) ? $id : null;
         $this->emitChange();
     }
 
@@ -82,13 +86,14 @@ class FulfillmentPicker extends Component
         $this->emitChange();
     }
 
-    public function selectPaymentOptionForLine(int $index, int $paymentOptionId): void
+    public function selectPaymentOptionForLine(int $index, int|string|null $paymentOptionId): void
     {
         if (! isset($this->payments[$index])) {
             return;
         }
 
-        $this->payments[$index]['payment_option_id'] = $paymentOptionId;
+        // O select tem a opção "Escolha...": valor vazio limpa a forma de pagamento da linha.
+        $this->payments[$index]['payment_option_id'] = blank($paymentOptionId) ? null : (int) $paymentOptionId;
         $this->payments[$index]['change_for'] = null;
         $this->emitChange();
     }

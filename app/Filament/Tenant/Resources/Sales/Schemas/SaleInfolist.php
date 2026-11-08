@@ -124,9 +124,10 @@ class SaleInfolist
                             TextEntry::make('product_name')->label('Produto'),
                             TextEntry::make('quantity')->label('Qtd.'),
                             TextEntry::make('unit_price')->label('Preço')->money('BRL'),
-                            TextEntry::make('total')->label('Total')->money('BRL'),
+                            TextEntry::make('total')->label('Valor')->money('BRL'),
+                            TextEntry::make('discount_amount')->label('Desconto')->money('BRL'),
                         ])
-                        ->columns(4),
+                        ->columns(5),
                 ]),
             Section::make('Pagamentos recebidos')
                 ->schema([
@@ -143,9 +144,10 @@ class SaleInfolist
                 ]),
             Section::make('Valores')
                 ->schema([
-                    Grid::make(4)->schema([
+                    Grid::make(5)->schema([
                         TextEntry::make('items_total')->label('Itens')->money('BRL'),
                         TextEntry::make('discount_total')->label('Desconto (já nos itens)')->money('BRL'),
+                        TextEntry::make('manual_discount_total')->label('Desconto manual')->money('BRL'),
                         TextEntry::make('delivery_fee')->label('Taxa de entrega')->money('BRL'),
                         TextEntry::make('total')->label('Total')->money('BRL')->weight('bold'),
                     ]),

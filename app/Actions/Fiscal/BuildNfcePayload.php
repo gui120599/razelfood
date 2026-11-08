@@ -13,6 +13,7 @@ use App\Models\PaymentOption;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\SaleOrderItemDiscount;
 use App\Models\SalePayment;
 use App\Models\Scopes\TenantScope;
 use App\Models\TenantFiscalSettings;
@@ -33,10 +34,11 @@ use Illuminate\Support\Str;
  *
  * Valores (RN-FIS-05..09): `unitAmount` é o preço unitário do item; `totalAmount`
  * = quantidade × preço; `othersAmount` leva os adicionais (× quantidade) mais a
- * fração do frete, rateado igualmente em centavos entre as linhas; o desconto do
- * pedido é só informativo (os preços já são líquidos), então `discountAmount` é 0.
+ * fração do frete, rateado igualmente em centavos entre as linhas; o desconto das promoções
+ * do pedido é só informativo (os preços já são líquidos), mas o desconto MANUAL da venda
+ * (`manual_discount_total`) é rateado proporcionalmente em `discountAmount`.
  * Pizza de sabores é UM item. Brindes ficam fora da nota. A soma das linhas tem de
- * bater com o total da venda, e pagamentos − troco também, centavo a centavo.
+ * bater com o total da venda (itens + adicionais/frete − desconto), e pagamentos − troco também, centavo a centavo.
  */
 class BuildNfcePayload
 {
@@ -62,8 +64,14 @@ class BuildNfcePayload
         }
 
         $lines = $this->applyFreight($lines, Money::toCents($sale->delivery_fee));
+        try {
+            $lines = $this->applyDiscount($lines, Money::toCents($sale->manual_discount_total));
+        } catch (\InvalidArgumentException $exception) {
+            throw new FiscalDocumentException('Não foi possível ratear o desconto da venda entre os itens. Revise a venda antes de emitir.', previous: $exception);
+        }
+
         $totalCents = Money::toCents($sale->total);
-        $itemsCents = $lines->sum(fn (array $line): int => $line['total_cents'] + $line['others_cents']);
+        $itemsCents = $lines->sum(fn (array $line): int => $line['total_cents'] + $line['others_cents'] - $line['discount_cents']);
 
         if ($itemsCents !== $totalCents) {
             throw new FiscalDocumentException('Os itens da venda ('.Money::format($itemsCents).') não fecham com o total da venda ('.Money::format($totalCents).'). Revise a venda antes de emitir.');
@@ -115,6 +123,8 @@ class BuildNfcePayload
             ->keyBy('id');
 
         $addonNames = $this->addonNames($sale, $orderItems);
+        $itemDiscounts = SaleOrderItemDiscount::query()->withoutGlobalScope(TenantScope::class)
+            ->where('tenant_id', $sale->tenant_id)->where('sale_id', $sale->id)->pluck('amount', 'order_item_id');
         $lines = collect();
 
         foreach ($orderItems as $item) {
@@ -134,6 +144,7 @@ class BuildNfcePayload
                 $quantity,
                 Money::toCents($item->unit_price),
                 Money::toCents($item->addons_total) * $quantity,
+                Money::toCents($itemDiscounts[$item->id] ?? 0),
             ));
         }
 
@@ -148,7 +159,7 @@ class BuildNfcePayload
                 throw new FiscalDocumentException("O total do item avulso \"{$item->product_name}\" não fecha com preço × quantidade.");
             }
 
-            $lines->push($this->line($product, $this->describe($product, $item->product_name, []), $quantity, $unitCents, 0));
+            $lines->push($this->line($product, $this->describe($product, $item->product_name, []), $quantity, $unitCents, 0, Money::toCents($item->discount_amount)));
         }
 
         return $lines;
@@ -210,7 +221,7 @@ class BuildNfcePayload
     /**
      * @return array<string, mixed>
      */
-    private function line(Product $product, string $description, int $quantity, int $unitCents, int $addonsCents): array
+    private function line(Product $product, string $description, int $quantity, int $unitCents, int $addonsCents, int $ownDiscountCents = 0): array
     {
         $fiscal = ($this->resolveProductFiscalData)($product);
 
@@ -231,6 +242,12 @@ class BuildNfcePayload
             'unit_cents' => $unitCents,
             'total_cents' => $unitCents * $quantity,
             'others_cents' => $addonsCents,
+            // Desconto em reais dado na própria linha (Desc. R$, nunca acima do valor da linha); `discount_cents`
+            // soma a ele a parte do percentual.
+            'own_discount_cents' => min($ownDiscountCents, $unitCents * $quantity + $addonsCents),
+            'discount_cents' => min($ownDiscountCents, $unitCents * $quantity + $addonsCents),
+            // Valor do item (preço × quantidade + adicionais), sem o frete: base do rateio do desconto.
+            'gross_cents' => $unitCents * $quantity + $addonsCents,
         ];
     }
 
@@ -250,6 +267,39 @@ class BuildNfcePayload
 
         return $lines->values()->map(function (array $line, int $index) use ($shares): array {
             $line['others_cents'] += $shares[$index];
+
+            return $line;
+        });
+    }
+
+    /**
+     * Desconto manual da venda por linha (`discountAmount`): cada linha leva o desconto em reais que
+     * recebeu (Desc. R$) mais uma parte do que resta do desconto total (o percentual), rateado
+     * proporcionalmente ao valor LÍQUIDO da linha (maior resto, em centavos).
+     *
+     * @param  Collection<int, array<string, mixed>>  $lines
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function applyDiscount(Collection $lines, int $discountCents): Collection
+    {
+        if ($discountCents === 0) {
+            return $lines;
+        }
+
+        $lines = $lines->values();
+        $own = $lines->sum(fn (array $line): int => $line['own_discount_cents']);
+
+        if ($own > $discountCents) {
+            throw new FiscalDocumentException('Os descontos por item passam do desconto total da venda. Revise a venda antes de emitir.');
+        }
+
+        $shares = CentAllocator::proportional(
+            $discountCents - $own,
+            $lines->map(fn (array $line): int => max(0, $line['gross_cents'] - $line['own_discount_cents']))->all(),
+        );
+
+        return $lines->map(function (array $line, int $index) use ($shares): array {
+            $line['discount_cents'] = $line['own_discount_cents'] + $shares[$index];
 
             return $line;
         });
@@ -347,7 +397,7 @@ class BuildNfcePayload
             'unitTax' => $fiscal->commercialUnit,
             'quantityTax' => $line['quantity'],
             'taxUnitAmount' => $unitAmount,
-            'discountAmount' => 0,
+            'discountAmount' => $this->amount($line['discount_cents']),
             'othersAmount' => $this->amount($line['others_cents']),
             // Sempre verdadeiro, como na produção do Pizzaria-App: lá `(bool) item_venda_valor` recebe o texto
             // "0.00" do cast decimal (verdadeiro em PHP), então o item sempre compõe o total da nota.
@@ -355,7 +405,7 @@ class BuildNfcePayload
             'cest' => filled($fiscal->cest) ? $fiscal->cest : null,
         ];
 
-        $item['tax'] = $this->taxBlock($fiscal, $line['total_cents'] + $line['others_cents'], $settings);
+        $item['tax'] = $this->taxBlock($fiscal, $line['total_cents'] + $line['others_cents'] - $line['discount_cents'], $settings);
 
         return $item;
     }
@@ -417,6 +467,7 @@ class BuildNfcePayload
             'unit_amount' => Money::fromCents($line['unit_cents']),
             'total_amount' => Money::fromCents($line['total_cents']),
             'others_amount' => Money::fromCents($line['others_cents']),
+            'discount_amount' => Money::fromCents($line['discount_cents']),
         ];
     }
 

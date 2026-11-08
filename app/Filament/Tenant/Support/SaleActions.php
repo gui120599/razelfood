@@ -5,6 +5,7 @@ namespace App\Filament\Tenant\Support;
 use App\Actions\Sales\CancelSaleWithFiscalDocument;
 use App\Enums\SaleStatus;
 use App\Exceptions\SaleException;
+use App\Filament\Tenant\Pages\Sales\NewSale;
 use App\Models\Sale;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
@@ -71,5 +72,18 @@ class SaleActions
 
                 Notification::make()->title('Cancelamento pendente desfeito')->success()->send();
             });
+    }
+
+    /**
+     * Retoma um rascunho (venda aberta) na tela Nova Venda.
+     */
+    public static function resume(): Action
+    {
+        return Action::make('resume')
+            ->label('Retomar')
+            ->icon(Heroicon::OutlinedPlayCircle)
+            ->color('warning')
+            ->visible(fn (Sale $record): bool => $record->status === SaleStatus::Open && NewSale::canAccess())
+            ->url(fn (Sale $record): string => NewSale::getUrl(['sale' => $record->id]));
     }
 }

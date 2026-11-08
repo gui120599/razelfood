@@ -58,7 +58,7 @@ class SyncPdvActivation
         }
 
         // Despacha na transição e, como rede de segurança, enquanto restar venda
-        // Finalizada sem pagamento (ex.: o despacho anterior falhou). O job é único
+        // Finalizada sem pagamento ou rascunho aberto (ex.: o despacho anterior falhou). O job é único
         // por tenant, idempotente e revalida o estado ao rodar.
         if ($cleared > 0 || $this->hasUnpaidFinalizedSales($fresh->id)) {
             CancelUnpaidSalesJob::dispatch($fresh->id)->afterCommit();
@@ -69,8 +69,8 @@ class SyncPdvActivation
     {
         return Sale::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
-            ->where('status', SaleStatus::Finalized)
-            ->whereDoesntHave('payments')
+            ->where(fn ($query) => $query->where('status', SaleStatus::Open)
+                ->orWhere(fn ($finalized) => $finalized->where('status', SaleStatus::Finalized)->whereDoesntHave('payments')))
             ->exists();
     }
 }

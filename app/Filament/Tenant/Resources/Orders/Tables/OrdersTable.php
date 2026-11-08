@@ -24,6 +24,7 @@ class OrdersTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->withPaymentProgress())
             ->defaultSort('created_at', 'desc')
             ->columns([
                 TextColumn::make('id')
@@ -94,7 +95,7 @@ class OrdersTable
                     ->icon(Heroicon::OutlinedPencilSquare)
                     ->color('gray')
                     ->visible(fn (Order $record) => AttendOrder::canAccess()
-                        && $record->sale_id === null
+                        && ! $record->hasItemsInSale()
                         && $record->status->isEditableContentWise()
                         && (! $record->status->requiresAdvancedPermissionToEdit() || (auth()->user()?->can('edit_order_advanced_status') ?? false)))
                     ->url(fn (Order $record) => AttendOrder::getUrl(['order' => $record])),

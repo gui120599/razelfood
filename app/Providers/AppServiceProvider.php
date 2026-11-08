@@ -9,6 +9,7 @@ use App\Filament\Tenant\Livewire\Orders\ClientLookup;
 use App\Filament\Tenant\Livewire\Orders\FlavorPickerModal;
 use App\Filament\Tenant\Livewire\Orders\FulfillmentPicker;
 use App\Filament\Tenant\Livewire\Orders\ProductCatalogSelector;
+use App\Filament\Tenant\Livewire\Sales\SaleProductSelector;
 use App\Models\Tenant;
 use App\Models\TenantFeatureOverride;
 use App\Models\User;
@@ -52,6 +53,7 @@ class AppServiceProvider extends ServiceProvider
         Livewire::component('tenant-order-addon-picker', AddonPickerModal::class);
         Livewire::component('tenant-order-client-lookup', ClientLookup::class);
         Livewire::component('tenant-order-fulfillment-picker', FulfillmentPicker::class);
+        Livewire::component('tenant-sale-product-selector', SaleProductSelector::class);
 
         // Data de corte do PDV (Fase 1.0): acompanha a feature `pdv` do tenant. Troca de
         // plano e overrides são tratados na hora; o que não passa por aqui (editar as

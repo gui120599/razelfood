@@ -7,6 +7,7 @@ use App\Models\Client;
 use App\Services\Address\ViaCepClient;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Reactive;
 use Livewire\Component;
 
 /**
@@ -19,6 +20,13 @@ use Livewire\Component;
  */
 class ClientLookup extends Component
 {
+    /**
+     * A opção de entrega escolhida exige endereço? Vem da página (AttendOrder) a cada render: o bloco
+     * de endereço só aparece nesse caso, como na origem.
+     */
+    #[Reactive]
+    public bool $requiresAddress = false;
+
     public string $phone = '';
 
     public string $name = '';

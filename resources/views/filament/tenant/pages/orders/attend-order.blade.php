@@ -1,172 +1,87 @@
 <x-filament-panels::page>
-    <div class="grid grid-cols-1 gap-6 xl:grid-cols-5">
-        <div class="space-y-4 xl:col-span-3">
-            <div class="rounded-xl border border-gray-200 bg-white p-4 dark:border-white/10 dark:bg-white/5">
-                <h2 class="mb-3 flex items-center gap-2 font-heading text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                    <x-heroicon-o-squares-2x2 class="h-4 w-4" />
-                    Catálogo
-                </h2>
-                @livewire('tenant-order-product-catalog', key('attend-order-catalog'))
-            </div>
+    @if ($this->paymentMismatch)
+        <div class="flex items-start gap-2 px-4 py-3 mb-4 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-xl text-amber-700 dark:text-amber-400 text-sm">
+            <x-heroicon-o-exclamation-triangle class="h-5 w-5 shrink-0" />
+            <span>Forma de pagamento combinada não bate com o total — revise e salve.</span>
+        </div>
+    @endif
+
+    {{-- Tipo de atendimento: segue a opção de entrega escolhida (retirada não tem endereço nem taxa). --}}
+    @php $serviceType = $this->serviceType; @endphp
+    <div class="mb-4 flex flex-wrap items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+        <span>Tipo de atendimento</span>
+        <span class="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-primary-600 px-3 font-semibold text-white">
+            <x-filament::icon :icon="$serviceType['icon']" class="h-4 w-4" />
+            {{ $serviceType['label'] }}
+        </span>
+        @if ($currentOrder)
+            <span class="text-gray-500 dark:text-gray-400">Pedido nº {{ $currentOrder->id }}</span>
+        @endif
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-5 gap-4">
+        <div class="xl:col-span-3">
+            @livewire('tenant-order-product-catalog', key('attend-order-catalog'))
         </div>
 
-        <div class="space-y-4 xl:col-span-2">
-            <div class="rounded-xl border border-gray-200 bg-white p-4 dark:border-white/10 dark:bg-white/5">
-                <h2 class="mb-3 flex items-center gap-2 font-heading text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                    <x-heroicon-o-shopping-cart class="h-4 w-4" />
+        <div class="xl:col-span-2 space-y-4">
+            {{-- Carrinho: card próprio da página, acima do Cliente. As ações (+/-, editar, remover) são da
+                 própria AttendOrder, que é a dona do carrinho (a regra de preço continua no servidor). --}}
+            <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-white/10 p-4">
+                <h3 class="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    <x-heroicon-o-shopping-cart class="h-4 w-4 text-primary-600" />
                     Carrinho
-                </h2>
+                    <span class="font-normal normal-case text-gray-400 dark:text-gray-500">({{ count($this->cartLines) }})</span>
+                </h3>
 
                 @if (empty($this->cartLines))
-                    <p class="py-6 text-center text-sm text-gray-500 dark:text-gray-500">Nenhum item adicionado ainda.</p>
+                    <p class="py-6 text-center text-sm text-gray-400 dark:text-gray-500">Nenhum item adicionado ainda.</p>
                 @else
-                    <ul class="divide-y divide-gray-200 dark:divide-white/10">
+                    <div class="divide-y divide-gray-100 dark:divide-white/10 max-h-96 overflow-y-auto">
                         @foreach ($this->cartLines as $line)
-                            <li wire:key="cart-line-{{ $line['index'] }}" class="flex items-start gap-3 py-2.5">
-                                <div class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gray-100 dark:bg-white/5">
-                                    @if ($line['image_url'])
-                                        <img src="{{ $line['image_url'] }}" alt="" class="h-full w-full object-cover">
-                                    @else
-                                        <x-heroicon-o-photo class="h-5 w-5 text-gray-400 dark:text-gray-600" />
-                                    @endif
-                                </div>
-
-                                <div class="min-w-0 flex-1">
-                                    <div class="flex items-center gap-1.5">
-                                        @if ($line['category_name'])
-                                            <span class="rounded-full border border-gray-200 bg-gray-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-gray-500 dark:border-white/10 dark:bg-white/10 dark:text-gray-400">{{ $line['category_name'] }}</span>
-                                        @endif
-                                        @if ($line['is_combo'])
-                                            <span class="rounded-full border border-rf-teal-500/30 bg-rf-teal-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-rf-teal-500 dark:text-rf-teal-300">Combo</span>
-                                        @endif
-                                        <span class="truncate text-sm font-medium text-gray-900 dark:text-white">{{ $line['name'] }}</span>
-                                    </div>
-
-                                    <div class="mt-1 flex items-center gap-2">
-                                        <button type="button" wire:click="updateItemQuantity({{ $line['index'] }}, {{ $line['quantity'] - 1 }})" class="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/20">
-                                            <x-heroicon-o-minus class="h-3 w-3" />
-                                        </button>
-                                        <span class="w-5 text-center text-sm text-gray-700 dark:text-gray-200">{{ $line['quantity'] }}</span>
-                                        <button type="button" wire:click="updateItemQuantity({{ $line['index'] }}, {{ $line['quantity'] + 1 }})" class="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/20">
-                                            <x-heroicon-o-plus class="h-3 w-3" />
-                                        </button>
-
-                                        <span class="text-xs text-gray-500 dark:text-gray-500">{{ \Illuminate\Support\Number::currency($line['unit_price'], in: 'BRL', locale: 'pt_BR') }} cada</span>
-                                    </div>
-
-                                    @foreach ($line['addons_display'] as $addonLine)
-                                        <p class="mt-0.5 truncate text-xs text-gray-400 dark:text-gray-500">+ {{ $addonLine }}</p>
-                                    @endforeach
-
-                                    @foreach ($line['gifts_display'] ?? [] as $giftLine)
-                                        <p class="mt-0.5 truncate text-xs font-semibold text-emerald-600 dark:text-emerald-400">{{ $giftLine }} — grátis</p>
-                                    @endforeach
-
-                                    <div x-data="{ open: @js(filled($line['note'])) }" class="mt-1">
-                                        <div class="flex flex-wrap items-center gap-3">
-                                            <button
-                                                type="button"
-                                                x-show="! open"
-                                                x-on:click="open = true; $nextTick(() => $refs.noteInput?.focus())"
-                                                class="flex items-center gap-1 text-xs font-medium text-rf-orange-600 hover:text-rf-orange-700"
-                                            >
-                                                <x-heroicon-o-chat-bubble-left-ellipsis class="h-3.5 w-3.5" />
-                                                Observação
-                                            </button>
-
-                                            @if ($line['has_addons'])
-                                                <button
-                                                    type="button"
-                                                    wire:click="editLineAddons({{ $line['index'] }})"
-                                                    class="flex items-center gap-1 text-xs font-medium text-rf-orange-600 hover:text-rf-orange-700"
-                                                >
-                                                    <x-heroicon-o-plus-circle class="h-3.5 w-3.5" />
-                                                    Adicionais
-                                                </button>
-                                            @endif
-                                        </div>
-
-                                        <input
-                                            x-show="open"
-                                            x-ref="noteInput"
-                                            type="text"
-                                            value="{{ $line['note'] }}"
-                                            wire:change="updateItemNote({{ $line['index'] }}, $event.target.value)"
-                                            placeholder="Obs.: sem cebola, bem passado..."
-                                            class="fi-input mt-1 block w-full rounded-lg border border-gray-300 bg-gray-50 px-2 py-1 text-xs text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
-                                        >
-                                    </div>
-                                </div>
-
-                                <div class="flex flex-col items-end gap-1.5">
-                                    <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ \Illuminate\Support\Number::currency($line['line_total'], in: 'BRL', locale: 'pt_BR') }}</span>
-                                    <button type="button" wire:click="removeItem({{ $line['index'] }})" class="text-gray-400 hover:text-rf-danger">
-                                        <x-heroicon-o-trash class="h-4 w-4" />
-                                    </button>
-                                </div>
-                            </li>
+                            @include('filament.tenant.pages.orders.attend-order.cart-line', ['line' => $line])
                         @endforeach
-                    </ul>
+                    </div>
                 @endif
             </div>
 
-            <div class="rounded-xl border border-gray-200 bg-white p-4 dark:border-white/10 dark:bg-white/5">
-                <h2 class="mb-3 flex items-center gap-2 font-heading text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                    <x-heroicon-o-user class="h-4 w-4" />
-                    Cliente
-                </h2>
-                @livewire('tenant-order-client-lookup', ['initial' => $clientData], key('attend-order-client'))
+            @livewire('tenant-order-client-lookup', ['initial' => $clientData, 'requiresAddress' => $serviceType['requires_address']], key('attend-order-client'))
+
+            @livewire('tenant-order-fulfillment-picker', ['initial' => $fulfillmentData, 'total' => $this->grandTotalPreview], key('attend-order-fulfillment'))
+
+            @if (($preview = $this->deliveryFeePreview) && $preview['blocked'])
+                <p class="px-1 text-xs text-rf-danger">{{ $preview['message'] }}</p>
+            @endif
+
+            <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-white/10 p-4 space-y-2">
+                <label class="text-xs text-gray-500 dark:text-gray-400">Observação</label>
+                <textarea wire:model.live.debounce.500ms="orderNotes" rows="2" placeholder="Alguma observação sobre o pedido..."
+                    class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-white/10 rounded-lg bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"></textarea>
             </div>
 
-            <div class="rounded-xl border border-gray-200 bg-white p-4 dark:border-white/10 dark:bg-white/5">
-                <h2 class="mb-3 flex items-center gap-2 font-heading text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                    <x-heroicon-o-truck class="h-4 w-4" />
-                    Entrega e pagamento
-                </h2>
-                @livewire('tenant-order-fulfillment-picker', ['initial' => $fulfillmentData, 'total' => $this->grandTotalPreview], key('attend-order-fulfillment'))
+            {{-- Resumo financeiro --}}
+            <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-white/10 p-4 space-y-3">
+                <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Resumo financeiro</h3>
 
-                @if ($preview = $this->deliveryFeePreview)
-                    @if ($preview['blocked'])
-                        <p class="mt-3 text-xs text-rf-danger">{{ $preview['message'] }}</p>
-                    @endif
-                @endif
-            </div>
-
-            <div class="rounded-xl border border-gray-200 bg-white p-4 dark:border-white/10 dark:bg-white/5">
-                <h2 class="mb-3 flex items-center gap-2 font-heading text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                    <x-heroicon-o-chat-bubble-left-ellipsis class="h-4 w-4" />
-                    Observação do pedido
-                </h2>
-                <textarea
-                    wire:model.live.debounce.500ms="orderNotes"
-                    rows="2"
-                    placeholder="Ex.: entregar na portaria, sem cebola em tudo, etc."
-                    class="fi-input block w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-rf-orange-600 dark:border-none dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
-                ></textarea>
-            </div>
-
-            <div class="rounded-xl border border-gray-200 bg-white p-4 dark:border-white/10 dark:bg-white/5">
                 <dl class="space-y-1.5 text-sm">
-                    <div class="flex justify-between text-gray-500 dark:text-gray-400">
+                    <div class="flex justify-between text-gray-600 dark:text-gray-300">
                         <dt>Itens</dt>
-                        <dd>{{ \Illuminate\Support\Number::currency($this->cartTotal, in: 'BRL', locale: 'pt_BR') }}</dd>
+                        <dd>R$ {{ number_format($this->cartTotal, 2, ',', '.') }}</dd>
                     </div>
-                    <div class="flex justify-between text-gray-500 dark:text-gray-400">
-                        <dt>Entrega</dt>
-                        <dd>{{ \Illuminate\Support\Number::currency($this->deliveryFeePreviewAmount, in: 'BRL', locale: 'pt_BR') }}</dd>
-                    </div>
-                    <div class="flex justify-between border-t border-gray-200 pt-1.5 font-heading text-base font-bold text-rf-orange-600 dark:border-white/10">
+                    @if ($serviceType['requires_address'] || $this->deliveryFeePreviewAmount > 0)
+                        <div class="flex justify-between text-gray-600 dark:text-gray-300">
+                            <dt>Taxa de entrega</dt>
+                            <dd>{{ $this->deliveryFeePreviewAmount > 0 ? 'R$ '.number_format($this->deliveryFeePreviewAmount, 2, ',', '.') : 'Grátis' }}</dd>
+                        </div>
+                    @endif
+                    <div class="flex justify-between pt-1.5 mt-1 border-t border-gray-100 dark:border-white/10 text-base font-bold text-gray-800 dark:text-gray-100">
                         <dt>Total</dt>
-                        <dd>{{ \Illuminate\Support\Number::currency($this->grandTotalPreview, in: 'BRL', locale: 'pt_BR') }}</dd>
+                        <dd class="text-primary-600 dark:text-primary-400">R$ {{ number_format($this->grandTotalPreview, 2, ',', '.') }}</dd>
                     </div>
                 </dl>
 
-                <button
-                    type="button"
-                    wire:click="save"
-                    wire:loading.attr="disabled"
-                    class="mt-4 w-full rounded-lg bg-rf-orange-600 py-3 text-sm font-semibold text-white transition hover:bg-rf-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
+                <button type="button" wire:click="save" wire:loading.attr="disabled"
+                    class="w-full rounded-lg bg-primary-600 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50">
                     {{ $currentOrder ? 'Salvar alterações' : 'Criar pedido' }}
                 </button>
             </div>

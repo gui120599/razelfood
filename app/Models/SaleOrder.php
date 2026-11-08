@@ -20,6 +20,7 @@ class SaleOrder extends TenantScopedModel
         'order_status',
         'client_name',
         'order_total',
+        'delivery_fee_charged',
     ];
 
     protected function casts(): array
@@ -27,6 +28,7 @@ class SaleOrder extends TenantScopedModel
         return [
             'order_status' => OrderStatus::class,
             'order_total' => 'decimal:2',
+            'delivery_fee_charged' => 'decimal:2',
         ];
     }
 

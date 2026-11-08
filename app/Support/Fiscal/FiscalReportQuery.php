@@ -21,7 +21,7 @@ use Throwable;
  * enviado à NFE.io), então sempre bate com a nota mesmo que o catálogo mude depois.
  * Consulta sempre pelo tenant informado (não depende do tenant "atual").
  *
- * @phpstan-type Row array{label: string, items: ?int, quantity: ?int, items_cents: ?int, others_cents: ?int, total_cents: int}
+ * @phpstan-type Row array{label: string, items: ?int, quantity: ?int, items_cents: ?int, others_cents: ?int, discount_cents: ?int, total_cents: int}
  */
 class FiscalReportQuery
 {
@@ -154,23 +154,25 @@ class FiscalReportQuery
     }
 
     /**
-     * @return array{notes: int, items: int, items_cents: int, others_cents: int, total_cents: int}
+     * @return array{notes: int, items: int, items_cents: int, others_cents: int, discount_cents: int, total_cents: int}
      */
     public function summary(): array
     {
         $row = $this->itemsBase()
-            ->selectRaw('COUNT(i.id) as items, ROUND(COALESCE(SUM(i.total_amount), 0) * 100) as items_cents, ROUND(COALESCE(SUM(i.others_amount), 0) * 100) as others_cents')
+            ->selectRaw('COUNT(i.id) as items, ROUND(COALESCE(SUM(i.total_amount), 0) * 100) as items_cents, ROUND(COALESCE(SUM(i.others_amount), 0) * 100) as others_cents, ROUND(COALESCE(SUM(i.discount_amount), 0) * 100) as discount_cents')
             ->first();
 
         $items = (int) $row->items_cents;
         $others = (int) $row->others_cents;
+        $discount = (int) $row->discount_cents;
 
         return [
             'notes' => $this->notesTotals()['count'],
             'items' => (int) $row->items,
             'items_cents' => $items,
             'others_cents' => $others,
-            'total_cents' => $items + $others,
+            'discount_cents' => $discount,
+            'total_cents' => $items + $others - $discount,
         ];
     }
 
@@ -231,6 +233,7 @@ class FiscalReportQuery
             ['Itens', $summary['items']],
             ['Valor dos itens', $number($summary['items_cents'])],
             ['Adicionais e frete', $number($summary['others_cents'])],
+            ['Descontos', $number($summary['discount_cents'])],
             ['Total das notas', $number($summary['total_cents'])],
         ];
 
@@ -246,7 +249,7 @@ class FiscalReportQuery
             $group = $this->group($dimension);
             $lines[] = [];
             $lines[] = [self::TITLES[$dimension]];
-            $lines[] = [self::DIMENSIONS[$dimension], 'Itens', 'Quantidade', 'Valor dos itens', 'Adicionais e frete', 'Total'];
+            $lines[] = [self::DIMENSIONS[$dimension], 'Itens', 'Quantidade', 'Valor dos itens', 'Adicionais e frete', 'Desconto', 'Total'];
 
             foreach ($group['rows']->push($group['total']) as $row) {
                 $lines[] = [
@@ -255,6 +258,7 @@ class FiscalReportQuery
                     $row['quantity'] ?? '',
                     $row['items_cents'] === null ? '' : $number($row['items_cents']),
                     $row['others_cents'] === null ? '' : $number($row['others_cents']),
+                    $row['discount_cents'] === null ? '' : $number($row['discount_cents']),
                     $number($row['total_cents']),
                 ];
             }
@@ -302,9 +306,9 @@ class FiscalReportQuery
         };
 
         return $this->itemsBase()
-            ->selectRaw("{$label} as label, COUNT(i.id) as items, COALESCE(SUM(i.quantity), 0) as quantity, ROUND(COALESCE(SUM(i.total_amount), 0) * 100) as items_cents, ROUND(COALESCE(SUM(i.others_amount), 0) * 100) as others_cents")
+            ->selectRaw("{$label} as label, COUNT(i.id) as items, COALESCE(SUM(i.quantity), 0) as quantity, ROUND(COALESCE(SUM(i.total_amount), 0) * 100) as items_cents, ROUND(COALESCE(SUM(i.others_amount), 0) * 100) as others_cents, ROUND(COALESCE(SUM(i.discount_amount), 0) * 100) as discount_cents")
             ->groupBy(DB::raw($label))
-            ->orderByRaw(in_array($dimension, ['day', 'ncm'], true) ? 'label' : '(items_cents + others_cents) DESC')
+            ->orderByRaw(in_array($dimension, ['day', 'ncm'], true) ? 'label' : '(items_cents + others_cents - discount_cents) DESC')
             ->get()
             ->map(fn (object $row): array => [
                 'label' => $dimension === 'day' ? date('d/m/Y', strtotime((string) $row->label)) : (string) $row->label,
@@ -312,7 +316,8 @@ class FiscalReportQuery
                 'quantity' => (int) $row->quantity,
                 'items_cents' => (int) $row->items_cents,
                 'others_cents' => (int) $row->others_cents,
-                'total_cents' => (int) $row->items_cents + (int) $row->others_cents,
+                'discount_cents' => (int) $row->discount_cents,
+                'total_cents' => (int) $row->items_cents + (int) $row->others_cents - (int) $row->discount_cents,
             ])
             ->values();
     }
@@ -341,6 +346,7 @@ class FiscalReportQuery
                 'quantity' => null,
                 'items_cents' => null,
                 'others_cents' => null,
+                'discount_cents' => null,
                 'total_cents' => (int) $row->total_cents,
             ])
             ->values();
@@ -358,6 +364,7 @@ class FiscalReportQuery
             'quantity' => $paymentOnly ? null : (int) $rows->sum('quantity'),
             'items_cents' => $paymentOnly ? null : (int) $rows->sum('items_cents'),
             'others_cents' => $paymentOnly ? null : (int) $rows->sum('others_cents'),
+            'discount_cents' => $paymentOnly ? null : (int) $rows->sum('discount_cents'),
             'total_cents' => (int) $rows->sum('total_cents'),
         ];
     }

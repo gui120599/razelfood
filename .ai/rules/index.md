@@ -17,6 +17,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 | tests/Feature/**/*.php | .ai/rules/feature.md |
 | app/Filament/Resources/** | .ai/rules/filament-resources.md |
 | app/Filament/Support/EstablishmentDocumentFields.php, app/Filament/Support/InputMasks.php | .ai/rules/filament-support.md |
+| app/Filament/Tenant/Livewire/Orders/{AddonPickerModal,FlavorPickerModal,ProductCatalogSelector}.php | .ai/rules/filament-tenant-livewire-orders.md |
 | resources/css/filament/**/*.css | .ai/rules/filament.md |
 | app/{Actions/Fiscal/BuildNfcePayload.php,Support/Fiscal/BuyerResolver.php,Support/Fiscal/FlavorFraction.php} | .ai/rules/fiscal-fiscal.md |
 | {app/Support/Fiscal/**,app/Models/TenantFiscalSettings.php} | .ai/rules/fiscal-models.md |
@@ -31,17 +32,23 @@ Before planning or editing, find the row whose globs match the file's path and r
 | app/Models/*.php, app/Models/Tenant.php | .ai/rules/models.md |
 | resources/views/{orders/ticket.blade.php,components/reports/print-layout.blade.php,reports/*-print.blade.php} | .ai/rules/orders-reports.md |
 | app/Filament/Tenant/{Pages,Livewire}/Orders/** | .ai/rules/orders.md |
+| app/Filament/Tenant/Pages/Sales/** | .ai/rules/pages-sales.md |
 | app/Filament/Tenant/Pages/**/*.php | .ai/rules/pages.md |
 | {app/Filament/Tenant/Pages/Sales/**,app/Filament/Tenant/Resources/Sales/**,app/Policies/SalePolicy.php} | .ai/rules/policies.md |
 | app/{Actions/Menu/ResolvePriceForCartLine.php,Actions/Orders/Support/CartStockAndPromotionLedger.php,Models/ProductGift.php,Filament/Tenant/Resources/Products/RelationManagers/GiftsRelationManager.php} | .ai/rules/products-relation-managers.md |
+| {app/Filament/Tenant/Pages/Sales/**,app/Filament/Tenant/Livewire/**,app/Filament/Tenant/Resources/Products/**,routes/web.php} | .ai/rules/products.md |
 | app/Filament/Tenant/Resources/Categories/RelationManagers/FlavorQuantityOptionsRelationManager.php | .ai/rules/relation-managers.md |
 | app/Filament/Tenant/Pages/{Dashboard.php,Reports.php},app/Filament/Tenant/Widgets/Reports/** | .ai/rules/reports.md |
 | app/Filament/Tenant/Resources/**/*Resource.php | .ai/rules/resources.md |
 | routes/web.php | .ai/rules/routes.md |
+| {app/Actions/Sales/**,app/Support/Sales/**,app/Actions/Fiscal/BuildNfcePayload.php} | .ai/rules/sales-actions-fiscal.md |
 | app/{Actions/Fiscal/**,Actions/Sales/CancelSaleWithFiscalDocument.php,Jobs/CompleteSaleCancellationJob.php,Console/Commands/SyncFiscalDocumentsCommand.php} | .ai/rules/sales-commands.md |
+| {app/Actions/Sales/**,app/Support/Sales/**,app/Models/Sale.php,app/Models/Order.php} | .ai/rules/sales-models-models.md |
+| {app/Filament/Tenant/Pages/Sales/NewSale.php,app/Filament/Tenant/Livewire/Sales/**,resources/views/filament/tenant/pages/sales/new-sale*,resources/views/filament/tenant/livewire/sales/**,app/Support/Sales/SaleCartLines.php} | .ai/rules/sales.md |
 | scripts/promote-producao.sh | .ai/rules/scripts.md |
 | app/{Actions/Menu/ResolvePriceForCartLine.php,Actions/Orders/Support/CartStockAndPromotionLedger.php,Models/ProductGift.php,Support/Orders/GiftLineLabel.php} | .ai/rules/support-orders.md |
 | app/Actions/Orders/Support/CartStockAndPromotionLedger.php | .ai/rules/support.md |
+| resources/views/filament/tenant/livewire/orders/** | .ai/rules/tenant-livewire-orders.md |
 | app/{Actions/Orders/AdvanceOrderStatus.php,Filament/Tenant/Support/OrderStatusActions.php,Filament/Tenant/Pages/Kitchen.php,Models/Order.php} | .ai/rules/tenant-pages.md |
 | {app/Filament/Support/FiscalSettingsFields.php,app/Filament/Tenant/Pages/FiscalSettings.php,app/Filament/Resources/Tenants/**} | .ai/rules/tenants.md |
 | app/Filament/Tenant/Resources/Users/** | .ai/rules/users.md |

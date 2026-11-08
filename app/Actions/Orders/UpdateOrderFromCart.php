@@ -75,6 +75,10 @@ class UpdateOrderFromCart
                 throw new CheckoutException("Este pedido já foi cobrado na venda #{$order->sale?->number} e não pode ser alterado. Cancele a venda antes.");
             }
 
+            if ($order->hasItemsInSale()) {
+                throw new CheckoutException('Este pedido tem itens em uma venda e não pode ser alterado. Tire os itens da venda ou cancele a venda antes.');
+            }
+
             $order->loadMissing('items');
 
             $resolvePriceForCartLine = app(ResolvePriceForCartLine::class);

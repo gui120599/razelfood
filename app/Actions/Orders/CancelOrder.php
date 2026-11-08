@@ -37,6 +37,10 @@ class CancelOrder
                 throw new OrderTransitionException("Pedido #{$order->id} já foi cobrado na venda #{$order->sale?->number}. Cancele a venda antes de cancelar o pedido.");
             }
 
+            if ($order->hasItemsInSale()) {
+                throw new OrderTransitionException("Pedido #{$order->id} tem itens em uma venda e não pode ser cancelado. Tire os itens da venda ou cancele a venda antes.");
+            }
+
             if (! $order->status->canBeCancelled()) {
                 throw new OrderTransitionException("Pedido #{$order->id} não pode mais ser cancelado (está \"{$order->status->label()}\").");
             }

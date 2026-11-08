@@ -18,6 +18,9 @@ Schedule::command('promotions:reset-recurring')->everyFiveMinutes()->withoutOver
 // Acerta a data de ativação do PDV por tenant (rede de segurança dos observers).
 Schedule::command('sales:sync-pdv-activation')->everyFiveMinutes()->withoutOverlapping();
 
+// Rascunhos de venda vazios parados (o descarte ao sair da tela pode falhar). Tenant-aware.
+Schedule::command('sales:discard-empty-drafts')->everyFifteenMinutes()->withoutOverlapping(30);
+
 // Reconcilia com a NFE.io as NFC-e que ficaram paradas (webhook perdido). A cada 10 min,
 // compatível com o cron de 1 min da hospedagem compartilhada; só tenants com a feature `nfe_emissao`.
 Schedule::command('fiscal:sync-status')->everyTenMinutes()->withoutOverlapping(30);

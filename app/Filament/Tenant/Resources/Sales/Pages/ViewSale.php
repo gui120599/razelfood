@@ -21,6 +21,7 @@ class ViewSale extends ViewRecord
             FiscalDocumentActions::cancel(),
             FiscalDocumentActions::refresh(),
             FiscalDocumentActions::danfe(),
+            SaleActions::resume(),
             SaleActions::discardPendingCancellation(),
             SaleActions::cancel(),
         ];
