@@ -97,7 +97,7 @@ class ProductCatalogSelector extends Component
             })
             ->when($this->search !== '', fn (Builder $query) => $query->where('name', 'like', "%{$this->search}%"))
             ->with('category:id,name')
-            ->where('is_visible', true)
+            ->where('show_in_waiter_menu', true)
             ->where(function (Builder $query) {
                 $query->where('controls_stock', false)
                     ->orWhere('stock_quantity', '>', 0)

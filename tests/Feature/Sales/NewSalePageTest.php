@@ -10,9 +10,7 @@ use App\Actions\Sales\StartSale;
 use App\Actions\Tenants\SeedDefaultTenantRoles;
 use App\Enums\SaleStatus;
 use App\Filament\Tenant\Livewire\Sales\SaleProductSelector;
-use App\Filament\Tenant\Pages\Sales\CloseAccount;
 use App\Filament\Tenant\Pages\Sales\NewSale;
-use App\Filament\Tenant\Pages\Sales\PendingAccounts;
 use App\Filament\Tenant\Resources\Sales\Pages\ListSales;
 use App\Models\Client;
 use App\Models\Order;
@@ -134,15 +132,6 @@ class NewSalePageTest extends TestCase
 
         $this->assertFalse(NewSale::canAccess());
         Livewire::test(NewSale::class)->assertForbidden();
-    }
-
-    public function test_the_old_urls_redirect_to_the_new_screen(): void
-    {
-        $this->actingAsRole('Caixa');
-
-        Livewire::test(PendingAccounts::class)->assertRedirect(NewSale::getUrl());
-        Livewire::test(CloseAccount::class)->assertRedirect(NewSale::getUrl());
-        Livewire::withQueryParams(['orders' => '3,4'])->test(CloseAccount::class)->assertRedirect(NewSale::getUrl().'?orders=3%2C4');
     }
 
     public function test_the_requested_orders_of_the_old_url_are_launched_in_a_new_draft(): void

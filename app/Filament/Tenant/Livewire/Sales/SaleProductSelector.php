@@ -27,7 +27,7 @@ class SaleProductSelector extends Component
     #[Computed]
     public function categories(): Collection
     {
-        return Category::query()->whereHas('products')->orderBy('display_order')->orderBy('name')->get();
+        return Category::query()->whereHas('products', fn ($products) => $products->where('show_in_waiter_menu', true))->orderBy('display_order')->orderBy('name')->get();
     }
 
     /**
@@ -37,6 +37,7 @@ class SaleProductSelector extends Component
     public function products(): Collection
     {
         return Product::query()->with('category')
+            ->where('show_in_waiter_menu', true)
             ->when($this->search !== '', fn ($query) => $query->where('name', 'like', '%'.addcslashes($this->search, '%_\\').'%'))
             ->when($this->categoryId, fn ($query) => $query->where('category_id', $this->categoryId))
             ->orderBy('display_order')

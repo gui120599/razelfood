@@ -155,7 +155,7 @@ class FlavorPickerModal extends Component
         }
 
         return Product::where('category_id', $this->comboBuilder['category_id'])
-            ->where('is_visible', true)
+            ->where('show_in_waiter_menu', true)
             ->orderBy('display_order')
             ->get();
     }

@@ -69,6 +69,9 @@ class ProductsTable
                 IconColumn::make('is_visible')
                     ->label('Visível')
                     ->boolean(),
+                IconColumn::make('show_in_waiter_menu')
+                    ->label('Garçom')
+                    ->boolean(),
                 TextColumn::make('sales_count')
                     ->label('Vendidos')
                     ->sortable(),

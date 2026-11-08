@@ -9,9 +9,7 @@ use App\Actions\Tenants\SeedDefaultTenantRoles;
 use App\Enums\OrderPaymentStatus;
 use App\Enums\OrderStatus;
 use App\Enums\SaleStatus;
-use App\Filament\Tenant\Pages\Sales\CloseAccount;
 use App\Filament\Tenant\Pages\Sales\NewSale;
-use App\Filament\Tenant\Pages\Sales\PendingAccounts;
 use App\Filament\Tenant\Resources\Orders\Pages\ListOrders;
 use App\Filament\Tenant\Resources\Sales\Pages\ListSales;
 use App\Filament\Tenant\Resources\Sales\Pages\ViewSale;
@@ -125,15 +123,17 @@ class SalesPagesTest extends TestCase
             ->assertDontSee("Pedido #{$foreign->id}");
     }
 
-    public function test_the_old_pending_accounts_and_close_account_urls_lead_to_the_new_screen(): void
+    public function test_the_old_urls_redirect_to_the_new_screen_carrying_the_requested_orders(): void
     {
         $this->actingAsRole('Caixa');
         $a = $this->makeSaleOrder($this->tenant, 40);
         $b = $this->makeSaleOrder($this->tenant, 30);
 
-        Livewire::test(PendingAccounts::class)->assertRedirect(NewSale::getUrl());
-        Livewire::withQueryParams(['orders' => "{$a->id},{$b->id}"])->test(CloseAccount::class)
-            ->assertRedirect(NewSale::getUrl().'?orders='.urlencode("{$a->id},{$b->id}"));
+        $this->get('/painel/lazzopizza/contas-a-fechar')->assertRedirect('/painel/lazzopizza/vendas/operar');
+        $this->get('/painel/lazzopizza/fechar-conta')->assertRedirect('/painel/lazzopizza/vendas/operar');
+        $this->get("/painel/lazzopizza/fechar-conta?orders={$a->id},{$b->id}")
+            ->assertRedirect('/painel/lazzopizza/vendas/operar?orders='.urlencode("{$a->id},{$b->id}"));
+        $this->get('/painel/lazzopizza/outra-tela')->assertNotFound();
     }
 
     // ---- Nova Venda: fechamento de conta ---------------------------------
@@ -358,8 +358,7 @@ class SalesPagesTest extends TestCase
         foreach (['Caixa' => true, 'Gerente' => true, 'Atendente' => false, 'Entregador' => false] as $role => $allowed) {
             $this->actingAsRole($role);
 
-            $this->assertSame($allowed, PendingAccounts::canAccess(), "PendingAccounts para {$role}");
-            $this->assertSame($allowed, CloseAccount::canAccess(), "CloseAccount para {$role}");
+            $this->assertSame($allowed, NewSale::canAccess(), "NewSale para {$role}");
             $this->assertSame($allowed, SaleResource::canAccess(), "SaleResource para {$role}");
         }
     }
@@ -368,8 +367,7 @@ class SalesPagesTest extends TestCase
     {
         $this->actingAsRole('Atendente');
 
-        Livewire::test(PendingAccounts::class)->assertForbidden();
-        Livewire::test(CloseAccount::class)->assertForbidden();
+        Livewire::test(NewSale::class)->assertForbidden();
         Livewire::test(ListSales::class)->assertForbidden();
     }
 
@@ -378,12 +376,8 @@ class SalesPagesTest extends TestCase
         $this->actingAsRole('Admin');
 
         $this->assertTrue(NewSale::canAccess());
-        $this->assertTrue(PendingAccounts::canAccess());
-        $this->assertTrue(CloseAccount::canAccess());
         $this->assertTrue(SaleResource::canAccess());
         $this->assertTrue(NewSale::shouldRegisterNavigation());
-        $this->assertFalse(PendingAccounts::shouldRegisterNavigation(), 'As telas antigas saíram do menu.');
-        $this->assertFalse(CloseAccount::shouldRegisterNavigation(), 'A tela de fechamento não aparece no menu.');
     }
 
     public function test_tenant_without_pdv_gets_nothing_new_even_as_admin(): void
@@ -395,13 +389,12 @@ class SalesPagesTest extends TestCase
         $admin->assignRole('Admin');
         $this->actingAs($admin);
 
-        $this->assertFalse(PendingAccounts::canAccess());
-        $this->assertFalse(PendingAccounts::shouldRegisterNavigation());
-        $this->assertFalse(CloseAccount::canAccess());
+        $this->assertFalse(NewSale::canAccess());
+        $this->assertFalse(NewSale::shouldRegisterNavigation());
         $this->assertFalse(SaleResource::canAccess());
         $this->assertFalse(SaleResource::shouldRegisterNavigation());
 
-        Livewire::test(PendingAccounts::class)->assertForbidden();
+        Livewire::test(NewSale::class)->assertForbidden();
     }
 
     // ---- Histórico de pedidos --------------------------------------------

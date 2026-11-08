@@ -74,6 +74,10 @@ class ProductForm
                     Toggle::make('is_visible')
                         ->label('Visível no cardápio')
                         ->default(true),
+                    Toggle::make('show_in_waiter_menu')
+                        ->label('Mostrar no cardápio do garçom')
+                        ->helperText('Uso interno: lista o produto em Atender Pedido e Nova Venda, mesmo que ele não apareça no cardápio público.')
+                        ->default(true),
                     Toggle::make('bestseller_eligible')
                         ->label('Elegível a "mais vendidos"'),
                     Toggle::make('controls_stock')

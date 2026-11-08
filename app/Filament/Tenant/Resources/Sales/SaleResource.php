@@ -18,7 +18,7 @@ use UnitEnum;
 
 /**
  * Vendas (fechamento de conta, Fase 1.0). Só leitura + cancelamento: a venda
- * nasce em "Fechar conta" (CloseAccount → FinalizeSale), nunca por formulário.
+ * nasce na tela Nova Venda (NewSale → FinalizeOpenSale), nunca por formulário.
  */
 class SaleResource extends Resource
 {
