@@ -1,31 +1,40 @@
 @php
+    // Rótulos iguais aos do Painel de Pedidos original; as chaves (valores) são o contrato de Kitchen::quickFilter.
     $quickFilters = [
         'all' => 'Todos',
         'delivery' => 'Delivery',
         'pickup' => 'Retirada',
-        'dine_in' => 'Consumo local',
-        'pending' => 'Pendentes',
-        'preparing' => 'Em preparo',
+        'dine_in' => 'Mesa',
+        'pending' => 'Novos',
+        'preparing' => 'Preparando',
         'ready' => 'Prontos',
         'in_transit' => 'Em entrega',
         'finished' => 'Finalizados',
     ];
 
-    $columns = $this->boardColumns();
+    // Colunas do fluxo + a última ("Finalizados": Entregue e Finalizado juntos, marcada por Delivered).
+    $columns = [...$this->boardColumns(), \App\Enums\OrderStatus::Delivered];
     $finishedOrders = $this->ordersByStatus->get(\App\Enums\OrderStatus::Delivered->value, collect())
         ->concat($this->ordersByStatus->get(\App\Enums\OrderStatus::Finished->value, collect()))
         ->sortByDesc('opened_at')
         ->values();
+    $canOpenAttendance = $this->canOpenAttendance();
 @endphp
 
 <x-filament-panels::page>
-    <div class="space-y-3">
+    <div
+        x-data="{
+            irPara(id) {
+                document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+            },
+        }"
+    >
         {{-- Barra de filtros — uma linha só, compacta --}}
-        <div class="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-2.5 dark:border-white/10 dark:bg-gray-900">
+        <div class="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-2.5 dark:border-white/10 dark:bg-gray-900">
             <input
                 type="search"
                 wire:model.live.debounce.400ms="search"
-                placeholder="Buscar pedido, cliente ou telefone..."
+                placeholder="Buscar pedido, cliente ou celular..."
                 class="fi-input min-w-[180px] flex-1 rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-800"
             >
 
@@ -44,12 +53,14 @@
                 </select>
             @endif
 
-            <select wire:model.live="productionLineFilter" class="fi-select rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-800">
-                <option value="">Todas as linhas</option>
-                @foreach ($this->productionLines as $id => $name)
-                    <option value="{{ $id }}">{{ $name }}</option>
-                @endforeach
-            </select>
+            @if ($this->productionLines->isNotEmpty())
+                <select wire:model.live="productionLineFilter" class="fi-select rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-800">
+                    <option value="">Todas as linhas</option>
+                    @foreach ($this->productionLines as $id => $name)
+                        <option value="{{ $id }}">{{ $name }}</option>
+                    @endforeach
+                </select>
+            @endif
 
             <div class="flex items-center gap-1">
                 <input type="date" wire:model.live="periodFrom" class="fi-input w-32 rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-800">
@@ -62,11 +73,11 @@
                 wire:click="$toggle('onlyLate')"
                 @class([
                     'shrink-0 rounded-lg border px-3 py-2 text-xs font-semibold',
-                    'border-red-300 bg-red-50 text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-400' => $onlyLate,
+                    'border-danger-300 bg-danger-50 text-danger-700 dark:border-danger-500/40 dark:bg-danger-500/10 dark:text-danger-400' => $onlyLate,
                     'border-gray-300 text-gray-600 dark:border-gray-600 dark:text-gray-300' => ! $onlyLate,
                 ])
             >
-                ⚠ Atrasados
+                ⚠ Só atrasados
             </button>
 
             <button
@@ -86,118 +97,52 @@
             </span>
         </div>
 
-        {{-- Board Kanban --}}
-        <div x-data="{ activeColumn: 'started' }">
-            <div class="flex gap-2 overflow-x-auto pb-2 md:hidden">
-                @foreach ($columns as $status)
-                    <button
-                        type="button"
-                        x-on:click="activeColumn = '{{ $status->value }}'"
-                        :class="activeColumn === '{{ $status->value }}' ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-600'"
-                        class="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold dark:bg-white/10 dark:text-gray-300"
-                    >
-                        {{ $this->columnLabel($status) }}
-                    </button>
-                @endforeach
+        {{-- Chips que rolam até a coluna: navegação rápida no tablet sem precisar de abas (que exigiriam
+             condicionar a árvore inteira). Some a partir de xl, onde as colunas viram grid. --}}
+        <div class="mb-3 flex flex-wrap items-center gap-1.5 xl:hidden">
+            @foreach ($columns as $column)
                 <button
                     type="button"
-                    x-on:click="activeColumn = 'finished'"
-                    :class="activeColumn === 'finished' ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-600'"
-                    class="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold dark:bg-white/10 dark:text-gray-300"
+                    @click="irPara('coluna-{{ Str::slug($column->value) }}')"
+                    class="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-200 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10"
                 >
-                    Finalizados
+                    {{ $this->columnLabel($column) }}
                 </button>
-            </div>
-
-            <div class="flex gap-4 overflow-x-auto pb-4">
-                @foreach ($columns as $status)
-                    @php($orders = $this->ordersByStatus->get($status->value, collect()))
-
-                    <div
-                        :class="activeColumn === '{{ $status->value }}' ? 'flex' : 'hidden'"
-                        class="w-80 shrink-0 flex-col rounded-xl border border-gray-200 bg-gray-100 p-2.5 dark:border-transparent dark:bg-white/5 md:flex"
-                    >
-                        <div class="mb-2 flex shrink-0 items-center gap-1.5 px-1">
-                            <span class="h-2 w-2 shrink-0 rounded-full {{ $this->columnDotClass($status) }}"></span>
-                            <span class="text-sm font-bold text-gray-700 dark:text-gray-200">
-                                {{ $this->columnLabel($status) }} · {{ $orders->count() }}
-                            </span>
-                        </div>
-
-                        {{-- Altura aproximada; ajustar depois de ver o resultado real no navegador. --}}
-                        <div class="flex-1 space-y-3 overflow-y-auto pr-1" style="max-height: calc(100vh - 320px)">
-                            @forelse ($orders as $order)
-                                <x-orders.order-card
-                                    :order="$order"
-                                    :urgency="$this->urgencyFor($order)"
-                                    :minutes-in-stage="$this->minutesInStageFor($order)"
-                                    :primary-action="$this->primaryActionName($order)"
-                                    :primary-label="$this->primaryActionLabel($order)"
-                                    :cancel-label="$this->cancelLabel($order)"
-                                />
-                            @empty
-                                <p class="px-1 text-xs text-gray-400">Nenhum pedido.</p>
-                            @endforelse
-                        </div>
-                    </div>
-                @endforeach
-
-                <div
-                    :class="activeColumn === 'finished' ? 'flex' : 'hidden'"
-                    class="w-80 shrink-0 flex-col rounded-xl bg-gray-50 p-2.5 dark:bg-white/5 md:flex"
-                >
-                    <div class="mb-2 flex shrink-0 items-center gap-1.5 px-1">
-                        <span class="h-2 w-2 shrink-0 rounded-full bg-emerald-500"></span>
-                        <span class="text-sm font-bold text-gray-700 dark:text-gray-200">
-                            Finalizados · {{ $finishedOrders->count() }}
-                        </span>
-                    </div>
-
-                    <div class="flex-1 space-y-3 overflow-y-auto pr-1" style="max-height: calc(100vh - 320px)">
-                        @forelse ($finishedOrders as $order)
-                            <x-orders.order-card
-                                :order="$order"
-                                :urgency="$this->urgencyFor($order)"
-                                :minutes-in-stage="$this->minutesInStageFor($order)"
-                                :primary-action="$this->primaryActionName($order)"
-                                :primary-label="$this->primaryActionLabel($order)"
-                                :cancel-label="$this->cancelLabel($order)"
-                            />
-                        @empty
-                            <p class="px-1 text-xs text-gray-400">Nenhum pedido finalizado neste turno.</p>
-                        @endforelse
-
-                        <a
-                            href="{{ \App\Filament\Tenant\Resources\Orders\OrderResource::getUrl('index') }}"
-                            class="block px-1 py-1 text-xs font-semibold text-amber-600 hover:underline dark:text-amber-400"
-                        >
-                            Ver histórico completo →
-                        </a>
-                    </div>
-                </div>
-            </div>
+            @endforeach
         </div>
 
-        {{-- Cancelados --}}
+        {{-- Faixa de colunas: rola na horizontal com snap até xl, onde vira grid. O número de colunas é
+             dinâmico (a coluna "Em Entrega" sai quando o tenant não usa o estágio), então o
+             grid-template-columns vem de uma custom property — o Tailwind não gera classe a partir de
+             valor calculado em runtime. --}}
+        <div
+            class="flex snap-x snap-mandatory gap-2 overflow-x-auto overscroll-x-contain pb-2 xl:grid xl:snap-none xl:[grid-template-columns:repeat(var(--painel-colunas),minmax(19rem,1fr))]"
+            style="--painel-colunas: {{ count($columns) }}"
+        >
+            @foreach ($columns as $column)
+                @include('filament.tenant.pages.kitchen.column', [
+                    'status' => $column,
+                    'orders' => $column === \App\Enums\OrderStatus::Delivered
+                        ? $finishedOrders
+                        : $this->ordersByStatus->get($column->value, collect()),
+                    'canOpenAttendance' => $canOpenAttendance,
+                ])
+            @endforeach
+        </div>
+
+        {{-- Cancelados do turno --}}
         @if ($showCancelled)
-            <div class="rounded-xl border border-red-200 bg-red-50/50 p-3 dark:border-red-500/20 dark:bg-red-500/5">
+            <div class="mt-3 rounded-xl border border-danger-200 bg-danger-50/50 p-3 dark:border-danger-500/20 dark:bg-danger-500/5">
                 <div class="mb-3 flex items-center justify-between px-1">
-                    <span class="text-sm font-bold text-red-700 dark:text-red-400">Cancelados neste turno</span>
-                    <span class="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-500/10 dark:text-red-400">
+                    <span class="text-sm font-bold text-danger-700 dark:text-danger-400">Cancelados neste turno</span>
+                    <span class="rounded-full bg-danger-100 px-2 py-0.5 text-xs font-semibold text-danger-700 dark:bg-danger-500/10 dark:text-danger-400">
                         {{ $this->cancelledOrders->count() }}
                     </span>
                 </div>
 
-                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     @forelse ($this->cancelledOrders as $order)
-                        <x-orders.order-card
-                            :order="$order"
-                            :urgency="$this->urgencyFor($order)"
-                            :minutes-in-stage="$this->minutesInStageFor($order)"
-                            :primary-action="$this->primaryActionName($order)"
-                            :primary-label="$this->primaryActionLabel($order)"
-                            :cancel-label="$this->cancelLabel($order)"
-                        />
+                        @include('filament.tenant.pages.kitchen.cancelled-card', ['order' => $order])
                     @empty
                         <p class="px-1 text-xs text-gray-400">Nenhum pedido cancelado neste turno.</p>
                     @endforelse

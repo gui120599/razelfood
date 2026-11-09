@@ -5,9 +5,11 @@ namespace App\Filament\Tenant\Pages;
 use App\Enums\OrderOrigin;
 use App\Enums\OrderStatus;
 use App\Enums\OrderUrgencyLevel;
+use App\Filament\Tenant\Pages\Orders\AttendOrder;
 use App\Filament\Tenant\Support\OrderStatusActions;
 use App\Models\Addon;
 use App\Models\Category;
+use App\Models\FlavorQuantityOption;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
@@ -15,6 +17,7 @@ use App\Models\ProductionLine;
 use App\Models\User;
 use App\Support\CurrentTenant;
 use App\Support\FeatureKey;
+use App\Support\Fiscal\FlavorFraction;
 use App\Support\Orders\GiftLineLabel;
 use App\Support\Orders\OrderUrgencyResolver;
 use App\Support\Orders\ResolveActiveShiftStart;
@@ -254,7 +257,16 @@ class Kitchen extends Page
 
         $flavorProducts = $flavorIds->isEmpty()
             ? collect()
-            : Product::withTrashed()->whereIn('id', $flavorIds)->get(['id', 'name'])->keyBy('id');
+            : Product::withTrashed()->whereIn('id', $flavorIds)->get(['id', 'name', 'category_id'])->keyBy('id');
+
+        // Rateio configurado na categoria (ou na pai, quando herda): uma consulta para todas as pizzas do board.
+        $flavorCategories = $flavorProducts->isEmpty()
+            ? collect()
+            : Category::withTrashed()
+                ->with(['flavorQuantityOptions', 'parent.flavorQuantityOptions'])
+                ->whereIn('id', $flavorProducts->pluck('category_id')->filter()->unique())
+                ->get()
+                ->keyBy('id');
 
         $addonIds = $allItems->flatMap(fn (OrderItem $item) => $item->addons ?? [])->pluck('addon_id')->unique()->values();
 
@@ -274,6 +286,8 @@ class Kitchen extends Page
                     ? collect($item->flavors)->map(fn ($id) => $flavorProducts->get($id)?->name)->filter()->implode(' / ')
                     : ($item->product?->name ?? 'Item removido');
 
+                $item->flavorLines = $this->flavorSliceLines($item->flavors ?? [], $flavorProducts, $flavorCategories);
+
                 $item->addonsDisplay = collect($item->addons ?? [])->map(function (array $selection) use ($addonNames, $flavorProducts) {
                     $name = $addonNames->get($selection['addon_id'])?->name ?? 'Adicional removido';
                     $target = $selection['target'] !== null ? ($flavorProducts->get($selection['target'])?->name ?? 'sabor removido') : 'produto inteiro';
@@ -292,6 +306,43 @@ class Kitchen extends Page
         }
 
         return $orders;
+    }
+
+    /**
+     * Uma linha por sabor com a fração ("MEIA Calabresa", "1/3 Marguerita"), para a cozinha ler o que
+     * vai em cada pedaço. Vazio para item de um sabor só. O rateio vem da opção de quantidade da
+     * categoria; sem opção cadastrada, divisão igual.
+     *
+     * @param  array<int, int|string>  $flavorIds
+     * @param  Collection<int, Product>  $flavorProducts
+     * @param  Collection<int, Category>  $categories
+     * @return array<int, string>
+     */
+    private function flavorSliceLines(array $flavorIds, Collection $flavorProducts, Collection $categories): array
+    {
+        $count = count($flavorIds);
+
+        if ($count < 2) {
+            return [];
+        }
+
+        // O rateio é pela quantidade de sabores GRAVADA no item: um sabor removido de vez não desalinha as frações.
+        $firstFlavor = collect($flavorIds)->map(fn ($id): ?Product => $flavorProducts->get((int) $id))->filter()->first();
+        $category = $firstFlavor ? $categories->get($firstFlavor->category_id) : null;
+        $shares = $category?->resolvedFlavorQuantityOptions()->firstWhere('flavor_count', $count)?->flavor_shares;
+
+        if (! is_array($shares) || count($shares) !== $count) {
+            $shares = FlavorQuantityOption::equalShares($count);
+        }
+
+        return collect($flavorIds)
+            ->values()
+            ->map(fn ($id, int $index): ?string => ($flavor = $flavorProducts->get((int) $id)) === null
+                ? null
+                : FlavorFraction::sliceLabel((float) $shares[$index]).' '.$flavor->name)
+            ->filter()
+            ->values()
+            ->all();
     }
 
     public function minutesInStageFor(Order $order): ?int
@@ -323,7 +374,7 @@ class Kitchen extends Page
     public function primaryActionLabel(Order $order): string
     {
         return match (true) {
-            $order->status === OrderStatus::Started => 'Aceitar',
+            $order->status === OrderStatus::Started => 'Confirmar',
             $order->status === OrderStatus::Open => 'Iniciar preparo',
             $order->status === OrderStatus::Preparing => 'Marcar pronto',
             $order->status === OrderStatus::Ready && $order->assignsDeliveryCourier() => 'Despachar',
@@ -336,7 +387,8 @@ class Kitchen extends Page
 
     public function cancelLabel(Order $order): string
     {
-        return $order->status === OrderStatus::Started ? 'Rejeitar' : 'Cancelar';
+        // Antes de entrar em preparo o pedido é "rejeitado"; do preparo em diante, "cancelado".
+        return in_array($order->status, [OrderStatus::Started, OrderStatus::Open], true) ? 'Rejeitar' : 'Cancelar';
     }
 
     /**
@@ -375,6 +427,27 @@ class Kitchen extends Page
             OrderStatus::Delivered, OrderStatus::Finished => 'bg-green-600',
             OrderStatus::Cancelled => 'bg-red-600',
         };
+    }
+
+    /**
+     * Tom do cabeçalho da coluna (cor semântica do Filament, igual à tela de origem): fila neutra,
+     * andamento em azul/âmbar, finalizado em verde.
+     */
+    public function columnTone(OrderStatus $status): string
+    {
+        return match ($status) {
+            OrderStatus::Started => 'gray',
+            OrderStatus::Open, OrderStatus::InTransit => 'info',
+            OrderStatus::Preparing, OrderStatus::Ready => 'warning',
+            OrderStatus::Delivered, OrderStatus::Finished => 'success',
+            OrderStatus::Cancelled => 'danger',
+        };
+    }
+
+    /** "Abrir no atendimento" (edição do pedido) só aparece para quem acessa a tela de atendimento. */
+    public function canOpenAttendance(): bool
+    {
+        return AttendOrder::canAccess();
     }
 
     public function advanceAction(): Action
@@ -417,13 +490,18 @@ class Kitchen extends Page
         return Order::query()
             ->select([
                 'id', 'tenant_id', 'client_id', 'delivery_option_id', 'assigned_delivery_user_id',
-                'status', 'origin', 'grand_total', 'opened_at', 'accepted_at', 'preparing_at',
+                'status', 'origin', 'grand_total', 'delivery_address', 'sale_id', 'public_token',
+                'cancellation_reason', 'cancelled_by_user_id', 'cancelled_at',
+                'opened_at', 'accepted_at', 'preparing_at',
                 'ready_at', 'in_transit_at', 'delivered_at', 'finished_at', 'created_at',
             ])
             ->with([
                 'client:id,name,phone',
+                'deliveryOption:id,name,requires_address',
+                'sale:id,number,status',
                 'assignedDeliveryUser:id,name',
-                'items:id,order_id,product_id,quantity,flavors,addons,gifts',
+                'cancelledBy:id,name',
+                'items:id,order_id,product_id,quantity,unit_price,addons_total,note,flavors,addons,gifts',
                 'items.product:id,name,category_id',
                 'items.product.category:id,name',
             ])

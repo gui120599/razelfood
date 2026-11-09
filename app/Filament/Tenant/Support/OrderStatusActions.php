@@ -122,16 +122,7 @@ class OrderStatusActions
             ->icon(Heroicon::OutlinedUserCircle)
             ->color('gray')
             ->authorize('manage_order_status')
-            ->visible(function (array $arguments): bool {
-                if (! (CurrentTenant::get()?->assigns_delivery_couriers ?? true)) {
-                    return false;
-                }
-
-                $order = self::resolveOrder($arguments);
-
-                return $order->assigned_delivery_user_id !== null
-                    || in_array($order->status, [OrderStatus::Ready, OrderStatus::InTransit], true);
-            })
+            ->visible(fn (array $arguments): bool => self::resolveOrder($arguments)->allowsCourierReassignment())
             ->schema([
                 Select::make('assigned_delivery_user_id')
                     ->label('Entregador')
@@ -267,12 +258,7 @@ class OrderStatusActions
             ->modalSubmitAction(false)
             ->modalCancelActionLabel('Fechar')
             ->authorize('manage_order_status')
-            ->visible(function (array $arguments): bool {
-                $order = self::resolveOrder($arguments);
-
-                return $order->usesInTransitStage()
-                    && in_array($order->status, [OrderStatus::Ready, OrderStatus::InTransit], true);
-            })
+            ->visible(fn (array $arguments): bool => self::resolveOrder($arguments)->allowsDeliveryLink())
             ->modalContent(function (array $arguments) {
                 $order = self::resolveOrder($arguments);
 
