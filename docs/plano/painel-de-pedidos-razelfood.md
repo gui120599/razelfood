@@ -141,7 +141,9 @@ Três entregas, cada uma com testes, revisão `laravel-reviewer` e commit própr
 - Corte por turno nas colunas ativas e botão "N pedidos de turnos anteriores" (D-PP-01).
 - Coluna Finalizados com seletor de turno e "carregar mais".
 - Seletor "Colunas" (preferência por usuário).
-- Arquivos: `Kitchen.php`, `kitchen.blade.php`, possivelmente um método `forOpeningDay()` em `ResolveActiveShiftStart`.
+- Chips de navegação com os nomes curtos do status (Iniciado, Aberto, Preparando, Pronto, Entregue), como na origem.
+- Arquivos: `Kitchen.php`, `kitchen.blade.php`, `kitchen/column.blade.php`, `ResolveActiveShiftStart::windowForOpeningDay()`.
+- **Desvios deliberados da origem** (achados da revisão): o seletor "Turno de" acompanha o turno atual até o operador escolher uma data (a origem congela o dia da abertura da tela); a janela de uma data escolhida é o **dia operacional** (da primeira abertura do dia até a primeira abertura do seguinte, fim exclusivo), sem sobreposição nem lacuna; cada pedido usa um único carimbo de referência (`COALESCE(finished_at, delivered_at, opened_at)`); a coluna que o filtro rápido seleciona nunca fica escondida.
 
 **1.S.2c — Tempo real, som, impressão e PDFs**
 - Poll de 10 s com assinatura e `skipRender()`; evento `novo-pedido` e som; "Atualizado às" pelo hook do Livewire.
@@ -219,7 +221,21 @@ Reaproveitar o padrão dos testes da origem e manter os `Kitchen*Test` verdes se
 - **Limitações conhecidas:** `#id` no card segue o `id` interno, enquanto a comanda impressa usa `Order::displayNumber()` (número por estabelecimento). Há essa divergência já existente entre o board e a comanda; decisão pendente (D-PP-09, abaixo). Item de venda parcial (`order_items.sale_id`) não bloqueia o atalho "Abrir no atendimento"; o bloqueio vem ao salvar.
 - **Pizzaria-App:** `git status` idêntico ao do início da sessão.
 
-Pendente: 1.S.2b, 1.S.2c.
+**1.S.2a — resultado da conferência visual (2026-11-09):** capturas lado a lado recebidas; a diferença visível restante eram os chips de navegação (nomes curtos do status), corrigida na 1.S.2b. O total do pedido no card foi dispensado pelo usuário. D-PP-09 adiado pelo usuário para depois da 1.S.2c.
+
+### 1.S.2b — Turno, colunas e filtros (2026-11-09) · aguardando conferência visual e commit
+
+- **Arquivos criados:** `tests/Feature/Orders/KitchenShiftAndColumnsTest.php` (29 testes).
+- **Arquivos modificados:** `app/Filament/Tenant/Pages/Kitchen.php`, `app/Support/Orders/ResolveActiveShiftStart.php` (`windowForOpeningDay`), `resources/views/filament/tenant/pages/kitchen.blade.php`, `resources/views/filament/tenant/pages/kitchen/column.blade.php`, `tests/Feature/Orders/KitchenCardTest.php` (asserção do id `coluna-in-transit` que passava à toa).
+- **Sem migration, sem permissão nova.** Preferência nova: `user_preferences` chave `kitchen.columns` (`{"hidden": [...]}`), por usuário e tenant.
+- **Comportamento que muda (D-PP-01, aprovado):** as colunas em andamento só mostram o turno atual; pedidos de turnos anteriores ficam atrás do botão "N pedidos de turnos anteriores (mostrar)". Um período informado substitui a janela.
+- **Coluna Finalizados:** seletor "Turno de", limite 50 (carregar mais até 200, com aviso de truncamento), "Ver histórico completo" mantido.
+- **Colunas visíveis:** menu "Colunas" por usuário; nunca esconde todas; a coluna do filtro rápido não some; valores adulterados no navegador são saneados; colunas ocultas não são consultadas.
+- **Achados da revisão tratados:** `finishedDate` congelado no `mount()`; janelas de turno sobrepostas/com lacuna e fronteira inclusiva; contador com período informado; filtro rápido com a coluna oculta; validação da data; saneamento das preferências; consultas desnecessárias por render (turno memoizado, colunas ocultas puladas); `wire:model` da data com debounce; botão "carregar mais" só quando há mais.
+- **Limitações conhecidas:** a consulta de finalizados usa `COALESCE(...)` e varre os pedidos do tenant; se ficar lenta, um índice composto resolve (não necessário hoje). O dia operacional de uma data escolhida cobre os dois turnos de um dia com almoço e jantar, enquanto o padrão (turno atual) mostra só a partir da última abertura.
+- **Capturas lado a lado:** pendentes (feitas pelo usuário). **Pizzaria-App:** `git status` idêntico ao do início.
+
+Pendente: 1.S.2c.
 
 ### Decisão pendente descoberta na 1.S.2a
 

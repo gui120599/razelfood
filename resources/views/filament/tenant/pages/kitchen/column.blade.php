@@ -42,6 +42,19 @@
         </span>
     </header>
 
+    {{-- Filtro de data, só na coluna final: o turno cujos pedidos finalizados ela mostra. --}}
+    @if ($isFinished)
+        <div class="flex items-center gap-2 border-x border-gray-200 bg-gray-50 px-3 py-1.5 dark:border-white/10 dark:bg-white/5">
+            <label for="finishedDate" class="text-xs text-gray-500 dark:text-gray-400">Turno de</label>
+            <input
+                id="finishedDate"
+                type="date"
+                wire:model.live.debounce.700ms="finishedDate"
+                class="min-w-0 flex-1 rounded-md border-gray-300 bg-white py-1 text-xs dark:border-white/10 dark:bg-gray-900 dark:text-white"
+            />
+        </div>
+    @endif
+
     {{-- Corpo: rolagem independente por coluna. dvh, não vh — a barra de endereço do mobile muda a altura visível. --}}
     <div class="h-[calc(100dvh-15rem)] flex-1 space-y-2 overflow-y-auto rounded-b-xl border border-gray-200 bg-gray-50 p-2 dark:border-white/10 dark:bg-white/[0.02]">
         @forelse ($orders as $order)
@@ -67,6 +80,22 @@
                 @endif
             </p>
         @endforelse
+
+        @if ($isFinished && $this->canLoadMoreFinished())
+            <button
+                type="button"
+                wire:click="expandFinished"
+                class="w-full rounded-lg py-2 text-xs font-semibold text-primary-600 transition hover:bg-primary-50 dark:text-primary-400 dark:hover:bg-primary-500/10"
+            >
+                Carregar mais finalizados
+            </button>
+        @endif
+
+        @if ($isFinished && $this->finishedIsTruncated())
+            <p class="px-1 py-1 text-[11px] text-gray-400">
+                Mostrando os {{ $orders->count() }} mais recentes deste turno. O resto está no histórico.
+            </p>
+        @endif
 
         @if ($isFinished)
             <a

@@ -12,11 +12,12 @@
         'finished' => 'Finalizados',
     ];
 
-    // Colunas do fluxo + a última ("Finalizados": Entregue e Finalizado juntos, marcada por Delivered).
-    $columns = [...$this->boardColumns(), \App\Enums\OrderStatus::Delivered];
+    // Colunas visíveis: as do fluxo + a última ("Finalizados": Entregue e Finalizado juntos, marcada por
+    // Delivered), menos as que o usuário escondeu.
+    $columns = $this->visibleColumns();
     $finishedOrders = $this->ordersByStatus->get(\App\Enums\OrderStatus::Delivered->value, collect())
         ->concat($this->ordersByStatus->get(\App\Enums\OrderStatus::Finished->value, collect()))
-        ->sortByDesc('opened_at')
+        ->sortByDesc('id')
         ->values();
     $canOpenAttendance = $this->canOpenAttendance();
 @endphp
@@ -97,19 +98,82 @@
             </span>
         </div>
 
-        {{-- Chips que rolam até a coluna: navegação rápida no tablet sem precisar de abas (que exigiriam
-             condicionar a árvore inteira). Some a partir de xl, onde as colunas viram grid. --}}
-        <div class="mb-3 flex flex-wrap items-center gap-1.5 xl:hidden">
-            @foreach ($columns as $column)
+        {{-- Barra superior: navegação entre colunas, pedidos de turnos anteriores e colunas visíveis --}}
+        <div class="mb-3 flex flex-wrap items-center gap-2">
+            {{-- Chips que rolam até a coluna: navegação rápida no tablet sem precisar de abas (que exigiriam
+                 condicionar a árvore inteira). Somem a partir de xl, onde as colunas viram grid. --}}
+            <div class="flex flex-1 flex-wrap items-center gap-1.5 xl:hidden">
+                @foreach ($columns as $column)
+                    <button
+                        type="button"
+                        @click="irPara('coluna-{{ Str::slug($column->value) }}')"
+                        class="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-200 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10"
+                    >
+                        {{ $this->chipLabel($column) }}
+                    </button>
+                @endforeach
+            </div>
+
+            @if ($this->outOfShiftTotal > 0)
                 <button
                     type="button"
-                    @click="irPara('coluna-{{ Str::slug($column->value) }}')"
-                    class="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-200 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10"
+                    wire:click="toggleOutOfShift"
+                    @class([
+                        'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition',
+                        'bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-500/15 dark:text-amber-400' => ! $showOutOfShift,
+                        'bg-amber-600 text-white hover:bg-amber-500' => $showOutOfShift,
+                    ])
                 >
-                    {{ $this->columnLabel($column) }}
+                    <x-heroicon-m-exclamation-triangle class="h-4 w-4" />
+                    {{ $this->outOfShiftTotal }}
+                    {{ $this->outOfShiftTotal === 1 ? 'pedido' : 'pedidos' }}
+                    de turnos anteriores
+                    <span class="font-normal opacity-75">
+                        ({{ $showOutOfShift ? 'ocultar' : 'mostrar' }})
+                    </span>
                 </button>
-            @endforeach
+            @endif
+
+            {{-- Colunas visíveis — preferência gravada no usuário. --}}
+            <div x-data="{ aberto: false }" class="relative" @click.outside="aberto = false">
+                <button
+                    type="button"
+                    @click="aberto = ! aberto"
+                    class="flex items-center gap-1.5 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-200 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10"
+                >
+                    <x-heroicon-m-view-columns class="h-4 w-4" />
+                    Colunas
+                    @php $hiddenCount = count($this->availableColumns()) - count($columns); @endphp
+                    @if ($hiddenCount > 0)
+                        <span class="font-normal opacity-75">({{ $hiddenCount }} {{ $hiddenCount === 1 ? 'oculta' : 'ocultas' }})</span>
+                    @endif
+                </button>
+
+                <div
+                    x-show="aberto"
+                    x-cloak
+                    class="absolute right-0 z-20 mt-1 w-56 rounded-lg bg-white p-2 shadow-lg ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10"
+                >
+                    @foreach ($this->availableColumns() as $column)
+                        <label class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-xs text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-white/5">
+                            <input
+                                type="checkbox"
+                                @checked(! in_array($column->value, $hiddenColumns, true))
+                                wire:click="toggleColumn('{{ $column->value }}')"
+                                class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-white/20 dark:bg-gray-800"
+                            >
+                            {{ $this->columnLabel($column) }}
+                        </label>
+                    @endforeach
+                </div>
+            </div>
         </div>
+
+        @if ($showOutOfShift)
+            <div class="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-500/30">
+                Mostrando também pedidos abertos antes do turno atual. Eles ficaram presos em alguma etapa — vale conferir se devem ser concluídos ou cancelados.
+            </div>
+        @endif
 
         {{-- Faixa de colunas: rola na horizontal com snap até xl, onde vira grid. O número de colunas é
              dinâmico (a coluna "Em Entrega" sai quando o tenant não usa o estágio), então o

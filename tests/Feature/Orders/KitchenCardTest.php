@@ -284,11 +284,13 @@ class KitchenCardTest extends TestCase
 
     public function test_in_transit_column_disappears_when_the_tenant_skips_that_stage(): void
     {
+        Livewire::test(Kitchen::class)->assertSeeHtml('id="coluna-in-transit"');
+
         $this->tenant->update(['uses_in_transit_stage' => false]);
         CurrentTenant::set($this->tenant->fresh());
 
         Livewire::test(Kitchen::class)
-            ->assertDontSeeHtml('id="coluna-in_transit"')
+            ->assertDontSeeHtml('id="coluna-in-transit"')
             ->assertSeeHtml('id="coluna-delivered"')
             ->assertSeeHtml('--painel-colunas: 5');
     }

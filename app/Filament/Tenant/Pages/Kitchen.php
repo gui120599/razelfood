@@ -15,6 +15,7 @@ use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\ProductionLine;
 use App\Models\User;
+use App\Models\UserPreference;
 use App\Support\CurrentTenant;
 use App\Support\FeatureKey;
 use App\Support\Fiscal\FlavorFraction;
@@ -26,6 +27,7 @@ use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Carbon\Carbon;
 use Filament\Actions\Action;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
@@ -100,7 +102,15 @@ class Kitchen extends Page
         OrderStatus::Finished,
     ];
 
+    /** Cancelados do turno exibidos na faixa de cancelados. */
     private const RECENT_FINISHED_LIMIT = 20;
+
+    /** Coluna "Finalizados": limite normal e depois de "Carregar mais finalizados". */
+    private const FINISHED_LIMIT = 50;
+
+    private const FINISHED_LIMIT_EXPANDED = 200;
+
+    private const COLUMNS_PREFERENCE_KEY = 'kitchen.columns';
 
     private const FILTER_PREFERENCE_KEY = 'kitchen.filters';
 
@@ -129,9 +139,37 @@ class Kitchen extends Page
 
     public ?string $lastRefreshedAt = null;
 
+    /**
+     * Dia de abertura cujos pedidos finalizados a última coluna mostra. Enquanto o operador não escolhe,
+     * acompanha o turno atual (atualizado a cada poll, então vira sozinho na troca de turno).
+     */
+    public ?string $finishedDate = null;
+
+    public bool $finishedDateChosen = false;
+
+    /** Mostra também os pedidos em andamento abertos antes do turno atual (presos em alguma etapa). */
+    public bool $showOutOfShift = false;
+
+    public bool $finishedExpanded = false;
+
+    /** Havia mais finalizados do que o limite (preenchido ao montar `ordersByStatus`). */
+    private bool $finishedHasMore = false;
+
+    private ?Carbon $shiftStartCache = null;
+
+    /**
+     * Colunas que o usuário escolheu esconder (valores de OrderStatus; "delivered" é a coluna Finalizados).
+     * Preferência por usuário, vale em qualquer aparelho.
+     *
+     * @var array<int, string>
+     */
+    public array $hiddenColumns = [];
+
     public function mount(): void
     {
         $this->touchLastRefreshedAt();
+        $this->finishedDate = $this->activeShiftStart()->toDateString();
+        $this->hiddenColumns = $this->sanitizeHiddenColumns(UserPreference::valueFor(auth()->user(), self::COLUMNS_PREFERENCE_KEY)['hidden'] ?? []);
         $this->loadFilterPreferences(
             self::FILTER_PREFERENCE_KEY,
             self::PERSISTED_FILTER_PROPERTIES,
@@ -152,6 +190,10 @@ class Kitchen extends Page
     public function refreshBoard(): void
     {
         $this->touchLastRefreshedAt();
+
+        if (! $this->finishedDateChosen) {
+            $this->finishedDate = $this->activeShiftStart()->toDateString();
+        }
     }
 
     private function touchLastRefreshedAt(): void
@@ -162,19 +204,48 @@ class Kitchen extends Page
     #[Computed]
     public function ordersByStatus(): Collection
     {
+        $visible = array_map(fn (OrderStatus $status): string => $status->value, $this->visibleColumns());
         $statusFilter = $this->statusFilterValue();
-        $activeStatuses = $statusFilter ? [$statusFilter] : self::BOARD_COLUMNS;
+        $activeStatuses = array_values(array_filter(
+            $statusFilter ? [$statusFilter] : self::BOARD_COLUMNS,
+            fn (OrderStatus $status): bool => in_array($status->value, $visible, true),
+        ));
 
-        $active = $this->quickFilter === 'finished'
+        // Só o turno atual entra nas colunas em andamento: o que ficou preso de turnos anteriores vira o
+        // contador "N pedidos de turnos anteriores". Um período informado substitui essa janela.
+        $active = $this->quickFilter === 'finished' || $activeStatuses === []
             ? collect()
-            : $this->filteredQuery()->whereIn('status', $activeStatuses)->orderBy('opened_at')->get();
+            : $this->filteredQuery()
+                ->whereIn('status', $activeStatuses)
+                ->when(
+                    ! $this->periodFrom && ! $this->periodUntil && ! $this->showOutOfShift,
+                    fn (Builder $query) => $query->where(fn (Builder $inner) => $inner
+                        ->where('opened_at', '>=', $this->activeShiftStart())
+                        ->orWhereNull('opened_at')),
+                )
+                ->orderBy('opened_at')
+                ->get();
 
-        $finished = $this->filteredQuery()
-            ->whereIn('status', self::FINISHED_STATUSES)
-            ->where('opened_at', '>=', $this->activeShiftStart())
-            ->orderByDesc('opened_at')
-            ->limit($this->quickFilter === 'finished' ? 100 : self::RECENT_FINISHED_LIMIT)
-            ->get();
+        $finished = collect();
+        $this->finishedHasMore = false;
+
+        if (in_array(OrderStatus::Delivered->value, $visible, true)) {
+            [$windowStart, $windowEnd] = $this->finishedWindow();
+            $limit = $this->finishedLimit();
+
+            // Um único carimbo de referência por pedido (finalização, senão entrega, senão abertura): cada
+            // pedido pertence a exatamente uma janela, mesmo que existam os dois carimbos.
+            $rows = $this->filteredQuery()
+                ->whereIn('status', self::FINISHED_STATUSES)
+                ->whereRaw('COALESCE(finished_at, delivered_at, opened_at) >= ?', [$windowStart])
+                ->when($windowEnd !== null, fn (Builder $query) => $query->whereRaw('COALESCE(finished_at, delivered_at, opened_at) < ?', [$windowEnd]))
+                ->orderByDesc('id')
+                ->limit($limit + 1)
+                ->get();
+
+            $this->finishedHasMore = $rows->count() > $limit;
+            $finished = $rows->take($limit);
+        }
 
         $all = $this->resolveItemDisplayNames($active->concat($finished));
 
@@ -183,6 +254,191 @@ class Kitchen extends Page
         }
 
         return $all->groupBy(fn (Order $order): string => $order->status->value);
+    }
+
+    /**
+     * Pedidos em andamento abertos antes do turno atual, por status. Só a contagem: a listagem entra nas
+     * colunas se o operador clicar em "mostrar". Ignora os filtros da tela de propósito (o aviso é do tenant).
+     *
+     * @return array<string, int>
+     */
+    #[Computed]
+    public function outOfShiftCounts(): array
+    {
+        // Com período informado a janela do turno não vale: nada fica "escondido por turno".
+        if ($this->periodFrom || $this->periodUntil) {
+            return [];
+        }
+
+        return Order::query()
+            ->whereIn('status', collect($this->boardColumns())->map(fn (OrderStatus $status): string => $status->value)->all())
+            ->where('opened_at', '<', $this->activeShiftStart())
+            ->selectRaw('status, COUNT(*) AS total')
+            ->groupBy('status')
+            ->pluck('total', 'status')
+            ->map(fn ($total): int => (int) $total)
+            ->all();
+    }
+
+    #[Computed]
+    public function outOfShiftTotal(): int
+    {
+        return array_sum($this->outOfShiftCounts);
+    }
+
+    public function toggleOutOfShift(): void
+    {
+        $this->showOutOfShift = ! $this->showOutOfShift;
+        unset($this->ordersByStatus);
+    }
+
+    public function expandFinished(): void
+    {
+        $this->finishedExpanded = true;
+        unset($this->ordersByStatus);
+    }
+
+    public function updatedFinishedDate(): void
+    {
+        $this->finishedDateChosen = $this->parseFinishedDate() !== null;
+        $this->finishedExpanded = false;
+        unset($this->ordersByStatus);
+    }
+
+    /** Data escolhida no seletor, só se for um 'Y-m-d' válido (a propriedade é pública e vem do navegador). */
+    private function parseFinishedDate(): ?Carbon
+    {
+        $date = $this->finishedDate;
+
+        if (! is_string($date) || preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) !== 1) {
+            return null;
+        }
+
+        $parsed = Carbon::createFromFormat('!Y-m-d', $date);
+
+        return $parsed !== false && $parsed->format('Y-m-d') === $date && $parsed->year >= 2000 ? $parsed : null;
+    }
+
+    /**
+     * Janela da coluna Finalizados: sem escolha do operador, vale o turno atual (do início dele em diante,
+     * como o corte das colunas em andamento); com data escolhida, o dia operacional daquela abertura.
+     *
+     * @return array{0: Carbon, 1: ?Carbon} [início, fim) — fim nulo = sem limite
+     */
+    private function finishedWindow(): array
+    {
+        $chosen = $this->finishedDateChosen ? $this->parseFinishedDate() : null;
+
+        if ($chosen === null) {
+            return [$this->activeShiftStart(), null];
+        }
+
+        return app(ResolveActiveShiftStart::class)->windowForOpeningDay($chosen);
+    }
+
+    private function finishedLimit(): int
+    {
+        return $this->finishedExpanded ? self::FINISHED_LIMIT_EXPANDED : self::FINISHED_LIMIT;
+    }
+
+    /** "Carregar mais finalizados" só aparece quando de fato há mais pedidos além do limite normal. */
+    public function canLoadMoreFinished(): bool
+    {
+        return ! $this->finishedExpanded && $this->finishedHasMore;
+    }
+
+    /** Mesmo depois de "carregar mais" ainda havia pedidos: a coluna avisa e aponta o histórico. */
+    public function finishedIsTruncated(): bool
+    {
+        return $this->finishedExpanded && $this->finishedHasMore;
+    }
+
+    /**
+     * Todas as colunas possíveis, na ordem do board: as do fluxo e a última (Finalizados, marcada por Delivered).
+     *
+     * @return array<int, OrderStatus>
+     */
+    public function availableColumns(): array
+    {
+        return [...$this->boardColumns(), OrderStatus::Delivered];
+    }
+
+    /**
+     * Colunas que a tela renderiza: as disponíveis menos as que o usuário escondeu. A coluna que o filtro
+     * rápido seleciona ("Prontos", "Finalizados"…) nunca fica escondida, e se tudo estiver escondido (por
+     * exemplo, só havia "Em Entrega" visível e o tenant desligou esse estágio) volta tudo.
+     *
+     * @return array<int, OrderStatus>
+     */
+    public function visibleColumns(): array
+    {
+        $focused = $this->quickFilter === 'finished'
+            ? OrderStatus::Delivered->value
+            : $this->statusFilterValue()?->value;
+
+        $visible = array_values(array_filter(
+            $this->availableColumns(),
+            fn (OrderStatus $status): bool => $status->value === $focused || ! in_array($status->value, $this->hiddenColumns, true),
+        ));
+
+        return $visible === [] ? $this->availableColumns() : $visible;
+    }
+
+    /**
+     * Só valores de coluna existentes, sem repetição (a preferência salva e a propriedade pública vêm de fora).
+     *
+     * @return array<int, string>
+     */
+    private function sanitizeHiddenColumns(mixed $columns): array
+    {
+        if (! is_array($columns)) {
+            return [];
+        }
+
+        $available = array_map(fn (OrderStatus $column): string => $column->value, $this->availableColumns());
+
+        return array_values(array_unique(array_intersect(array_filter($columns, 'is_string'), $available)));
+    }
+
+    public function toggleColumn(string $status): void
+    {
+        $available = array_map(fn (OrderStatus $column): string => $column->value, $this->availableColumns());
+
+        if (! in_array($status, $available, true)) {
+            return;
+        }
+
+        $current = $this->sanitizeHiddenColumns($this->hiddenColumns);
+
+        $hidden = in_array($status, $current, true)
+            ? array_values(array_diff($current, [$status]))
+            : [...$current, $status];
+
+        if (array_diff($available, $hidden) === []) {
+            Notification::make()->warning()->title('Mantenha ao menos uma coluna visível.')->send();
+
+            return;
+        }
+
+        $this->hiddenColumns = $hidden;
+        UserPreference::rememberFor(auth()->user(), self::COLUMNS_PREFERENCE_KEY, ['hidden' => $hidden]);
+    }
+
+    /**
+     * Rótulo curto do status nos chips de navegação ("Iniciado", "Aberto"…), como na tela original; o
+     * cabeçalho da coluna usa {@see columnLabel()}.
+     */
+    public function chipLabel(OrderStatus $status): string
+    {
+        return match ($status) {
+            OrderStatus::Started => 'Iniciado',
+            OrderStatus::Open => 'Aberto',
+            OrderStatus::Preparing => 'Preparando',
+            OrderStatus::Ready => 'Pronto',
+            OrderStatus::InTransit => 'Em transporte',
+            OrderStatus::Delivered, OrderStatus::Finished => 'Entregue',
+            OrderStatus::Cancelled => 'Cancelado',
+        };
     }
 
     #[Computed]
@@ -592,8 +848,9 @@ class Kitchen extends Page
         };
     }
 
+    /** Início do turno atual, calculado uma vez por request (várias consultas do board o usam). */
     private function activeShiftStart(): Carbon
     {
-        return app(ResolveActiveShiftStart::class)();
+        return $this->shiftStartCache ??= app(ResolveActiveShiftStart::class)();
     }
 }
