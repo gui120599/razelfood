@@ -192,6 +192,19 @@ class FiscalDocumentActions
     public const BATCH_LIMIT = 25;
 
     /**
+     * Amplia o limite de tempo só numa request web (hospedagem compartilhada). No CLI (testes, workers)
+     * o limite já é ilimitado e `set_time_limit(300)` o IMPORIA ao processo inteiro: a suíte de testes,
+     * por exemplo, morria com "Maximum execution time" quando passava de 300 s depois da chamada.
+     * Silenciado se a hospedagem proibir a alteração.
+     */
+    private static function extendWebTimeLimit(): void
+    {
+        if (PHP_SAPI !== 'cli') {
+            @set_time_limit(300);
+        }
+    }
+
+    /**
      * "Enviar NFC-e" em lote: cada venda segue as mesmas regras do botão individual
      * (IssueFiscalDocument: bloqueios, lock, número reservado). Pula com o motivo o que não puder
      * e uma falha não interrompe as outras.
@@ -210,8 +223,8 @@ class FiscalDocumentActions
             ->deselectRecordsAfterCompletion()
             ->action(function (Collection $records): void {
                 // Até BATCH_LIMIT chamadas HTTP em uma request: sem isto uma rodada lenta é morta no meio
-                // (hospedagem compartilhada) e deixa envio ambíguo. Silenciado se a hospedagem proibir.
-                @set_time_limit(300);
+                // (hospedagem compartilhada) e deixa envio ambíguo.
+                self::extendWebTimeLimit();
                 $records->load('currentFiscalDocument');
 
                 $done = 0;
@@ -274,7 +287,7 @@ class FiscalDocumentActions
             ->modalDescription('Consulta a NFE.io das vendas que já têm nota enviada. As demais são puladas, com o motivo. Máximo de '.self::BATCH_LIMIT.' consultas por vez.')
             ->deselectRecordsAfterCompletion()
             ->action(function (Collection $records): void {
-                @set_time_limit(300);
+                self::extendWebTimeLimit();
                 $records->load('currentFiscalDocument');
 
                 $done = 0;
