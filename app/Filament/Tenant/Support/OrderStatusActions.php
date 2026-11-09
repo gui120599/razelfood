@@ -30,7 +30,11 @@ use Illuminate\Support\Facades\URL;
  */
 class OrderStatusActions
 {
-    public static function advance(): Action
+    /**
+     * @param  (callable(Order): void)|null  $afterAdvance  chamado só depois de uma transição bem-sucedida, com o pedido já
+     *                                                      atualizado (a Central usa para mandar a comanda à impressora)
+     */
+    public static function advance(?callable $afterAdvance = null): Action
     {
         return Action::make('advance')
             ->label('Avançar')
@@ -50,9 +54,9 @@ class OrderStatusActions
 
                 return $order->status->canAdvanceGenerically();
             })
-            ->action(function (array $arguments): void {
+            ->action(function (array $arguments) use ($afterAdvance): void {
                 try {
-                    app(AdvanceOrderStatus::class)(self::resolveOrder($arguments), auth()->user());
+                    $updated = app(AdvanceOrderStatus::class)(self::resolveOrder($arguments), auth()->user());
                 } catch (OrderTransitionException $e) {
                     Notification::make()->title($e->getMessage())->danger()->send();
 
@@ -60,6 +64,10 @@ class OrderStatusActions
                 }
 
                 Notification::make()->title('Pedido atualizado')->success()->send();
+
+                if ($afterAdvance !== null) {
+                    $afterAdvance($updated);
+                }
             });
     }
 

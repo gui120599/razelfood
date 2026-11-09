@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Support\CurrentTenant;
 use App\Support\FeatureKey;
+use App\Support\Orders\ResolveActiveShiftStart;
 use App\Support\Reports\ReportPeriod;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
@@ -27,18 +28,28 @@ class OrdersReportPrintController extends Controller
         abort_unless(CurrentTenant::get()?->hasFeature(FeatureKey::RELATORIOS) ?? false, 403);
         abort_unless(Auth::user()->can('View:Reports'), 403);
 
-        [$start, $end] = ReportPeriod::resolveRange($request->query('start'), $request->query('end'));
+        // `?shift=Y-m-d` (Central de Pedidos): o turno que abre nessa data, não o dia de calendário.
+        $shifts = app(ResolveActiveShiftStart::class);
+        $shiftDay = $shifts->parseOpeningDay($request->query('shift'));
 
-        $orders = Order::query()
-            ->with(['client', 'payments', 'deliveryOption'])
-            ->openedBetween($start, $end)
+        if ($shiftDay !== null) {
+            [$from, $until] = $shifts->windowForOpeningDay($shiftDay);
+            $periodLabel = 'Turno de '.$shiftDay->format('d/m/Y').' ('.$from->format('d/m H:i').' a '.$until->format('d/m H:i').')';
+            $scope = fn ($query) => $query->openedWithin($from, $until);
+        } else {
+            [$start, $end] = ReportPeriod::resolveRange($request->query('start'), $request->query('end'));
+            $periodLabel = 'Período: '.$start->format('d/m/Y').' a '.$end->format('d/m/Y');
+            $scope = fn ($query) => $query->openedBetween($start, $end);
+        }
+
+        $orders = $scope(Order::query()->with(['client', 'payments', 'deliveryOption']))
             ->orderBy('opened_at')
             ->get();
 
         return view('reports.orders-print', [
             'tenant' => CurrentTenant::get(),
             'orders' => $orders,
-            'periodLabel' => 'Período: '.$start->format('d/m/Y').' a '.$end->format('d/m/Y'),
+            'periodLabel' => $periodLabel,
         ]);
     }
 }

@@ -246,6 +246,22 @@ class Order extends TenantScopedModel
             ->whereBetween('delivered_at', [$start->copy()->startOfDay(), $end->copy()->endOfDay()]);
     }
 
+    /**
+     * Pedidos feitos dentro de uma janela exata [início, fim) — recorte por turno (a janela pode atravessar a meia-noite).
+     */
+    public function scopeOpenedWithin(Builder $query, CarbonInterface $from, CarbonInterface $until): Builder
+    {
+        return $query->where('opened_at', '>=', $from)->where('opened_at', '<', $until);
+    }
+
+    /**
+     * Pedidos entregues dentro de uma janela exata [início, fim) — recorte por turno do relatório de entregas.
+     */
+    public function scopeDeliveredWithin(Builder $query, CarbonInterface $from, CarbonInterface $until): Builder
+    {
+        return $query->where('delivered_at', '>=', $from)->where('delivered_at', '<', $until);
+    }
+
     public function currentStageStartedAt(): ?Carbon
     {
         return $this->{$this->status->timestampColumn()};

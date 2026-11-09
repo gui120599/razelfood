@@ -58,6 +58,21 @@ class ResolveActiveShiftStart
     }
 
     /**
+     * Data de abertura vinda de fora (propriedade pública do Livewire, query string): só um 'Y-m-d' válido de
+     * verdade (nada de '+99999999 years', '2026-02-30' ou 'next monday').
+     */
+    public function parseOpeningDay(mixed $value): ?Carbon
+    {
+        if (! is_string($value) || preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) !== 1) {
+            return null;
+        }
+
+        $parsed = Carbon::createFromFormat('!Y-m-d', $value);
+
+        return $parsed !== false && $parsed->format('Y-m-d') === $value && $parsed->year >= 2000 ? $parsed : null;
+    }
+
+    /**
      * Janela do dia operacional que ABRE na data informada ('Y-m-d' ou Carbon): do primeiro horário de abertura
      * daquele dia da semana (ou 00:00, sem horário) até a primeira abertura do dia seguinte (ou 24 h depois do
      * início, sem horário nesse dia). As janelas de dias seguidos com horário se encaixam sem sobreposição nem

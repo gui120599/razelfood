@@ -149,7 +149,8 @@ Três entregas, cada uma com testes, revisão `laravel-reviewer` e commit própr
 - Poll de 10 s com assinatura e `skipRender()`; evento `novo-pedido` e som; "Atualizado às" pelo hook do Livewire.
 - Impressão da comanda ao iniciar preparo (por aparelho), em iframe oculto, reaproveitando `order.ticket`.
 - Ações "PDF do dia" e "PDF de entregas" (D-PP-06).
-- Arquivos: `Kitchen.php`, `kitchen.blade.php`; nenhuma migration, nenhuma permissão nova.
+- Arquivos: `Kitchen.php`, `kitchen.blade.php`, `OrderStatusActions::advance()` (callback pós-transição), `OrdersReportPrintController`, `DeliveriesReportPrintController`, `DeliveriesReport::groupsWithin()`, `Order` (escopos `openedWithin`/`deliveredWithin`); nenhuma migration, nenhuma permissão nova.
+- **Desvios deliberados da origem:** o alerta sonoro usa o **maior id** dos pedidos "Novos" (a origem compara contagens, e perde o aviso quando a fila encolhe por uma ação local no mesmo intervalo do poll; também não toca na transição 0→1) e ignora pedido lançado por atendente; a assinatura inclui o minuto corrente e o início do turno (o tempo no status e o corte por turno seguem andando mesmo sem mudança de status) e só varre os finalizados do turno; o poll usa `.visible`; a comanda só imprime se o aparelho ligou "Imprimir ao iniciar o preparo" (a origem imprime sempre); os PDFs seguem o **turno** do seletor (`?shift=Y-m-d`), não o dia de calendário.
 
 **Sem migrations e sem permissões novas** nas três entregas.
 
@@ -235,7 +236,17 @@ Reaproveitar o padrão dos testes da origem e manter os `Kitchen*Test` verdes se
 - **Limitações conhecidas:** a consulta de finalizados usa `COALESCE(...)` e varre os pedidos do tenant; se ficar lenta, um índice composto resolve (não necessário hoje). O dia operacional de uma data escolhida cobre os dois turnos de um dia com almoço e jantar, enquanto o padrão (turno atual) mostra só a partir da última abertura.
 - **Capturas lado a lado:** pendentes (feitas pelo usuário). **Pizzaria-App:** `git status` idêntico ao do início.
 
-Pendente: 1.S.2c.
+### 1.S.2c — Tempo real, som, impressão e PDFs (2026-11-09) · aguardando conferência visual
+
+- **Arquivos criados:** `tests/Feature/Orders/KitchenRealtimeTest.php` (25 testes).
+- **Arquivos modificados:** `Kitchen.php`, `kitchen.blade.php`, `OrderStatusActions.php`, `Order.php`, `ResolveActiveShiftStart.php` (`parseOpeningDay`), `DeliveriesReport.php`, `OrdersReportPrintController.php`, `DeliveriesReportPrintController.php`.
+- **Sem migration, sem permissão nova.** Preferências do aparelho (som e impressão) ficam no `localStorage`, nunca no banco.
+- **Poll:** `wire:poll.10s.visible="refreshBoard"`; sem mudança na assinatura o servidor responde sem renderizar (provado nos testes pela ausência das consultas de `order_items`). "Atualizado às" vem do hook de commit do Livewire.
+- **Achados da revisão tratados:** alerta perdido com fila que encolhe (marcador por id); PDFs por turno em vez de dia civil; assinatura que varria o histórico; um só `AudioContext` destravado no primeiro toque; origem do iframe validada; assinatura calculada depois das preferências; `lastRefreshedAt` removido; `boardSignature` e `latestIncomingId` travados (`#[Locked]`); data dos PDFs validada.
+- **Limitações conhecidas:** o som e a impressão em iframe só podem ser verificados em navegador (o Chrome da cozinha precisa de `--kiosk-printing` para imprimir sem diálogo); aba em segundo plano é estrangulada pelo Livewire.
+- **Capturas lado a lado:** pendentes (feitas pelo usuário).
+
+**Fase 1.S.2 (Painel de Pedidos) concluída no código.** Restam a conferência de Vendas e telas fiscais e o alinhamento do menu (D-09), cada um com levantamento próprio, e a D-PP-09.
 
 ### Decisão pendente descoberta na 1.S.2a
 

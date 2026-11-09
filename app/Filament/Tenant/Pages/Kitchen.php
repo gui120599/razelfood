@@ -34,6 +34,7 @@ use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Url;
 use UnitEnum;
 
@@ -137,8 +138,6 @@ class Kitchen extends Page
     #[Url(as: 'linha')]
     public ?int $productionLineFilter = null;
 
-    public ?string $lastRefreshedAt = null;
-
     /**
      * Dia de abertura cujos pedidos finalizados a última coluna mostra. Enquanto o operador não escolhe,
      * acompanha o turno atual (atualizado a cada poll, então vira sozinho na troca de turno).
@@ -151,6 +150,21 @@ class Kitchen extends Page
     public bool $showOutOfShift = false;
 
     public bool $finishedExpanded = false;
+
+    /**
+     * Impressão digital do estado do board. Enquanto não muda, o poll devolve resposta vazia
+     * (ver refreshBoard()): sem consulta de cards nem diff de DOM.
+     */
+    #[Locked]
+    public string $boardSignature = '';
+
+    /**
+     * Maior id entre os pedidos "Novos" do cardápio/mesa: o alerta sonoro toca quando surge um id maior. Um marcador
+     * que só cresce não se perde quando a fila encolhe por uma ação local (confirmar, cancelar) no mesmo intervalo
+     * do poll, o que acontece com uma simples contagem.
+     */
+    #[Locked]
+    public int $latestIncomingId = 0;
 
     /** Havia mais finalizados do que o limite (preenchido ao montar `ordersByStatus`). */
     private bool $finishedHasMore = false;
@@ -167,7 +181,6 @@ class Kitchen extends Page
 
     public function mount(): void
     {
-        $this->touchLastRefreshedAt();
         $this->finishedDate = $this->activeShiftStart()->toDateString();
         $this->hiddenColumns = $this->sanitizeHiddenColumns(UserPreference::valueFor(auth()->user(), self::COLUMNS_PREFERENCE_KEY)['hidden'] ?? []);
         $this->loadFilterPreferences(
@@ -175,6 +188,10 @@ class Kitchen extends Page
             self::PERSISTED_FILTER_PROPERTIES,
             skipIfAlreadySet: ['productionLineFilter'],
         );
+
+        // Depois das preferências (showCancelled entra na assinatura): o primeiro poll não repete o render.
+        $this->boardSignature = $this->currentBoardSignature();
+        $this->latestIncomingId = $this->newestIncomingOrderId();
     }
 
     /**
@@ -187,18 +204,87 @@ class Kitchen extends Page
         }
     }
 
+    /**
+     * Alvo do `wire:poll`. Só renderiza de novo quando a assinatura do board muda (ou o turno virou); no estado
+     * estacionário a resposta é vazia. Se a fila de entrada cresceu, avisa o navegador (`novo-pedido`, que
+     * toca o som se o aparelho ligou).
+     */
     public function refreshBoard(): void
     {
-        $this->touchLastRefreshedAt();
+        $dateMoved = false;
 
         if (! $this->finishedDateChosen) {
-            $this->finishedDate = $this->activeShiftStart()->toDateString();
+            $current = $this->activeShiftStart()->toDateString();
+            $dateMoved = $current !== $this->finishedDate;
+            $this->finishedDate = $current;
         }
+
+        $signature = $this->currentBoardSignature();
+
+        if (! $dateMoved && $signature === $this->boardSignature) {
+            $this->skipRender();
+
+            return;
+        }
+
+        $this->boardSignature = $signature;
+        unset($this->ordersByStatus, $this->cancelledOrders, $this->outOfShiftCounts, $this->outOfShiftTotal);
+
+        $latest = $this->newestIncomingOrderId();
+
+        if ($latest > $this->latestIncomingId) {
+            $this->dispatch('novo-pedido');
+        }
+
+        $this->latestIncomingId = max($latest, $this->latestIncomingId);
     }
 
-    private function touchLastRefreshedAt(): void
+    /**
+     * Contagem e último `updated_at` por status, mais o início do turno e o minuto corrente. A contagem é
+     * indispensável: transições gravadas por query builder não mexem em `updated_at`, mas movem a contagem
+     * entre os grupos. O turno e o minuto fazem o board se redesenhar quando um pedido passa do prazo
+     * (tempo no status) ou sai do turno sem nenhuma mudança de status. Os filtros de tela ficam de fora:
+     * mudá-los já dispara uma requisição própria.
+     */
+    private function currentBoardSignature(): string
     {
-        $this->lastRefreshedAt = now()->format('H:i:s');
+        $flow = array_map(fn (OrderStatus $status): string => $status->value, $this->boardColumns());
+
+        if ($this->showCancelled) {
+            $flow[] = OrderStatus::Cancelled->value;
+        }
+
+        $finished = array_map(fn (OrderStatus $status): string => $status->value, self::FINISHED_STATUSES);
+        $shiftStart = $this->activeShiftStart();
+
+        // Os finalizados entram só a partir do turno atual: o histórico inteiro do tenant não pode ser varrido
+        // a cada poll (10 s por tablet).
+        return Order::query()
+            ->where(fn (Builder $query) => $query
+                ->whereIn('status', $flow)
+                ->orWhere(fn (Builder $done) => $done
+                    ->whereIn('status', $finished)
+                    ->whereRaw('COALESCE(finished_at, delivered_at, opened_at) >= ?', [$shiftStart])))
+            ->selectRaw('status, COUNT(*) AS total, COALESCE(MAX(updated_at), 0) AS latest')
+            ->groupBy('status')
+            ->orderBy('status')
+            ->get()
+            ->map(fn ($row): string => "{$row->status->value}:{$row->total}:{$row->latest}")
+            ->push('shift:'.$shiftStart->timestamp)
+            ->push('minute:'.now()->format('YmdHi'))
+            ->implode('|');
+    }
+
+    /**
+     * Maior id entre os pedidos aguardando confirmação (coluna "Novos"). Pedido lançado por atendente não conta:
+     * quem o criou já sabe dele, e o beep tocaria a cada pedido digitado (o alerta é para o que chega de fora).
+     */
+    private function newestIncomingOrderId(): int
+    {
+        return (int) Order::query()
+            ->where('status', OrderStatus::Started)
+            ->where('origin', '!=', OrderOrigin::Staff)
+            ->max('id');
     }
 
     #[Computed]
@@ -308,15 +394,7 @@ class Kitchen extends Page
     /** Data escolhida no seletor, só se for um 'Y-m-d' válido (a propriedade é pública e vem do navegador). */
     private function parseFinishedDate(): ?Carbon
     {
-        $date = $this->finishedDate;
-
-        if (! is_string($date) || preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) !== 1) {
-            return null;
-        }
-
-        $parsed = Carbon::createFromFormat('!Y-m-d', $date);
-
-        return $parsed !== false && $parsed->format('Y-m-d') === $date && $parsed->year >= 2000 ? $parsed : null;
+        return app(ResolveActiveShiftStart::class)->parseOpeningDay($this->finishedDate);
     }
 
     /**
@@ -706,9 +784,46 @@ class Kitchen extends Page
         return AttendOrder::canAccess();
     }
 
+    /**
+     * "PDF do dia" e "PDF de entregas": ligam às impressões dos relatórios que o RazelFood já tem, para o TURNO
+     * do seletor "Turno de" (`?shift=`: janela do dia operacional, que pode passar da meia-noite). Só aparecem para quem tem a feature de relatórios e a permissão da respectiva tela.
+     *
+     * @return array<int, Action>
+     */
+    protected function getHeaderActions(): array
+    {
+        $day = fn (): string => $this->parseFinishedDate()?->toDateString() ?? $this->activeShiftStart()->toDateString();
+        $hasReports = fn (): bool => CurrentTenant::get()?->hasFeature(FeatureKey::RELATORIOS) ?? false;
+
+        return [
+            Action::make('pdfDay')
+                ->label('PDF do dia')
+                ->icon(Heroicon::OutlinedPrinter)
+                ->color('gray')
+                ->visible(fn (): bool => $hasReports() && (auth()->user()?->can('View:Reports') ?? false))
+                ->url(fn (): string => route('reports.orders.print', ['shift' => $day()]), shouldOpenInNewTab: true),
+
+            Action::make('pdfDeliveries')
+                ->label('PDF de entregas')
+                ->icon(Heroicon::OutlinedTruck)
+                ->color('gray')
+                ->visible(fn (): bool => $hasReports() && (auth()->user()?->can('View:Deliveries') ?? false))
+                ->url(fn (): string => route('reports.deliveries.print', ['shift' => $day()]), shouldOpenInNewTab: true),
+        ];
+    }
+
+    /**
+     * Iniciar o preparo (Aceito → Preparando) manda a comanda à impressora, se o aparelho ligou a opção. O
+     * navegador imprime num iframe oculto: um window.open depois da ida e volta do Livewire já não conta
+     * como gesto do usuário e seria barrado pelo bloqueador de pop-up.
+     */
     public function advanceAction(): Action
     {
-        return OrderStatusActions::advance();
+        return OrderStatusActions::advance(function (Order $order): void {
+            if ($order->status === OrderStatus::Preparing) {
+                $this->dispatch('imprimir-pedido', url: route('order.ticket', ['order' => $order->id]));
+            }
+        });
     }
 
     public function dispatchAction(): Action

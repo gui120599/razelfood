@@ -23,12 +23,15 @@
 @endphp
 
 <x-filament-panels::page>
+    {{-- Um único wire:poll para o board inteiro. refreshBoard() compara uma assinatura e chama skipRender()
+         quando nada mudou, então o ciclo normal não gera diff de DOM nem as consultas de card. `.visible`: só
+         consulta com o board na tela (aba em segundo plano é estrangulada pelo Livewire; o tablet da cozinha
+         fica em primeiro plano). --}}
     <div
-        x-data="{
-            irPara(id) {
-                document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
-            },
-        }"
+        wire:poll.10s.visible="refreshBoard"
+        x-data="centralPedidos()"
+        @novo-pedido.window="alertar()"
+        @imprimir-pedido.window="imprimirPedido($event.detail)"
     >
         {{-- Barra de filtros — uma linha só, compacta --}}
         <div class="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-2.5 dark:border-white/10 dark:bg-gray-900">
@@ -93,9 +96,16 @@
                 {{ $showCancelled ? 'Ocultar cancelados' : 'Ver cancelados' }}
             </button>
 
-            <span class="ml-auto shrink-0 text-xs text-gray-400" wire:poll.20s="refreshBoard">
-                🔄 Atualizado às {{ $lastRefreshedAt }}
-            </span>
+            {{-- Preferência do aparelho (localStorage): ligar só no computador da cozinha, que tem a impressora. --}}
+            <label class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600 dark:border-gray-600 dark:text-gray-300">
+                <input type="checkbox" x-model="imprimirAoPreparar" @change="salvarImprimir()" class="rounded border-gray-300 text-primary-600">
+                Imprimir ao iniciar o preparo
+            </label>
+
+            {{-- Não vem do servidor: o poll usa skipRender() quando nada mudou, então um texto renderizado no
+                 request nunca avançaria sozinho. O Alpine escuta o hook de commit do Livewire e atualiza a
+                 cada resposta do poll, mudança ou não ("a tela está viva"). --}}
+            <span class="ml-auto shrink-0 text-xs text-gray-400" x-text="`🔄 Atualizado às ${ultimaAtualizacao}`"></span>
         </div>
 
         {{-- Barra superior: navegação entre colunas, pedidos de turnos anteriores e colunas visíveis --}}
@@ -167,6 +177,14 @@
                     @endforeach
                 </div>
             </div>
+
+            {{-- O navegador bloqueia áudio sem um gesto do usuário: este botão é o gesto que destrava o alerta. --}}
+            <button
+                type="button"
+                @click="alternarSom()"
+                x-text="somAtivo ? '🔔 Som ligado' : '🔕 Ativar som'"
+                class="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-200 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10"
+            ></button>
         </div>
 
         @if ($showOutOfShift)
@@ -214,4 +232,131 @@
             </div>
         @endif
     </div>
+
+    @script
+        <script>
+            Alpine.data('centralPedidos', () => ({
+                ctx: null,
+                somAtivo: false,
+                imprimirAoPreparar: false,
+                ultimaAtualizacao: new Date().toLocaleTimeString('pt-BR').slice(0, 8),
+
+                init() {
+                    window.addEventListener('pointerdown', () => this.destravarAudio());
+
+                    try {
+                        this.somAtivo = localStorage.getItem('central-pedidos-som') === '1';
+                        this.imprimirAoPreparar = localStorage.getItem('central-pedidos-imprimir-preparo') === '1';
+                    } catch (_) {
+                        // Aba privada / storage bloqueado: segue sem preferência.
+                    }
+
+                    // O poll usa skipRender() quando nada mudou, então o "Atualizado às" não pode vir do servidor.
+                    // O hook de commit dispara a cada resposta, mudança ou não; só conta a desta página.
+                    const componentId = this.$root.closest('[wire\\:id]')?.getAttribute('wire:id');
+
+                    Livewire.hook('commit', ({ component, succeed }) => {
+                        succeed(() => {
+                            if (component.id === componentId) {
+                                this.ultimaAtualizacao = new Date().toLocaleTimeString('pt-BR').slice(0, 8);
+                            }
+                        });
+                    });
+                },
+
+                alternarSom() {
+                    this.somAtivo = ! this.somAtivo;
+
+                    try {
+                        localStorage.setItem('central-pedidos-som', this.somAtivo ? '1' : '0');
+                    } catch (_) {}
+
+                    // Toca uma vez ao ligar: confirma o volume e é o gesto que destrava o AudioContext.
+                    if (this.somAtivo) {
+                        this.alertar();
+                    }
+                },
+
+                salvarImprimir() {
+                    try {
+                        localStorage.setItem('central-pedidos-imprimir-preparo', this.imprimirAoPreparar ? '1' : '0');
+                    } catch (_) {}
+                },
+
+                // A comanda chama window.print() ao carregar; num iframe oculto ela imprime sem abrir janela, então
+                // o bloqueador de pop-up não interfere. Para sair sem o diálogo de impressão, o Chrome da
+                // cozinha deve rodar com --kiosk-printing.
+                imprimirPedido({ url }) {
+                    if (! this.imprimirAoPreparar) {
+                        return;
+                    }
+
+                    // O servidor só emite a rota da própria comanda; ignora qualquer outra origem (o evento é da janela).
+                    try {
+                        if (new URL(url, window.location.origin).origin !== window.location.origin) {
+                            return;
+                        }
+                    } catch (_) {
+                        return;
+                    }
+
+                    const iframe = document.createElement('iframe');
+                    iframe.style.cssText = 'position:fixed;width:0;height:0;border:0;visibility:hidden';
+                    iframe.src = url;
+                    document.body.appendChild(iframe);
+                    setTimeout(() => iframe.remove(), 60000);
+                },
+
+                irPara(id) {
+                    document.getElementById(id)?.scrollIntoView({
+                        behavior: 'smooth',
+                        inline: 'start',
+                        block: 'nearest',
+                    });
+                },
+
+                // Um único AudioContext (o navegador limita quantos podem existir) e destravado no primeiro toque:
+                // depois de recarregar a página o "Som ligado" vem do localStorage, mas sem gesto o áudio fica suspenso.
+                audio() {
+                    this.ctx ??= new (window.AudioContext || window.webkitAudioContext)();
+
+                    return this.ctx;
+                },
+
+                destravarAudio() {
+                    if (this.somAtivo) {
+                        try {
+                            this.audio().resume?.();
+                        } catch (_) {}
+                    }
+                },
+
+                // Beep sintetizado — sem asset de áudio para carregar.
+                alertar() {
+                    if (! this.somAtivo) {
+                        return;
+                    }
+
+                    try {
+                        const ctx = this.audio();
+                        ctx.resume?.();
+
+                        [0, 150, 300].forEach((atraso, i) => {
+                            const osc = ctx.createOscillator();
+                            const gain = ctx.createGain();
+                            osc.connect(gain);
+                            gain.connect(ctx.destination);
+                            osc.frequency.value = i === 1 ? 1100 : 880;
+                            gain.gain.setValueAtTime(0.3, ctx.currentTime + atraso / 1000);
+                            gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + atraso / 1000 + 0.2);
+                            osc.start(ctx.currentTime + atraso / 1000);
+                            osc.stop(ctx.currentTime + atraso / 1000 + 0.2);
+                        });
+                    } catch (_) {
+                        // Autoplay bloqueado: o card já mostra a fila, o som é extra.
+                    }
+                },
+            }));
+        </script>
+    @endscript
 </x-filament-panels::page>

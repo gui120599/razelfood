@@ -449,7 +449,7 @@ class KitchenShiftAndColumnsTest extends TestCase
         $this->tenant->update(['uses_in_transit_stage' => false]);
         CurrentTenant::set($this->tenant->fresh());
 
-        $component->call('refreshBoard')
+        $component->call('$refresh')
             ->assertSeeHtml('id="coluna-started"')
             ->assertSeeHtml('id="coluna-delivered"')
             ->assertSeeHtml('--painel-colunas: 5');
