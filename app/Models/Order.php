@@ -246,6 +246,22 @@ class Order extends TenantScopedModel
             ->whereBetween('delivered_at', [$start->copy()->startOfDay(), $end->copy()->endOfDay()]);
     }
 
+    /**
+     * Pedidos feitos dentro de uma janela exata [início, fim) — recorte por turno (a janela pode atravessar a meia-noite).
+     */
+    public function scopeOpenedWithin(Builder $query, CarbonInterface $from, CarbonInterface $until): Builder
+    {
+        return $query->where('opened_at', '>=', $from)->where('opened_at', '<', $until);
+    }
+
+    /**
+     * Pedidos entregues dentro de uma janela exata [início, fim) — recorte por turno do relatório de entregas.
+     */
+    public function scopeDeliveredWithin(Builder $query, CarbonInterface $from, CarbonInterface $until): Builder
+    {
+        return $query->where('delivered_at', '>=', $from)->where('delivered_at', '<', $until);
+    }
+
     public function currentStageStartedAt(): ?Carbon
     {
         return $this->{$this->status->timestampColumn()};
@@ -302,5 +318,66 @@ class Order extends TenantScopedModel
     {
         return $this->usesInTransitStage()
             && (CurrentTenant::get()?->assigns_delivery_couriers ?? true);
+    }
+
+    /**
+     * O link/QR de entrega (confirmação pelo celular do entregador) só faz sentido para pedido de
+     * entrega que passa por "Em Transporte" e já está pronto ou a caminho. Mesma regra da Action
+     * `deliveryLink` e do menu do card da Central de Pedidos.
+     */
+    public function allowsDeliveryLink(): bool
+    {
+        return $this->usesInTransitStage()
+            && in_array($this->status, [OrderStatus::Ready, OrderStatus::InTransit], true);
+    }
+
+    /**
+     * Trocar o entregador exige que o tenant atribua entregador e que o pedido já tenha um
+     * (ou esteja pronto/a caminho, quando ainda pode receber). Mesma regra da Action `reassignDelivery`.
+     */
+    public function allowsCourierReassignment(): bool
+    {
+        if (! (CurrentTenant::get()?->assigns_delivery_couriers ?? true)) {
+            return false;
+        }
+
+        return $this->assigned_delivery_user_id !== null
+            || in_array($this->status, [OrderStatus::Ready, OrderStatus::InTransit], true);
+    }
+
+    /**
+     * O pedido pode ser aberto para edição na tela de atendimento por este usuário: conteúdo ainda editável,
+     * não cobrado numa venda e, do estágio "Pronto" em diante, com a permissão avançada. Mesma regra do
+     * `mount()` do AttendOrder (que responde 403 nos outros casos) e do atalho "Editar" da lista de pedidos.
+     * Só olha `sale_id` (já carregado); item avulso lançado em venda é barrado ao salvar.
+     */
+    public function isEditableInAttendanceBy(?User $user): bool
+    {
+        if ($this->sale_id !== null || ! $this->status->isEditableContentWise()) {
+            return false;
+        }
+
+        return ! $this->status->requiresAdvancedPermissionToEdit()
+            || ($user?->can('edit_order_advanced_status') ?? false);
+    }
+
+    /**
+     * Quem confirma a entrega (Em Transporte → Entregue): o Entregador (`mark_order_delivered`) e, quando o tenant
+     * não atribui entregador, também quem gerencia pedidos — senão o Atendente não fecharia o pedido.
+     * Mesma regra da Action `markDelivered` e do botão do card.
+     */
+    public function canConfirmDeliveryBy(?User $user): bool
+    {
+        return (bool) $user?->can('mark_order_delivered')
+            || (! (CurrentTenant::get()?->assigns_delivery_couriers ?? true) && (bool) $user?->can('manage_order_status'));
+    }
+
+    /**
+     * Link público de acompanhamento (o mesmo enviado ao cliente no WhatsApp). Usa o token opaco,
+     * nunca o id; null enquanto o pedido não tem token.
+     */
+    public function trackingUrl(): ?string
+    {
+        return blank($this->public_token) ? null : route('order.tracking', ['order' => $this->public_token]);
     }
 }

@@ -25,4 +25,13 @@ final class FlavorFraction
 
         return rtrim(rtrim(number_format($percent, 2, ',', ''), '0'), ',').'%';
     }
+
+    /**
+     * Rótulo da fatia nas telas de pedido ("MEIA", "1/3"…): metade lê por extenso, como na tela de origem;
+     * as demais frações seguem {@see label()}. Não é usado na NFC-e, que mantém o "1/2" em ASCII.
+     */
+    public static function sliceLabel(float $percent): string
+    {
+        return abs($percent - 50) < 0.5 ? 'MEIA' : self::label($percent);
+    }
 }

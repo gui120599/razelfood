@@ -314,9 +314,8 @@ class AttendOrder extends Page
             if ($item['type'] === 'combo' && count($item['flavor_ids']) > 1) {
                 $flavorLines = collect($item['flavor_ids'])->values()->map(function (int $id, int $position) use ($products, $resolved): string {
                     $percent = (float) (($resolved['flavor_shares'][$position] ?? 0) * 100);
-                    $label = abs($percent - 50) < 0.5 ? 'MEIA' : FlavorFraction::label($percent);
 
-                    return $label.' '.($products->get($id)?->name ?? 'Sabor removido');
+                    return FlavorFraction::sliceLabel($percent).' '.($products->get($id)?->name ?? 'Sabor removido');
                 })->all();
             }
 

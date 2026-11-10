@@ -96,8 +96,7 @@ class OrdersTable
                     ->color('gray')
                     ->visible(fn (Order $record) => AttendOrder::canAccess()
                         && ! $record->hasItemsInSale()
-                        && $record->status->isEditableContentWise()
-                        && (! $record->status->requiresAdvancedPermissionToEdit() || (auth()->user()?->can('edit_order_advanced_status') ?? false)))
+                        && $record->isEditableInAttendanceBy(auth()->user()))
                     ->url(fn (Order $record) => AttendOrder::getUrl(['order' => $record])),
                 ViewAction::make(),
             ]);

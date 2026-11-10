@@ -4,6 +4,7 @@ namespace App\Support\Reports;
 
 use App\Models\Order;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 /**
@@ -15,6 +16,26 @@ use Illuminate\Support\Collection;
 class DeliveriesReport
 {
     /**
+     * Entregas por dia de calendário, do início do primeiro dia ao fim do último.
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    public function groups(CarbonInterface $start, CarbonInterface $end): Collection
+    {
+        return $this->build(Order::query()->deliveredBetween($start, $end));
+    }
+
+    /**
+     * Entregas numa janela exata [início, fim) — o turno, que pode atravessar a meia-noite.
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    public function groupsWithin(CarbonInterface $from, CarbonInterface $until): Collection
+    {
+        return $this->build(Order::query()->deliveredWithin($from, $until));
+    }
+
+    /**
      * @return Collection<int, array{
      *     user_id: ?int,
      *     name: string,
@@ -25,10 +46,10 @@ class DeliveriesReport
      *     orders: array<int, array{number: int|string, delivered_at: ?CarbonInterface, client: ?string, address: ?string, neighborhood: ?string, total: float, delivery_fee: float, payments: string, minutes: ?int}>
      * }>
      */
-    public function groups(CarbonInterface $start, CarbonInterface $end): Collection
+    private function build(Builder $query): Collection
     {
-        $orders = Order::query()
-            ->deliveredBetween($start, $end)
+        $orders = $query
+            ->whereNotNull('delivered_at')
             ->whereNotNull('assigned_delivery_user_id')
             ->with(['assignedDeliveryUser:id,name', 'client:id,name', 'payments'])
             ->orderBy('delivered_at')

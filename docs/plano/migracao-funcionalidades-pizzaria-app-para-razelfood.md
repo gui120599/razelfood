@@ -13,6 +13,7 @@ Documentos complementares (aprofundam cada módulo):
 | [migracao-connect-stone-razelfood.md](migracao-connect-stone-razelfood.md) | Prioridade 2 — Connect Stone (Pagar.me v5) |
 | [painel-garcom-razelfood.md](painel-garcom-razelfood.md) | Prioridade 3 — Painel do Garçom / Salão |
 | [painel-cozinha-razelfood.md](painel-cozinha-razelfood.md) | Prioridade 4 — Painel da Cozinha (KDS) |
+| [painel-de-pedidos-razelfood.md](painel-de-pedidos-razelfood.md) | Fase 1.S.2 — Painel de Pedidos (kanban): cópia do front e diferenças |
 | [prompts-implementacao-futura.md](prompts-implementacao-futura.md) | Prompts prontos para os agentes de implementação |
 
 ---

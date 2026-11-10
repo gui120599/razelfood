@@ -56,4 +56,50 @@ class ResolveActiveShiftStart
 
         return $latestStart ?? $now->copy()->startOfDay();
     }
+
+    /**
+     * Data de abertura vinda de fora (propriedade pública do Livewire, query string): só um 'Y-m-d' válido de
+     * verdade (nada de '+99999999 years', '2026-02-30' ou 'next monday').
+     */
+    public function parseOpeningDay(mixed $value): ?Carbon
+    {
+        if (! is_string($value) || preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) !== 1) {
+            return null;
+        }
+
+        $parsed = Carbon::createFromFormat('!Y-m-d', $value);
+
+        return $parsed !== false && $parsed->format('Y-m-d') === $value && $parsed->year >= 2000 ? $parsed : null;
+    }
+
+    /**
+     * Janela do dia operacional que ABRE na data informada ('Y-m-d' ou Carbon): do primeiro horário de abertura
+     * daquele dia da semana (ou 00:00, sem horário) até a primeira abertura do dia seguinte (ou 24 h depois do
+     * início, sem horário nesse dia). As janelas de dias seguidos com horário se encaixam sem sobreposição nem
+     * lacuna; o fim é EXCLUSIVO. Diferente de `__invoke()`, não infere a que turno o instante pertence: o
+     * operador escolheu o dia de abertura (seletor "Turno de" da coluna Finalizados).
+     *
+     * @return array{0: Carbon, 1: Carbon} [início, fim)
+     */
+    public function windowForOpeningDay(Carbon|string $date): array
+    {
+        $day = ($date instanceof Carbon ? $date->copy() : Carbon::parse($date))->startOfDay();
+
+        $start = $this->earliestOpening($day) ?? $day->copy();
+        $end = $this->earliestOpening($day->copy()->addDay()) ?? $start->copy()->addDay();
+
+        return [$start, $end];
+    }
+
+    /** Primeira abertura ativa cadastrada para o dia da semana da data, no próprio dia; null sem horário. */
+    private function earliestOpening(Carbon $day): ?Carbon
+    {
+        $opensAt = BusinessHour::where('is_active', true)
+            ->where('weekday', $day->dayOfWeek)
+            ->orderBy('opens_at')
+            ->first()
+            ?->opens_at;
+
+        return $opensAt === null ? null : $day->copy()->setTimeFrom($opensAt);
+    }
 }
